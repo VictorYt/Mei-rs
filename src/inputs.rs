@@ -373,7 +373,8 @@ fn examples(items: impl Iterator<Item = String>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::OutputFormat;
+    use crate::cli::{Cli, Command};
+    use clap::Parser;
 
     fn data(name: &str) -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -404,16 +405,19 @@ mod tests {
         }
     }
 
-    fn args(bed: PathBuf) -> ScanArgs {
-        ScanArgs {
-            bam: data("positive.bam"),
-            bed,
-            reference: None,
-            padding: 300,
-            region: None,
-            output: None,
-            format: OutputFormat::Tsv,
-        }
+    fn args(bed: &Path) -> ScanArgs {
+        let bam = data("positive.bam");
+        let cli = Cli::try_parse_from([
+            "mei-rs".as_ref(),
+            "scan".as_ref(),
+            "--bam".as_ref(),
+            bam.as_os_str(),
+            "--bed".as_ref(),
+            bed.as_os_str(),
+        ])
+        .unwrap();
+        let Command::Scan(args) = cli.command;
+        args
     }
 
     #[test]
@@ -423,7 +427,7 @@ mod tests {
             ("positive.bam", Some(data("reference.fa"))),
             ("positive.cram", Some(data("reference.fa"))),
         ] {
-            let mut args = args(data("targets.bed"));
+            let mut args = args(&data("targets.bed"));
             args.bam = data(bam);
             args.reference = reference;
             let inputs = Inputs::load(&args).unwrap();
@@ -438,7 +442,7 @@ mod tests {
     fn contig_naming_mismatch() {
         let dir = TempDir::new("naming");
         let bed = dir.file("t.bed", "1\t9850\t10150\nchrM\t1\t10\n");
-        let err = Inputs::load(&args(bed)).unwrap_err();
+        let err = Inputs::load(&args(&bed)).unwrap_err();
         assert!(matches!(err, InputError::ContigNaming { .. }));
         assert!(
             err.to_string()
@@ -451,7 +455,7 @@ mod tests {
     fn no_known_contig() {
         let dir = TempDir::new("unknown");
         let bed = dir.file("t.bed", "chrZ\t1\t10\n");
-        let err = Inputs::load(&args(bed)).unwrap_err();
+        let err = Inputs::load(&args(&bed)).unwrap_err();
         assert!(matches!(err, InputError::NoKnownContig { .. }));
         assert!(err.to_string().starts_with("no contig of "), "{err}");
     }
@@ -463,7 +467,7 @@ mod tests {
             "t.bed",
             "chr1\t9850\t10150\nchrUn_x\t1\t10\nchr1\t25000\t25100\nchr2\t9900\t10100\n",
         );
-        let inputs = Inputs::load(&args(bed)).unwrap();
+        let inputs = Inputs::load(&args(&bed)).unwrap();
         let probes: Vec<_> = inputs
             .targets
             .probes()
@@ -476,7 +480,7 @@ mod tests {
     #[test]
     fn reference_mismatch() {
         let dir = TempDir::new("reference");
-        let mut args = args(data("targets.bed"));
+        let mut args = args(&data("targets.bed"));
 
         let fasta = dir.file("other.fa", ">chr1\nACGT\n>chr2\nACGT\n");
         dir.file("other.fa.fai", "chr1\t4\t6\t4\t5\nchr2\t4\t17\t4\t5\n");
@@ -507,7 +511,7 @@ mod tests {
 
     #[test]
     fn region() {
-        let mut args = args(data("targets.bed"));
+        let mut args = args(&data("targets.bed"));
         args.region = Some("chr1:10001-20000".parse().unwrap());
         let inputs = Inputs::load(&args).unwrap();
         assert_eq!(inputs.targets.regions().len(), 1);

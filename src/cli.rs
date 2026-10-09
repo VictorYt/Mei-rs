@@ -5,6 +5,9 @@ use std::path::PathBuf;
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 
+use crate::reader::extract::ExtractOptions;
+use crate::reader::filter::ReadFilter;
+use crate::reader::signals::ClipOptions;
 use crate::regions::Region;
 
 /// Detect mobile element insertions (Alu, LINE-1, SVA) in targeted capture
@@ -40,32 +43,98 @@ pub enum Command {
 #[derive(Debug, Args)]
 pub struct ScanArgs {
     /// Alignments to scan: BAM or CRAM, coordinate-sorted and indexed
-    #[arg(long, value_name = "FILE")]
+    #[arg(long, value_name = "FILE", help_heading = "Input")]
     pub bam: PathBuf,
 
     /// Capture targets (BED)
-    #[arg(long, value_name = "FILE")]
+    #[arg(long, value_name = "FILE", help_heading = "Input")]
     pub bed: PathBuf,
 
     /// Reference genome (FASTA, indexed); required for CRAM
-    #[arg(long, value_name = "FILE")]
+    #[arg(long, value_name = "FILE", help_heading = "Input")]
     pub reference: Option<PathBuf>,
 
     /// Bases added on each side of every target
-    #[arg(long, value_name = "BP", default_value_t = 300)]
+    #[arg(long, value_name = "BP", default_value_t = 300, help_heading = "Input")]
     pub padding: u32,
 
     /// Only scan this region (chr, or chr:start-end, 1-based inclusive)
-    #[arg(long, value_name = "REGION")]
+    #[arg(long, value_name = "REGION", help_heading = "Input")]
     pub region: Option<Region>,
 
+    /// Minimum mapping quality of an anchored read
+    #[arg(
+        long,
+        value_name = "Q",
+        default_value_t = 20,
+        help_heading = "Read filtering"
+    )]
+    pub min_mapq: u8,
+
+    /// Keep reads flagged as duplicates (files without duplicate marking)
+    #[arg(long, help_heading = "Read filtering")]
+    pub include_duplicates: bool,
+
+    /// Minimum length of a soft-clip
+    #[arg(long, value_name = "BP", default_value_t = 20,
+        value_parser = clap::value_parser!(u32).range(1..), help_heading = "Signal extraction")]
+    pub min_clip_len: u32,
+
+    /// Minimum median base quality of a soft-clip
+    #[arg(
+        long,
+        value_name = "Q",
+        default_value_t = 20,
+        help_heading = "Signal extraction"
+    )]
+    pub min_clip_quality: u8,
+
+    /// Minimum length of a poly(A/T) tail at the junction end of a soft-clip
+    #[arg(long, value_name = "BP", default_value_t = 10,
+        value_parser = clap::value_parser!(u32).range(1..), help_heading = "Signal extraction")]
+    pub polya_min_len: u32,
+
+    /// Minimum fraction of A (or T) in a poly(A/T) tail
+    #[arg(long, value_name = "FRACTION", default_value_t = 0.8,
+        value_parser = parse_fraction, help_heading = "Signal extraction")]
+    pub polya_min_frac: f64,
+
     /// Output file [default: standard output]
-    #[arg(short, long, value_name = "FILE")]
+    #[arg(short, long, value_name = "FILE", help_heading = "Output")]
     pub output: Option<PathBuf>,
 
     /// Output format
-    #[arg(long, value_enum, default_value_t = OutputFormat::Tsv)]
+    #[arg(long, value_enum, default_value_t = OutputFormat::Tsv, help_heading = "Output")]
     pub format: OutputFormat,
+}
+
+impl ScanArgs {
+    /// Signal extraction options.
+    #[must_use]
+    pub fn extract_options(&self) -> ExtractOptions {
+        ExtractOptions {
+            filter: ReadFilter {
+                min_mapq: self.min_mapq,
+                include_duplicates: self.include_duplicates,
+            },
+            clip: ClipOptions {
+                min_length: self.min_clip_len,
+                min_quality: self.min_clip_quality,
+                polya_min_length: self.polya_min_len,
+                polya_min_fraction: self.polya_min_frac,
+            },
+        }
+    }
+}
+
+/// Parse a fraction in (0, 1].
+fn parse_fraction(s: &str) -> Result<f64, String> {
+    let value: f64 = s.parse().map_err(|_| format!("`{s}` is not a number"))?;
+    if value > 0.0 && value <= 1.0 {
+        Ok(value)
+    } else {
+        Err(format!("{value} is not in (0, 1]"))
+    }
 }
 
 /// Format of the candidate list.
@@ -112,6 +181,46 @@ mod tests {
         assert_eq!(args.region, None);
         assert_eq!(args.output, None);
         assert_eq!(args.format, OutputFormat::Tsv);
+        assert_eq!(args.extract_options(), ExtractOptions::default());
+    }
+
+    #[test]
+    fn extraction_options() {
+        let args = scan(&[
+            "--min-mapq",
+            "30",
+            "--include-duplicates",
+            "--min-clip-len",
+            "15",
+            "--min-clip-quality",
+            "10",
+            "--polya-min-len",
+            "8",
+            "--polya-min-frac",
+            "0.9",
+        ])
+        .unwrap();
+        let options = args.extract_options();
+        assert_eq!(options.filter.min_mapq, 30);
+        assert!(options.filter.include_duplicates);
+        assert_eq!(options.clip.min_length, 15);
+        assert_eq!(options.clip.min_quality, 10);
+        assert_eq!(options.clip.polya_min_length, 8);
+        assert!((options.clip.polya_min_fraction - 0.9).abs() < f64::EPSILON);
+        for (option, value) in [
+            ("--polya-min-frac", "0"),
+            ("--polya-min-frac", "1.5"),
+            ("--polya-min-frac", "x"),
+            ("--min-clip-len", "0"),
+            ("--polya-min-len", "0"),
+            ("--min-mapq", "256"),
+        ] {
+            assert_eq!(
+                scan(&[option, value]).unwrap_err().kind(),
+                ErrorKind::ValueValidation,
+                "{option} {value}"
+            );
+        }
     }
 
     #[test]
