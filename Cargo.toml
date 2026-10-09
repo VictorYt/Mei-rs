@@ -1,6 +1,6 @@
 [package]
 name = "mei-rs"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.91"
 description = "Fast, memory-efficient detection of mobile element insertions (Alu, LINE-1, SVA) in targeted capture and exome sequencing data"
