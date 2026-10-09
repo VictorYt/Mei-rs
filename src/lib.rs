@@ -8,6 +8,7 @@
 
 pub mod cli;
 pub mod cluster;
+pub mod inputs;
 pub mod reader;
 pub mod regions;
 pub mod scan;

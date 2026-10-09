@@ -93,8 +93,10 @@ mei-rs/
 ├── src/
 │   ├── main.rs              # CLI entry point (clap)
 │   ├── cli.rs               # Subcommands and arguments
-│   ├── regions.rs           # BED loading, interval tree, padding
-│   ├── reader/              # Phase 1: targeted BAM/CRAM reading, signal extraction
+│   ├── inputs.rs            # Loading and consistency checks of the inputs
+│   ├── scan.rs              # `scan` subcommand (phases 1-2)
+│   ├── regions/             # --region, BED loading, padding, merging, interval tree
+│   ├── reader/              # Phase 1: indexed BAM/CRAM reading, signal extraction
 │   ├── cluster/             # Phase 2: windowing, breakpoints, capture filters
 │   ├── typer/               # Phase 3: k-mers + alignment to consensus, strand
 │   ├── assembly/            # Phase 4: local de Bruijn, TSD, poly(A)
@@ -104,11 +106,11 @@ mei-rs/
 ```
 
 ### Key dependencies (Cargo.toml)
-* **Genomic I/O:** `noodles` (pure Rust, safer, static binary) or `rust-htslib` (C bindings, very fast BAM/CRAM/VCF). To be decided in issue #1.
+* **Genomic I/O:** `noodles` + `noodles-util` (pure Rust, static binary; one indexed reader for BAM and CRAM), `flate2` (gzipped BED).
 * **Parallelism:** `rayon` (parallel iterators over chromosomes / BED regions).
-* **Algorithms:** `bio` (Rust-Bio: Smith-Waterman, string algorithms, interval tree), `coitrees`, `petgraph` (light de Bruijn graphs if needed).
+* **Algorithms:** `coitrees` (probe interval trees), `bio` (Rust-Bio: Smith-Waterman, string algorithms), `petgraph` (light de Bruijn graphs if needed).
 * **Concurrency / cache:** `dashmap` or `lru` for shared in-memory structures.
-* **CLI & logging:** `clap`, `tracing` (or `env_logger`).
+* **CLI, errors & logging:** `clap`, `thiserror` (module errors), `anyhow` (`main`), `tracing`.
 
 ---
 

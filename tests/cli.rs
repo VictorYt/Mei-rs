@@ -59,11 +59,73 @@ fn invalid_option_fails_with_usage_error() {
         .stderr(predicate::str::contains("invalid value 'vcf'"));
 }
 
+fn data(name: &str) -> String {
+    format!("{}/tests/data/{name}", env!("CARGO_MANIFEST_DIR"))
+}
+
 #[test]
-fn scan_is_not_implemented_yet() {
+fn scan_checks_the_inputs_then_stops() {
+    for (bam, reference) in [
+        ("positive.bam", None),
+        ("positive.cram", Some("reference.fa")),
+    ] {
+        let mut cmd = mei_rs();
+        cmd.args(["scan", "--bam", &data(bam), "--bed", &data("targets.bed")]);
+        if let Some(reference) = reference {
+            cmd.args(["--reference", &data(reference)]);
+        }
+        cmd.assert()
+            .code(1)
+            .stderr(predicate::str::contains("sample positive"))
+            .stderr(predicate::str::contains(
+                "3 targets (800 bp), 3 regions to scan (2600 bp with 300 bp of padding)",
+            ))
+            .stderr(predicate::str::contains(
+                "signal extraction is not implemented yet",
+            ));
+    }
+}
+
+#[test]
+fn scan_input_errors() {
+    let bed = data("targets.bed");
+    for (args, message) in [
+        (
+            vec!["--bam", "missing.bam", "--bed", &bed],
+            "cannot read missing.bam",
+        ),
+        (
+            vec!["--bam", &data("positive.bam"), "--bed", "missing.bed"],
+            "cannot read BED file missing.bed",
+        ),
+        (
+            vec!["--bam", &data("positive.cram"), "--bed", &bed],
+            "--reference is required",
+        ),
+    ] {
+        mei_rs()
+            .arg("scan")
+            .args(args)
+            .assert()
+            .code(1)
+            .stderr(predicate::str::contains(message));
+    }
+}
+
+#[test]
+fn scan_region() {
     mei_rs()
-        .args(["scan", "--bam", "s.bam", "--bed", "t.bed"])
+        .args([
+            "scan",
+            "--bam",
+            &data("positive.bam"),
+            "--bed",
+            &data("targets.bed"),
+        ])
+        .args(["--region", "chr1:1-100"])
         .assert()
         .code(1)
-        .stderr(predicate::str::contains("not implemented yet"));
+        .stderr(predicate::str::contains(
+            "--region chr1:1-100 holds no target",
+        ));
 }
