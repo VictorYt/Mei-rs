@@ -22,6 +22,8 @@ flate2 = "1"
 noodles = { version = "0.117", features = ["bam", "cram", "sam", "fasta", "core", "csi", "bgzf"] }
 noodles-util = { version = "0.86", features = ["alignment"] }
 rayon = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

@@ -5,6 +5,8 @@ use std::path::PathBuf;
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 
+use crate::cluster::ClusterOptions;
+use crate::cluster::filters::FilterOptions;
 use crate::reader::extract::ExtractOptions;
 use crate::reader::filter::ReadFilter;
 use crate::reader::signals::ClipOptions;
@@ -99,6 +101,26 @@ pub struct ScanArgs {
         value_parser = parse_fraction, help_heading = "Signal extraction")]
     pub polya_min_frac: f64,
 
+    /// Maximum distance between two consecutive signals of a candidate
+    #[arg(long, value_name = "BP", default_value_t = 100,
+        value_parser = clap::value_parser!(u64).range(1..), help_heading = "Clustering and filters")]
+    pub window: u64,
+
+    /// Minimum number of distinct supporting reads of a candidate
+    #[arg(long, value_name = "READS", default_value_t = 3,
+        value_parser = clap::value_parser!(u64).range(1..), help_heading = "Clustering and filters")]
+    pub min_support: u64,
+
+    /// Minimum number of supporting reads per read of local depth
+    #[arg(long, value_name = "RATIO", default_value_t = 0.05,
+        value_parser = parse_ratio, help_heading = "Clustering and filters")]
+    pub min_signal_ratio: f64,
+
+    /// Also output the candidates flagged `probe_edge` or `low_ratio`, with their
+    /// filter status (low-support clusters are never output)
+    #[arg(long, help_heading = "Clustering and filters")]
+    pub keep_filtered: bool,
+
     /// Output file [default: standard output]
     #[arg(short, long, value_name = "FILE", help_heading = "Output")]
     pub output: Option<PathBuf>,
@@ -124,6 +146,35 @@ impl ScanArgs {
                 polya_min_fraction: self.polya_min_frac,
             },
         }
+    }
+}
+
+impl ScanArgs {
+    /// Clustering options.
+    #[must_use]
+    pub fn cluster_options(&self) -> ClusterOptions {
+        ClusterOptions {
+            window: self.window,
+            min_support: usize::try_from(self.min_support).unwrap_or(usize::MAX),
+        }
+    }
+
+    /// Capture filter options.
+    #[must_use]
+    pub fn filter_options(&self) -> FilterOptions {
+        FilterOptions {
+            min_signal_ratio: self.min_signal_ratio,
+        }
+    }
+}
+
+/// Parse a non-negative ratio.
+fn parse_ratio(s: &str) -> Result<f64, String> {
+    let value: f64 = s.parse().map_err(|_| format!("`{s}` is not a number"))?;
+    if value >= 0.0 && value.is_finite() {
+        Ok(value)
+    } else {
+        Err(format!("{value} is not a non-negative number"))
     }
 }
 
@@ -182,6 +233,39 @@ mod tests {
         assert_eq!(args.output, None);
         assert_eq!(args.format, OutputFormat::Tsv);
         assert_eq!(args.extract_options(), ExtractOptions::default());
+        assert_eq!(args.cluster_options(), ClusterOptions::default());
+        assert_eq!(args.filter_options(), FilterOptions::default());
+        assert!(!args.keep_filtered);
+    }
+
+    #[test]
+    fn clustering_options() {
+        let args = scan(&[
+            "--window",
+            "50",
+            "--min-support",
+            "5",
+            "--min-signal-ratio",
+            "0.1",
+            "--keep-filtered",
+        ])
+        .unwrap();
+        assert_eq!(args.cluster_options().window, 50);
+        assert_eq!(args.cluster_options().min_support, 5);
+        assert!((args.filter_options().min_signal_ratio - 0.1).abs() < f64::EPSILON);
+        assert!(args.keep_filtered);
+        for (option, value) in [
+            ("--window", "0"),
+            ("--min-support", "0"),
+            ("--min-signal-ratio", "nan"),
+            ("--min-signal-ratio", "inf"),
+        ] {
+            assert_eq!(
+                scan(&[option, value]).unwrap_err().kind(),
+                ErrorKind::ValueValidation,
+                "{option} {value}"
+            );
+        }
     }
 
     #[test]

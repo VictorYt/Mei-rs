@@ -70,7 +70,7 @@ fn data(name: &str) -> String {
 }
 
 #[test]
-fn scan_extracts_the_signals_then_stops() {
+fn scan_logs_a_summary() {
     for (bam, reference) in [
         ("positive.bam", None),
         ("positive.cram", Some("reference.fa")),
@@ -81,7 +81,7 @@ fn scan_extracts_the_signals_then_stops() {
             cmd.args(["--reference", &data(reference)]);
         }
         cmd.assert()
-            .code(1)
+            .success()
             .stderr(predicate::str::contains("sample positive"))
             .stderr(predicate::str::contains(
                 "3 targets (800 bp), 3 regions to scan (2600 bp with 300 bp of padding)",
@@ -90,7 +90,9 @@ fn scan_extracts_the_signals_then_stops() {
             .stderr(predicate::str::contains(
                 "215 signals: 78 soft-clips (21 with a poly(A/T) tail, 0 more set aside for their base quality), 14 unmapped mates, 123 low-MAPQ mates, 0 mates on another contig, 0 large inserts",
             ))
-            .stderr(predicate::str::contains("clustering is not implemented yet"));
+            .stderr(predicate::str::contains(
+                "2 clusters, 2 with enough support: 1 PASS, 1 filtered",
+            ));
     }
 }
 
