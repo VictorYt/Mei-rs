@@ -1,8 +1,11 @@
-//! Genomic regions: the `--region` option, and later the capture targets
-//! (BED loading, padding, interval tree).
+//! Genomic regions: the `--region` option ([`Region`]), the capture probes
+//! of the BED file ([`bed`]) and the regions to scan ([`targets`]).
 //!
-//! Coordinates are stored 0-based half-open, like BED; they are read and
-//! displayed 1-based inclusive, like samtools regions.
+//! Coordinates are stored 0-based half-open, like BED; regions given on the
+//! command line are read and displayed 1-based inclusive, like samtools.
+
+pub mod bed;
+pub mod targets;
 
 use std::fmt;
 use std::str::FromStr;
