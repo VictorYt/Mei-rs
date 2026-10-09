@@ -26,6 +26,12 @@ fn scan_help_lists_every_option() {
         "--reference",
         "--padding",
         "--region",
+        "--min-mapq",
+        "--include-duplicates",
+        "--min-clip-len",
+        "--min-clip-quality",
+        "--polya-min-len",
+        "--polya-min-frac",
         "--output",
         "--format",
         "--threads",
@@ -64,7 +70,7 @@ fn data(name: &str) -> String {
 }
 
 #[test]
-fn scan_checks_the_inputs_then_stops() {
+fn scan_extracts_the_signals_then_stops() {
     for (bam, reference) in [
         ("positive.bam", None),
         ("positive.cram", Some("reference.fa")),
@@ -80,9 +86,11 @@ fn scan_checks_the_inputs_then_stops() {
             .stderr(predicate::str::contains(
                 "3 targets (800 bp), 3 regions to scan (2600 bp with 300 bp of padding)",
             ))
+            .stderr(predicate::str::contains("2023 reads: 2005 kept, 4 duplicates"))
             .stderr(predicate::str::contains(
-                "signal extraction is not implemented yet",
-            ));
+                "215 signals: 78 soft-clips (21 with a poly(A/T) tail, 0 more set aside for their base quality), 14 unmapped mates, 123 low-MAPQ mates, 0 mates on another contig, 0 large inserts",
+            ))
+            .stderr(predicate::str::contains("clustering is not implemented yet"));
     }
 }
 
