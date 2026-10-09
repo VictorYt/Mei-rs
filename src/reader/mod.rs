@@ -2,3 +2,5 @@
 //! signals (soft-clipped reads, discordant pairs, unmapped mates).
 
 pub mod alignment;
+pub mod filter;
+pub mod signals;
