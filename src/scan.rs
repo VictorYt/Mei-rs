@@ -1,18 +1,25 @@
 //! The `scan` subcommand: discovery of candidate insertion sites.
 
-use anyhow::{Result, bail};
+use std::fs::File;
+use std::io::{self, BufWriter, Write};
+use std::path::Path;
+
+use anyhow::{Context, Result};
 use tracing::{info, warn};
 
 use crate::cli::ScanArgs;
+use crate::cluster::{Candidate, cluster, filters};
 use crate::inputs::Inputs;
+use crate::reader::depth::local_depths;
 use crate::reader::extract::{Extraction, extract};
+use crate::writer::{self, Report};
 
 /// Run `mei-rs scan`.
 ///
 /// # Errors
 ///
-/// Fails if the inputs are unusable or inconsistent. Clustering is not
-/// implemented yet: once the signals are extracted, it always fails.
+/// Fails if the inputs are unusable or inconsistent, or if the output cannot
+/// be written.
 pub fn run(args: &ScanArgs) -> Result<()> {
     let inputs = Inputs::load(args)?;
     let targets = &inputs.targets;
@@ -31,9 +38,93 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         targets.padding()
     );
 
-    let extraction = extract(&inputs.alignment, targets, &args.extract_options())?;
+    let extract_options = args.extract_options();
+    let extraction = extract(&inputs.alignment, targets, &extract_options)?;
     log_extraction(&extraction);
-    bail!("clustering is not implemented yet")
+
+    let contigs: Vec<String> = inputs
+        .alignment
+        .contigs()
+        .into_iter()
+        .map(|c| c.name)
+        .collect();
+    let mut candidates = cluster(extraction.signals, &args.cluster_options());
+    let clusters = candidates.len();
+    candidates.retain(Candidate::is_pass);
+
+    let boundaries: Vec<(String, u64)> = candidates
+        .iter()
+        .map(|c| (contigs[c.contig].clone(), c.breakpoint))
+        .collect();
+    let depths = local_depths(&inputs.alignment, &boundaries, &extract_options.filter)?;
+    let filter_options = args.filter_options();
+    for (candidate, depth) in candidates.iter_mut().zip(depths) {
+        candidate.depth = Some(depth);
+        filters::apply(
+            candidate,
+            &contigs[candidate.contig],
+            targets,
+            &filter_options,
+        );
+    }
+    let pass = candidates.iter().filter(|c| c.is_pass()).count();
+    info!(
+        "{clusters} clusters, {} with enough support: {pass} PASS, {} filtered{}",
+        candidates.len(),
+        candidates.len() - pass,
+        if args.keep_filtered { " (kept)" } else { "" }
+    );
+    if !args.keep_filtered {
+        candidates.retain(Candidate::is_pass);
+    }
+
+    let command = command_line();
+    let report = Report {
+        sample: &inputs.sample,
+        command: &command,
+        contigs: &contigs,
+        candidates: &candidates,
+    };
+    write_output(&report, args)
+}
+
+/// Write the report to the output file, or to standard output.
+fn write_output(report: &Report<'_>, args: &ScanArgs) -> Result<()> {
+    let open = |path: &Path| {
+        File::create(path).with_context(|| format!("cannot create {}", path.display()))
+    };
+    let mut out: Box<dyn Write> = match &args.output {
+        Some(path) => Box::new(BufWriter::new(open(path)?)),
+        None => Box::new(BufWriter::new(io::stdout().lock())),
+    };
+    writer::write(report, args.format, &mut out)
+        .and_then(|()| out.flush())
+        .context("cannot write the candidates")?;
+    if let Some(path) = &args.output {
+        info!(
+            "{} candidates written to {}",
+            report.candidates.len(),
+            path.display()
+        );
+    }
+    Ok(())
+}
+
+/// The command line, with the program name only (not its path).
+fn command_line() -> String {
+    let mut args = std::env::args();
+    let program = args
+        .next()
+        .map(|p| {
+            Path::new(&p)
+                .file_name()
+                .map_or(p.clone(), |name| name.to_string_lossy().into_owned())
+        })
+        .unwrap_or_default();
+    std::iter::once(program)
+        .chain(args)
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Log the read counts and the signals found.
