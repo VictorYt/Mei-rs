@@ -145,8 +145,12 @@ Other limitations:
 - Candidates closer than `--window` are merged into one.
 - The TSD length comes from the soft-clip junctions only, and the length of a
   poly(A/T) tail is approximate (it can extend over a few bases after it).
-- On older data, most soft-clips fall below `--min-clip-quality` (2.9 million
-  set aside against 105,000 kept on NA12878).
+- On older data, most soft-clips fall below `--min-clip-quality`: 2.9 million
+  set aside against 105,000 kept on NA12878. They are not lost junctions:
+  93% have no base at the threshold (read ends masked by the base caller,
+  soft-clipped because they mismatch the reference), and trimming the
+  low-quality read end, as BWA `-q` does, would rescue 0.05% of them (chr1).
+  The log reports both counts (#25).
 - CRAM is slower than BAM and uses more memory (NA12878 on 12 cores: BAM 70 s
   and 2.9 GB, CRAM 507 s and 6.5 GB, same output).
 

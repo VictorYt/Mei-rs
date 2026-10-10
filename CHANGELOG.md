@@ -15,6 +15,10 @@ project follows [Semantic Versioning](https://semver.org/).
 - `--probe-edge-tolerance` option (default 2 bp). (#29)
 - `tests/data/targets_tiled.bed`: the fixture insertion with probe edges on
   both junctions. (#29)
+- The log counts, among the soft-clips set aside for their base quality,
+  those without any base at the threshold (masked read ends): 2,682,180 of
+  2,870,963 on the NA12878 exome. The quality filter is unchanged: trimming
+  the low-quality read end would rescue 0.05% of them. (#25)
 
 ### Changed
 

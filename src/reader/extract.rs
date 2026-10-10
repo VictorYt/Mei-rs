@@ -162,6 +162,9 @@ pub struct Extraction {
     pub stats: FilterStats,
     /// Soft-clips set aside for their low base quality.
     pub low_quality_clips: u64,
+    /// Of these, soft-clips without any base at or above the threshold
+    /// (masked read ends).
+    pub masked_clips: u64,
     /// Insert size distribution (`None` without proper pairs).
     pub insert_size: Option<InsertSize>,
 }
@@ -194,6 +197,7 @@ struct RegionResult {
     insert_sizes: Vec<u64>,
     stats: FilterStats,
     low_quality_clips: u64,
+    masked_clips: u64,
 }
 
 /// Results of the regions processed by one worker, with the template lengths
@@ -205,6 +209,7 @@ struct Accumulator {
     insert_sizes: InsertSizeHistogram,
     stats: FilterStats,
     low_quality_clips: u64,
+    masked_clips: u64,
 }
 
 impl Accumulator {
@@ -216,6 +221,7 @@ impl Accumulator {
         }
         self.stats.merge(&region.stats);
         self.low_quality_clips += region.low_quality_clips;
+        self.masked_clips += region.masked_clips;
         self
     }
 
@@ -225,6 +231,7 @@ impl Accumulator {
         self.insert_sizes.merge(&other.insert_sizes);
         self.stats.merge(&other.stats);
         self.low_quality_clips += other.low_quality_clips;
+        self.masked_clips += other.masked_clips;
         self
     }
 }
@@ -274,6 +281,7 @@ pub fn extract(
         signals: result.signals,
         stats: result.stats,
         low_quality_clips: result.low_quality_clips,
+        masked_clips: result.masked_clips,
         insert_size: result.insert_sizes.estimate(),
     };
     if let Some(insert_size) = extraction.insert_size {
@@ -321,6 +329,7 @@ fn scan_region(
         result.large_inserts.extend(read.large_insert);
         result.insert_sizes.extend(read.insert_size);
         result.low_quality_clips += u64::from(read.low_quality_clips);
+        result.masked_clips += u64::from(read.masked_clips);
     }
     Ok(result)
 }

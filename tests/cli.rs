@@ -88,7 +88,7 @@ fn scan_logs_a_summary() {
             ))
             .stderr(predicate::str::contains("2023 reads: 2005 kept, 4 duplicates"))
             .stderr(predicate::str::contains(
-                "215 signals: 78 soft-clips (21 with a poly(A/T) tail, 0 more set aside for their base quality), 14 unmapped mates, 123 low-MAPQ mates, 0 mates on another contig, 0 large inserts",
+                "215 signals: 78 soft-clips (21 with a poly(A/T) tail, 0 more set aside for their base quality, 0 of which are masked read ends), 14 unmapped mates, 123 low-MAPQ mates, 0 mates on another contig, 0 large inserts",
             ))
             .stderr(predicate::str::contains(
                 "2 clusters, 2 with enough support: 1 PASS (1 high, 0 medium, 0 low confidence), 1 filtered",

@@ -158,6 +158,10 @@ pub struct ReadSignals {
     pub insert_size: Option<u64>,
     /// Soft-clips set aside for their low base quality.
     pub low_quality_clips: u32,
+    /// Of these, soft-clips without any base at or above the threshold: read
+    /// ends masked by the base caller (e.g. Illumina Q2 masking on older
+    /// data) rather than insertion junctions.
+    pub masked_clips: u32,
 }
 
 /// Find the signals of a read that passed the filter.
@@ -272,6 +276,9 @@ fn clip_signals(
         let median_quality = qualities.get(range.clone()).map_or(u8::MAX, median);
         if median_quality < options.min_quality {
             out.low_quality_clips += 1;
+            if qualities[range].iter().all(|&q| q < options.min_quality) {
+                out.masked_clips += 1;
+            }
             continue;
         }
         let clipped = &sequence[range];
@@ -546,6 +553,22 @@ mod tests {
         let out = signals(&low);
         assert_eq!(out.signals, []);
         assert_eq!(out.low_quality_clips, 1);
+        assert_eq!(out.masked_clips, 1);
+
+        // A low median, but some bases above the threshold: not masked.
+        let mut qualities = vec![30; 100];
+        qualities[..11].fill(10);
+        let partly = read(
+            Flags::empty(),
+            &[(Kind::SoftClip, 20), (Kind::Match, 80)],
+            &seq,
+        )
+        .set_quality_scores(QualityScores::from(qualities))
+        .build();
+        let out = signals(&partly);
+        assert_eq!(out.signals, []);
+        assert_eq!(out.low_quality_clips, 1);
+        assert_eq!(out.masked_clips, 0);
     }
 
     #[test]
