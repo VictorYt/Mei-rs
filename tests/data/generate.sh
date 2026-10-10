@@ -9,7 +9,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 python3 -I simulate.py "$tmp"
-mv "$tmp/reference.fa" "$tmp/targets.bed" "$tmp/truth.tsv" .
+mv "$tmp/reference.fa" "$tmp/targets.bed" "$tmp/targets_tiled.bed" "$tmp/truth.tsv" .
 samtools faidx reference.fa
 
 for sample in positive negative; do

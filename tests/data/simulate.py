@@ -3,6 +3,8 @@
 Writes, into the directory given as the only argument:
 - reference.fa: two random contigs; chr2 holds a reference copy of the Alu;
 - targets.bed: three capture targets;
+- targets_tiled.bed: the same, with the insertion target split into two
+  overlapping probes whose edges fall on the insertion junctions;
 - positive.sam: heterozygous Alu insertion with a TSD and a poly(A) tail on
   chr1, a probe-edge artefact and a few marked PCR duplicates;
 - negative.sam: same targets, without the insertion;
@@ -52,6 +54,14 @@ TARGETS = [
     ("chr1", 3000, 3200, "target_probe_edge"),
     ("chr2", 4000, 4300, "target_negative"),
 ]
+# Same targets, the insertion one tiled with two overlapping probes: the first
+# ends at the left junction, the second starts at the right one. Every
+# soft-clip of the insertion stops at a probe edge, yet its poly(A) tail and
+# TSD must keep it from the probe-edge filter.
+TILED_TARGETS = [
+    ("chr1", 9850, INS_POS + TSD_LEN, "target_insertion_left"),
+    ("chr1", INS_POS, 10150, "target_insertion_right"),
+] + TARGETS[1:]
 
 COMPLEMENT = str.maketrans("ACGT", "TGCA")
 
@@ -297,9 +307,10 @@ def main(out_dir):
             for i in range(0, len(seq), 60):
                 fa.write(seq[i : i + 60] + "\n")
 
-    with open(os.path.join(out_dir, "targets.bed"), "w") as bed:
-        for contig, start, end, name in TARGETS:
-            bed.write(f"{contig}\t{start}\t{end}\t{name}\n")
+    for file_name, targets in (("targets.bed", TARGETS), ("targets_tiled.bed", TILED_TARGETS)):
+        with open(os.path.join(out_dir, file_name), "w") as bed:
+            for contig, start, end, name in targets:
+                bed.write(f"{contig}\t{start}\t{end}\t{name}\n")
 
     chr1 = reference["chr1"]
     alt = chr1[: INS_POS + TSD_LEN] + INSERTION + chr1[INS_POS:]

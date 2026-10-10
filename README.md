@@ -77,6 +77,7 @@ skipped with a warning.
 | `--min-clips` | 2 | minimum number of soft-clips at the junctions (`no_junction` below); each junction needs as many to give a TSD |
 | `--allow-no-tail` | off | do not require a soft-clip with a poly(A/T) tail (`no_tail`) |
 | `--min-signal-ratio` | 0.05 | minimum number of supporting reads per read of local depth |
+| `--probe-edge-tolerance` | 2 | distance in bp to a probe start or end within which a soft-clip stops at the probe edge |
 | `--keep-filtered` | off | also write the candidates flagged `no_junction`, `no_tail`, `probe_edge` or `low_ratio` |
 | **Output** | | |
 | `-o`, `--output` | stdout | output file |
@@ -100,8 +101,9 @@ skipped with a warning.
    flanks give the TSD.
 3. **Filters**: `no_junction` when fewer than `--min-clips` soft-clips mark
    the junctions (mate signals alone); `no_tail` without any poly(A/T) tail;
-   `probe_edge` when every soft-clip stops exactly at a probe start or end
-   (digestion or ligation artefact of the capture); `low_ratio` when the
+   `probe_edge` when every soft-clip stops within `--probe-edge-tolerance`
+   of a probe start or end, without any poly(A/T) tail or TSD (digestion or
+   ligation artefact of the capture); `low_ratio` when the
    supporting reads are too few for the local depth.
 4. **Confidence** of the `PASS` candidates: `high` with a poly(A/T) tail and a
    TSD (complete evidence of a retrotransposition), `medium` with a tail and
@@ -150,9 +152,6 @@ Other limitations:
 
 ### Next steps (v0.1.1)
 
-- Probe-edge filter with a ±2 bp tolerance, applied only without a poly(A/T)
-  tail or a TSD (#29).
-- Insert size distribution as a histogram, to cut memory (#23).
 - Faster, lighter CRAM decoding (#24).
 - Soft-clip base quality filter suited to older data (#25).
 - Precision and recall against truth sets (HGSVC trios, GIAB HG002) and
