@@ -29,6 +29,14 @@ project follows [Semantic Versioning](https://semver.org/).
 - `probe_edge` now applies within `--probe-edge-tolerance` of a probe edge,
   and only to candidates without any poly(A/T) tail or TSD: a real insertion
   next to a probe edge stays `PASS`. (#29)
+- Faster CRAM reading: neighbouring regions (and candidate breakpoints, for
+  the local depth) are read with one query, so that each CRAM container is
+  decoded once instead of once per region; regions are processed contig by
+  contig, with the reference sequence loaded once per contig and released
+  after it; the index is read once instead of once per reader; fewer readers
+  are opened. Same output. On the NA12878 exome (12 cores): CRAM 507 s and
+  6.5 GB -> 124 s (memory 1.4 GB with the macOS large-allocation cache
+  disabled, 3.8 GB with it); BAM 72 s and 1.65 GB -> 66 s and 1.2 GB. (#24)
 - Template lengths of proper pairs are counted in a bounded histogram instead
   of being kept in memory: same insert size estimate and output, peak memory
   on the NA12878 exome down from 3.2 GB to 1.7 GB. (#23)

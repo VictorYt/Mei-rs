@@ -112,11 +112,32 @@ pub enum AlignmentError {
     },
 }
 
+/// Index of an alignment file, read once and cloned for each reader.
+#[derive(Clone)]
+enum Index {
+    Bai(noodles::bam::bai::Index),
+    Csi(noodles::csi::Index),
+    Crai(noodles::cram::crai::Index),
+}
+
+impl Index {
+    fn read(format: Format, path: &Path) -> io::Result<Self> {
+        Ok(match format {
+            Format::Bam if path.extension().is_some_and(|ext| ext == "csi") => {
+                Self::Csi(noodles::csi::fs::read(path)?)
+            }
+            Format::Bam => Self::Bai(noodles::bam::bai::fs::read(path)?),
+            Format::Cram => Self::Crai(noodles::cram::crai::fs::read(path)?),
+        })
+    }
+}
+
 /// An indexed BAM or CRAM file.
 pub struct AlignmentFile {
     path: PathBuf,
     format: Format,
     index_path: PathBuf,
+    index: Index,
     header: sam::Header,
     reference: Option<fasta::Repository>,
 }
@@ -163,10 +184,15 @@ impl AlignmentFile {
             (Format::Bam, _) => None,
         };
 
+        let index = Index::read(format, &index_path).map_err(|source| AlignmentError::Io {
+            path: index_path.clone(),
+            source,
+        })?;
         let mut file = Self {
             path: path.to_path_buf(),
             format,
             index_path,
+            index,
             header: sam::Header::default(),
             reference,
         };
@@ -243,14 +269,34 @@ impl AlignmentFile {
         Ok(RegionReader { file: self, inner })
     }
 
+    /// Load the reference sequence of a contig into the cache used to decode
+    /// a CRAM file, before the readers need it: on a cache miss, every reader
+    /// asking for it at once would read it from the FASTA in turn.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the sequence cannot be read from the FASTA.
+    pub fn load_reference(&self, contig: &str) -> io::Result<()> {
+        if let Some(reference) = &self.reference {
+            reference.get(contig.as_bytes()).transpose()?;
+        }
+        Ok(())
+    }
+
+    /// Drop the reference sequences cached to decode a CRAM file (sequences
+    /// in use stay alive until their readers release them).
+    pub fn clear_reference_cache(&self) {
+        if let Some(reference) = &self.reference {
+            reference.clear();
+        }
+    }
+
     fn build_reader(&self) -> io::Result<IndexedReader<File>> {
         let builder = Builder::default();
-        let mut builder = match self.format {
-            Format::Bam if self.index_path.extension().is_some_and(|ext| ext == "csi") => {
-                builder.set_index(noodles::csi::fs::read(&self.index_path)?)
-            }
-            Format::Bam => builder.set_index(noodles::bam::bai::fs::read(&self.index_path)?),
-            Format::Cram => builder.set_index(noodles::cram::crai::fs::read(&self.index_path)?),
+        let mut builder = match &self.index {
+            Index::Bai(index) => builder.set_index(index.clone()),
+            Index::Csi(index) => builder.set_index(index.clone()),
+            Index::Crai(index) => builder.set_index(index.clone()),
         };
         if let Some(reference) = &self.reference {
             builder = builder.set_reference_sequence_repository(reference.clone());

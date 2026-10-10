@@ -1,15 +1,13 @@
 //! Signal extraction over all the regions to scan, in parallel.
 //!
-//! Regions are processed in parallel on the current `rayon` thread pool, with
-//! one reader per worker. A read overlapping two neighbouring regions is
-//! processed once, by the first one. The result does not depend on the number
-//! of threads: signals are sorted.
+//! Regions are read in batches (see [`super::batch`]). A read overlapping two
+//! regions is processed once. The result does not depend on the number of
+//! threads or on the batches: signals are sorted.
 
 use std::io;
 
-use rayon::prelude::*;
-
 use super::alignment::{AlignmentError, AlignmentFile, RegionReader};
+use super::batch::{self, Batch};
 use super::filter::{FilterStats, ReadFilter};
 use super::signals::{ClipOptions, Signal, SignalKind, read_signals};
 use crate::regions::targets::{ScanRegion, TargetSet};
@@ -189,7 +187,7 @@ impl Extraction {
     }
 }
 
-/// Result of one region.
+/// Result of one batch of regions.
 #[derive(Default)]
 struct RegionResult {
     signals: Vec<Signal>,
@@ -247,35 +245,33 @@ pub fn extract(
     options: &ExtractOptions,
 ) -> Result<Extraction, AlignmentError> {
     let regions = targets.regions();
-    let result = regions
-        .par_iter()
-        .enumerate()
-        .map_init(
-            || file.reader(),
-            |reader, (i, region)| {
-                let reader = reader
-                    .as_mut()
-                    .map_err(|e| io::Error::other(e.to_string()))?;
-                // A read starting before the region and overlapping the
-                // previous one belongs to the previous one.
-                let previous_end = i
-                    .checked_sub(1)
-                    .map(|p| &regions[p])
-                    .filter(|p| p.contig == region.contig)
-                    .map(|p| p.end);
-                scan_region(reader, file, region, previous_end, options)
-            },
-        )
-        // The template lengths of each region go into one histogram per
-        // split, not a list of all the pairs.
-        .try_fold(Accumulator::default, |acc, region| {
-            region.map(|region| acc.add(region))
-        })
-        .try_reduce(Accumulator::default, |a, b| Ok(a.merge(b)))
-        .map_err(|source| AlignmentError::Io {
-            path: file.path().to_path_buf(),
-            source,
-        })?;
+    let result = batch::fold(
+        file,
+        &batch::batches(regions, file.format()),
+        |reader, batch| {
+            // A read starting before the batch and overlapping the previous
+            // region belongs to the previous batch.
+            let previous_end = batch
+                .range
+                .start
+                .checked_sub(1)
+                .map(|p| &regions[p])
+                .filter(|p| p.contig == batch.span.contig)
+                .map(|p| p.end);
+            scan_batch(
+                reader,
+                file,
+                &regions[batch.range.clone()],
+                batch,
+                previous_end,
+                options,
+            )
+        },
+        // The template lengths of each batch go into one histogram per split,
+        // not a list of all the pairs.
+        Accumulator::add,
+        Accumulator::merge,
+    )?;
 
     let mut extraction = Extraction {
         signals: result.signals,
@@ -296,22 +292,28 @@ pub fn extract(
     Ok(extraction)
 }
 
-/// Extract the signals of the reads of one region.
-fn scan_region(
+/// Extract the signals of the reads of a batch of regions of one contig.
+fn scan_batch(
     reader: &mut RegionReader<'_>,
     file: &AlignmentFile,
-    region: &ScanRegion,
+    regions: &[ScanRegion],
+    batch: &Batch,
     previous_end: Option<u64>,
     options: &ExtractOptions,
 ) -> io::Result<RegionResult> {
     let mut result = RegionResult::default();
-    for record in reader.query(region)? {
+    let span = &batch.span;
+    for record in reader.query(span)? {
         let record = record?;
         if let (Some(previous_end), Some(start)) =
             (previous_end, record.alignment_start().transpose()?)
-            && (start.get() as u64 - 1) < region.start
+            && (start.get() as u64 - 1) < span.start
             && (start.get() as u64 - 1) < previous_end
         {
+            continue;
+        }
+        // Reads between the regions of a batch are not scanned.
+        if regions.len() > 1 && batch::overlap(regions, record.as_ref())?.is_empty() {
             continue;
         }
         let exclusion = options.filter.check(record.as_ref())?;
@@ -468,6 +470,19 @@ mod tests {
         let b = extract(&file, &whole, &options).unwrap();
         assert_eq!(a.stats, b.stats);
         assert_eq!(a.signals, b.signals);
+
+        // CRAM: the two regions, and a third one 2 kb away, form one batch;
+        // reads between them are left out.
+        let cram =
+            AlignmentFile::open(&data("positive.cram"), Some(&data("reference.fa"))).unwrap();
+        let three = targets(&[(9_850, 10_005), (10_006, 10_150), (12_000, 12_100)]);
+        let only_third = targets(&[(12_000, 12_100)]);
+        let c = extract(&cram, &three, &options).unwrap();
+        let d = extract(&file, &only_third, &options).unwrap();
+        let mut expected = a.stats;
+        expected.merge(&d.stats);
+        assert_eq!(c.stats, expected);
+        assert_eq!(c.signals, a.signals);
     }
 
     fn histogram(lengths: &[u64]) -> InsertSizeHistogram {
