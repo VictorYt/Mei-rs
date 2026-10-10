@@ -33,6 +33,7 @@ in pure Rust.
 mei-rs scan \
   --bam sample.bam \
   --bed targets.bed \
+  --reference genome.fa \
   --output sample.candidates.tsv \
   --threads 8
 
@@ -161,10 +162,14 @@ Other limitations:
   was 507 s and 6.5 GB before #24). On macOS, the allocator keeps the freed
   reference sequences in memory (3.8 GB, 1.4 GB with `MallocLargeCache=0`).
 
-### Next steps (v0.1.1)
+### Next steps (v0.2.0)
 
-- Precision and recall against truth sets (HGSVC trios, GIAB HG002) and
-  comparison with Scramble, MELT and xTea (#26).
+- Element typing against MEI consensus sequences (#30), and mates checked
+  against them (#31), so that the `medium` level gets specific.
+- Short soft-clips of 2x75 bp reads (#32), local assembly of the junctions
+  and TSD (#33), scoring and genotype (#34), VCF output (#35).
+- Precision and recall against truth sets (HGSVC, GIAB HG002) and comparison
+  with Scramble, MELT and xTea (#26).
 
 Calls are research results: confirm them with an orthogonal method before any
 clinical use.

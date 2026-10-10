@@ -6,6 +6,12 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-10
+
+Specificity on real data: `PASS` candidates need soft-clip junctions and a
+poly(A/T) tail, get a confidence level, and lose the length variants of
+reference poly(A) tracts; lower memory and faster CRAM reading.
+
 ### Added
 
 - Confidence level of `PASS` candidates (`confidence` column): `high` (poly(A/T)
@@ -93,5 +99,6 @@ targeted capture and exome data.
   kept in memory (#23); most soft-clips of older data fall below the base
   quality threshold (#25).
 
-[Unreleased]: https://github.com/VictorYt/Mei-rs/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/VictorYt/Mei-rs/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/VictorYt/Mei-rs/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/VictorYt/Mei-rs/releases/tag/v0.1.0
