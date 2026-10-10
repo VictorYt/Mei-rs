@@ -6,6 +6,20 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Confidence level of `PASS` candidates (`confidence` column): `high` (poly(A/T)
+  tail and TSD), `medium` (tail and mate signals), `low` (soft-clips only);
+  `left_junction_clips` and `right_junction_clips` columns. (#22)
+- `--min-clips` and `--allow-no-tail` options. (#22)
+
+### Changed
+
+- `PASS` now requires soft-clips at the junctions (new `no_junction` filter)
+  and a soft-clip with a poly(A/T) tail (new `no_tail` filter); a TSD is only
+  reported when each junction has `--min-clips` soft-clips. On the NA12878
+  exome: 358 `PASS` candidates instead of 56,956. (#22)
+
 ## [0.1.0] - 2026-10-10
 
 First release: discovery of candidate mobile element insertion sites in

@@ -77,7 +77,12 @@ mod tests {
     fn candidate(signals: Vec<crate::reader::signals::Signal>, depth: u64) -> Candidate {
         let mut signals = signals;
         signals.sort();
-        let mut c = cluster(signals, &ClusterOptions::default()).remove(0);
+        // Tails are not what these tests are about.
+        let options = ClusterOptions {
+            require_tail: false,
+            ..ClusterOptions::default()
+        };
+        let mut c = cluster(signals, &options).remove(0);
         c.depth = Some(depth);
         c
     }
@@ -113,7 +118,7 @@ mod tests {
         apply(&mut c, "chr1", &targets(), &options);
         assert!(c.is_pass());
 
-        // Mate signals only: not a probe-edge artefact.
+        // Mate signals only: not a probe-edge artefact (but no junction).
         let mut c = candidate(
             (0..5)
                 .map(|i| {
@@ -128,7 +133,7 @@ mod tests {
             20,
         );
         apply(&mut c, "chr1", &targets(), &options);
-        assert!(c.is_pass());
+        assert_eq!(c.filters, [Filter::NoJunction]);
     }
 
     #[test]

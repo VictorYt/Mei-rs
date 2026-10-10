@@ -2,6 +2,6 @@
 ##command: {command}
 ##sample: positive
 ##positions: 1-based; a position p means the insertion is right after base p
-#id	contig	position	left_junction	right_junction	tsd_length	strand	filter	support	left_clips	right_clips	unmapped_mates	discordant_mates	polya_clips	polyt_clips	both_sides	distinct_starts	depth	signal_ratio	start	end
-MEI_1	chr1	3000	.	3000	.	.	probe_edge	10	10	0	0	0	0	0	no	1	160	0.063	3000	3000
-MEI_2	chr1	10012	10012	10000	12	+	PASS	160	21	47	14	123	21	0	yes	118	148	1.081	9856	10099
+#id	contig	position	left_junction	right_junction	tsd_length	strand	filter	confidence	support	left_clips	right_clips	left_junction_clips	right_junction_clips	unmapped_mates	discordant_mates	polya_clips	polyt_clips	both_sides	distinct_starts	depth	signal_ratio	start	end
+MEI_1	chr1	3000	.	3000	.	.	no_tail;probe_edge	.	10	10	0	0	10	0	0	0	0	no	1	160	0.063	3000	3000
+MEI_2	chr1	10012	10012	10000	12	+	PASS	high	160	21	47	47	21	14	123	21	0	yes	118	148	1.081	9856	10099

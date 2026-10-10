@@ -74,8 +74,10 @@ skipped with a warning.
 | **Clustering and filters** | | |
 | `--window` | 100 | maximum distance between two consecutive signals of a candidate |
 | `--min-support` | 3 | minimum number of distinct supporting reads of a candidate |
+| `--min-clips` | 2 | minimum number of soft-clips at the junctions (`no_junction` below); each junction needs as many to give a TSD |
+| `--allow-no-tail` | off | do not require a soft-clip with a poly(A/T) tail (`no_tail`) |
 | `--min-signal-ratio` | 0.05 | minimum number of supporting reads per read of local depth |
-| `--keep-filtered` | off | also write the candidates flagged `probe_edge` or `low_ratio` |
+| `--keep-filtered` | off | also write the candidates flagged `no_junction`, `no_tail`, `probe_edge` or `low_ratio` |
 | **Output** | | |
 | `-o`, `--output` | stdout | output file |
 | `--format` | `tsv` | `tsv`, `bed` or `json` (with every signal of every candidate) |
@@ -96,9 +98,14 @@ skipped with a warning.
 2. **Clustering**: signals at most `--window` bases apart form a candidate.
    Its position is the most supported junction; the junctions of the two
    flanks give the TSD.
-3. **Capture filters**: `probe_edge` when every soft-clip stops exactly at a
-   probe start or end (digestion or ligation artefact of the capture);
-   `low_ratio` when the supporting reads are too few for the local depth.
+3. **Filters**: `no_junction` when fewer than `--min-clips` soft-clips mark
+   the junctions (mate signals alone); `no_tail` without any poly(A/T) tail;
+   `probe_edge` when every soft-clip stops exactly at a probe start or end
+   (digestion or ligation artefact of the capture); `low_ratio` when the
+   supporting reads are too few for the local depth.
+4. **Confidence** of the `PASS` candidates: `high` with a poly(A/T) tail and a
+   TSD (complete evidence of a retrotransposition), `medium` with a tail and
+   mate signals, `low` with soft-clips only.
 
 ### Output
 
@@ -106,8 +113,8 @@ One line per candidate, sorted by position. Positions are 1-based: a position
 `p` means the insertion is right after base `p`. Example:
 
 ```
-#id    contig  position  left_junction  right_junction  tsd_length  strand  filter  support  ...
-MEI_1  chr1    10012     10012          10000           12          +       PASS    160      ...
+#id    contig  position  left_junction  right_junction  tsd_length  strand  filter  confidence  support  ...
+MEI_1  chr1    10012     10012          10000           12          +       PASS    high        160      ...
 ```
 
 Every column of the TSV, BED and JSON formats is described in
@@ -115,22 +122,20 @@ Every column of the TSV, BED and JSON formats is described in
 
 ## Limitations
 
-v0.1.0 finds candidate sites but **is not yet specific on real data**. On the
+v0.1.0 found candidate sites but was not specific on real data. On the
 NA12878 exome of the 1000 Genomes Project (GRCh38, 172 million reads,
-1000 Genomes exome targets), it writes 56,956 `PASS` candidates, while a few
-dozen insertions are expected in the targets:
+1000 Genomes exome targets), it wrote 56,956 `PASS` candidates, mostly
+clusters of unmapped mates or of mates on another contig without any soft-clip
+junction, while a few dozen insertions are expected in the targets.
 
-- most `PASS` candidates are clusters of unmapped mates or of mates on another
-  contig, without any soft-clip junction (chimeric fragments are frequent in
-  exome libraries);
-- their TSD lengths are spread evenly from 1 to 50 bp, instead of peaking at
-  7-20 bp;
-- only 25 `PASS` candidates combine signals from both sides, a poly(A/T) tail
-  and a 5-25 bp TSD.
-
-Until v0.1.1, rank the candidates yourself: keep those with `both_sides` =
-`yes`, `polya_clips` or `polyt_clips` above 0 and a `tsd_length` of about 5 to
-25 bp.
+Since #22, a `PASS` candidate needs soft-clips at its junctions
+(`no_junction`) and at least one soft-clip with a poly(A/T) tail (`no_tail`),
+the only evidence that the inserted sequence is a retrotransposon until
+element typing; each `PASS` candidate gets a confidence level. On the same
+exome: **358 `PASS`** (6 `high`, 350 `medium`, 2 `low`); the 6 `high` ones all
+have signals from both sides and a 6-25 bp TSD. The `medium` level (tail and
+mate signals, no TSD) still needs the mates to be checked against MEI
+sequences (#31): favour `high` candidates.
 
 Other limitations:
 
@@ -145,11 +150,13 @@ Other limitations:
 
 ### Next steps (v0.1.1)
 
-- Require soft-clip junctions for `PASS` (#22).
+- Probe-edge filter with a ±2 bp tolerance, applied only without a poly(A/T)
+  tail or a TSD (#29).
 - Insert size distribution as a histogram, to cut memory (#23).
 - Faster, lighter CRAM decoding (#24).
 - Soft-clip base quality filter suited to older data (#25).
-- Precision and recall against truth sets: HGSVC trios, GIAB HG002 (#26).
+- Precision and recall against truth sets (HGSVC trios, GIAB HG002) and
+  comparison with Scramble, MELT and xTea (#26).
 
 Calls are research results: confirm them with an orthogonal method before any
 clinical use.
