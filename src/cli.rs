@@ -111,13 +111,24 @@ pub struct ScanArgs {
         value_parser = clap::value_parser!(u64).range(1..), help_heading = "Clustering and filters")]
     pub min_support: u64,
 
+    /// Minimum number of soft-clips at the junctions (fewer: `no_junction`);
+    /// each junction needs as many to give a TSD
+    #[arg(long, value_name = "READS", default_value_t = 2,
+        value_parser = clap::value_parser!(u64).range(1..), help_heading = "Clustering and filters")]
+    pub min_clips: u64,
+
+    /// Do not require a soft-clip with a poly(A/T) tail (`no_tail`) to pass
+    #[arg(long, help_heading = "Clustering and filters")]
+    pub allow_no_tail: bool,
+
     /// Minimum number of supporting reads per read of local depth
     #[arg(long, value_name = "RATIO", default_value_t = 0.05,
         value_parser = parse_ratio, help_heading = "Clustering and filters")]
     pub min_signal_ratio: f64,
 
-    /// Also output the candidates flagged `probe_edge` or `low_ratio`, with their
-    /// filter status (low-support clusters are never output)
+    /// Also output the candidates flagged `no_junction`, `no_tail`,
+    /// `probe_edge` or `low_ratio`, with their filter status (low-support
+    /// clusters are never output)
     #[arg(long, help_heading = "Clustering and filters")]
     pub keep_filtered: bool,
 
@@ -156,6 +167,8 @@ impl ScanArgs {
         ClusterOptions {
             window: self.window,
             min_support: usize::try_from(self.min_support).unwrap_or(usize::MAX),
+            min_clips: usize::try_from(self.min_clips).unwrap_or(usize::MAX),
+            require_tail: !self.allow_no_tail,
         }
     }
 
@@ -245,6 +258,9 @@ mod tests {
             "50",
             "--min-support",
             "5",
+            "--min-clips",
+            "4",
+            "--allow-no-tail",
             "--min-signal-ratio",
             "0.1",
             "--keep-filtered",
@@ -252,11 +268,14 @@ mod tests {
         .unwrap();
         assert_eq!(args.cluster_options().window, 50);
         assert_eq!(args.cluster_options().min_support, 5);
+        assert_eq!(args.cluster_options().min_clips, 4);
+        assert!(!args.cluster_options().require_tail);
         assert!((args.filter_options().min_signal_ratio - 0.1).abs() < f64::EPSILON);
         assert!(args.keep_filtered);
         for (option, value) in [
             ("--window", "0"),
             ("--min-support", "0"),
+            ("--min-clips", "0"),
             ("--min-signal-ratio", "nan"),
             ("--min-signal-ratio", "inf"),
         ] {

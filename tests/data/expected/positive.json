@@ -13,11 +13,15 @@
       "tsd_length": null,
       "strand": ".",
       "filter": [
+        "no_tail",
         "probe_edge"
       ],
+      "confidence": null,
       "support": 10,
       "left_clips": 10,
       "right_clips": 0,
+      "left_junction_clips": 0,
+      "right_junction_clips": 10,
       "unmapped_mates": 0,
       "discordant_mates": 0,
       "polya_clips": 0,
@@ -182,9 +186,12 @@
       "filter": [
         "PASS"
       ],
+      "confidence": "high",
       "support": 160,
       "left_clips": 21,
       "right_clips": 47,
+      "left_junction_clips": 47,
+      "right_junction_clips": 21,
       "unmapped_mates": 14,
       "discordant_mates": 123,
       "polya_clips": 21,

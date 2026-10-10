@@ -3,7 +3,7 @@
 `mei-rs scan` writes one line (or JSON object) per candidate insertion site,
 sorted by contig (alignment header order) and position. By default only the
 candidates that pass every filter are written; `--keep-filtered` also writes
-those flagged `probe_edge` or `low_ratio`. Clusters with fewer than
+those flagged `no_junction`, `no_tail`, `probe_edge` or `low_ratio`. Clusters with fewer than
 `--min-support` distinct reads are never written.
 
 ## Coordinates
@@ -26,12 +26,15 @@ convention), then one `#` line names the columns:
 | `position` | Estimated insertion point: the most supported soft-clip junction, or, without soft-clips, the midpoint between the reads of the two flanks. |
 | `left_junction` | End of the upstream flank: most supported junction of the reads clipped on their right end (`.` if none). |
 | `right_junction` | Start of the downstream flank: most supported junction of the reads clipped on their left end (`.` if none). |
-| `tsd_length` | `left_junction - right_junction` when the flanks overlap by 1 to 50 bp: the length of the target site duplication (`.` otherwise). |
+| `tsd_length` | `left_junction - right_junction` when each junction has at least `--min-clips` soft-clips and the flanks overlap by 1 to 50 bp: the length of the target site duplication (`.` otherwise). |
 | `strand` | Strand of the inserted element: `+` when poly(A) tails outnumber poly(T) tails in the soft-clips, `-` for the reverse, `.` on ties. |
-| `filter` | `PASS`, or the failed filters separated by `;`: `probe_edge` (every soft-clip stops exactly at a probe start or end: capture artefact), `low_ratio` (`signal_ratio` below `--min-signal-ratio`). |
+| `filter` | `PASS`, or the failed filters separated by `;`: `no_junction` (fewer than `--min-clips` soft-clips at the junctions: mate signals alone do not resolve the insertion to the base), `no_tail` (no soft-clip with a poly(A/T) tail; disabled by `--allow-no-tail`), `probe_edge` (every soft-clip stops exactly at a probe start or end: capture artefact), `low_ratio` (`signal_ratio` below `--min-signal-ratio`). |
+| `confidence` | For `PASS` candidates: `high` (a poly(A/T) tail and a TSD: complete evidence of a retrotransposition), `medium` (mate signals, without a TSD or, with `--allow-no-tail`, without a tail), `low` (soft-clips only, without a TSD); `.` for filtered candidates. |
 | `support` | Distinct supporting reads (by name). |
 | `left_clips` | Reads soft-clipped on their left end (the insertion lies before them). |
 | `right_clips` | Reads soft-clipped on their right end (the insertion lies after them). |
+| `left_junction_clips` | Soft-clips within 2 bp of `left_junction`. |
+| `right_junction_clips` | Soft-clips within 2 bp of `right_junction`. |
 | `unmapped_mates` | Reads whose mate is unmapped. |
 | `discordant_mates` | Reads whose mate maps with a low MAPQ, to another contig, or far away on the same contig. |
 | `polya_clips` | Soft-clips with a poly(A) tail at the junction. |
@@ -53,12 +56,14 @@ Missing values are written `.`.
 | 4 | Candidate identifier. |
 | 5 | `support`, capped at 1000. |
 | 6 | `strand`. |
+| 7 | `confidence` for a `PASS` candidate, otherwise the failed filters. |
 
 ## JSON (`--format json`)
 
 An object with `mei_rs` (version), `command`, `sample`, `positions` (the
 coordinate convention) and `candidates`. Each candidate has the TSV columns
-(`filter` as a list, `both_sides` as a boolean, missing values as `null`) and
+(`filter` as a list, `both_sides` as a boolean, missing values, such as
+the `confidence` of a filtered candidate, as `null`) and
 a `signals` list. Each signal has:
 
 | Field | Description |

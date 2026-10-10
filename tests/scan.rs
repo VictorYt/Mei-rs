@@ -91,6 +91,7 @@ fn positive_sample_has_one_pass_candidate_at_the_insertion() {
         "position {position} not within 5 bp of {right}-{left}"
     );
     assert_eq!(column(&tsv, row, "filter"), "PASS");
+    assert_eq!(column(&tsv, row, "confidence"), "high");
     assert_eq!(column(&tsv, row, "contig"), truth[0]);
     assert_eq!(column(&tsv, row, "left_junction"), truth[1]);
     assert_eq!(column(&tsv, row, "right_junction"), (right - 1).to_string());
@@ -120,7 +121,8 @@ fn negative_sample_has_no_pass_candidate() {
     ]);
     let rows = rows(&tsv);
     assert_eq!(rows.len(), 1);
-    assert_eq!(column(&tsv, &rows[0], "filter"), "probe_edge");
+    // No poly(A/T) tail in the artefact either.
+    assert_eq!(column(&tsv, &rows[0], "filter"), "no_tail;probe_edge");
     assert_eq!(column(&tsv, &rows[0], "position"), "3000");
 }
 

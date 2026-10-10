@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use tracing::{info, warn};
 
 use crate::cli::ScanArgs;
-use crate::cluster::{Candidate, cluster, filters};
+use crate::cluster::{Candidate, Confidence, Filter, cluster, filters};
 use crate::inputs::Inputs;
 use crate::reader::depth::local_depths;
 use crate::reader::extract::{Extraction, extract};
@@ -50,7 +50,7 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         .collect();
     let mut candidates = cluster(extraction.signals, &args.cluster_options());
     let clusters = candidates.len();
-    candidates.retain(Candidate::is_pass);
+    candidates.retain(|c| !c.is_low_support());
 
     let boundaries: Vec<(String, u64)> = candidates
         .iter()
@@ -68,12 +68,33 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         );
     }
     let pass = candidates.iter().filter(|c| c.is_pass()).count();
+    let level = |confidence| {
+        candidates
+            .iter()
+            .filter(|c| c.confidence() == Some(confidence))
+            .count()
+    };
     info!(
-        "{clusters} clusters, {} with enough support: {pass} PASS, {} filtered{}",
+        "{clusters} clusters, {} with enough support: {pass} PASS ({} high, {} medium, {} low confidence), {} filtered{}",
         candidates.len(),
+        level(Confidence::High),
+        level(Confidence::Medium),
+        level(Confidence::Low),
         candidates.len() - pass,
         if args.keep_filtered { " (kept)" } else { "" }
     );
+    for filter in [
+        Filter::NoJunction,
+        Filter::NoTail,
+        Filter::ProbeEdge,
+        Filter::LowRatio,
+    ] {
+        let n = candidates
+            .iter()
+            .filter(|c| c.filters.contains(&filter))
+            .count();
+        info!("  {}: {n}", filter.name());
+    }
     if !args.keep_filtered {
         candidates.retain(Candidate::is_pass);
     }
