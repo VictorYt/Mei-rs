@@ -12,6 +12,9 @@ project follows [Semantic Versioning](https://semver.org/).
   tail and TSD), `medium` (tail and mate signals), `low` (soft-clips only);
   `left_junction_clips` and `right_junction_clips` columns. (#22)
 - `--min-clips` and `--allow-no-tail` options. (#22)
+- `--probe-edge-tolerance` option (default 2 bp). (#29)
+- `tests/data/targets_tiled.bed`: the fixture insertion with probe edges on
+  both junctions. (#29)
 
 ### Changed
 
@@ -19,6 +22,9 @@ project follows [Semantic Versioning](https://semver.org/).
   and a soft-clip with a poly(A/T) tail (new `no_tail` filter); a TSD is only
   reported when each junction has `--min-clips` soft-clips. On the NA12878
   exome: 358 `PASS` candidates instead of 56,956. (#22)
+- `probe_edge` now applies within `--probe-edge-tolerance` of a probe edge,
+  and only to candidates without any poly(A/T) tail or TSD: a real insertion
+  next to a probe edge stays `PASS`. (#29)
 - Template lengths of proper pairs are counted in a bounded histogram instead
   of being kept in memory: same insert size estimate and output, peak memory
   on the NA12878 exome down from 3.2 GB to 1.7 GB. (#23)

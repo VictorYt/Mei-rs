@@ -127,6 +127,47 @@ fn negative_sample_has_no_pass_candidate() {
 }
 
 #[test]
+fn insertion_at_probe_edges_stays_pass() {
+    // The insertion target tiled with two probes whose edges fall on the two
+    // junctions: every soft-clip stops at a probe edge, but the poly(A) tail
+    // and the TSD rule out a capture artefact. The artefact stays flagged.
+    let tsv = scan(&[
+        "--bam",
+        "tests/data/positive.bam",
+        "--bed",
+        "tests/data/targets_tiled.bed",
+        "--keep-filtered",
+    ]);
+    let rows = rows(&tsv);
+    assert_eq!(rows.len(), 2, "{tsv}");
+    let artefact = rows.iter().find(|r| column(&tsv, r, "position") == "3000");
+    assert_eq!(
+        column(&tsv, artefact.unwrap(), "filter"),
+        "no_tail;probe_edge"
+    );
+    let insertion = rows.iter().find(|r| column(&tsv, r, "position") != "3000");
+    let insertion = insertion.unwrap();
+    assert_eq!(column(&tsv, insertion, "filter"), "PASS");
+    assert_eq!(column(&tsv, insertion, "confidence"), "high");
+
+    // The clips are exactly at the edges: the hallmarks keep it, not the
+    // tolerance.
+    let exact = scan(&[
+        "--bam",
+        "tests/data/positive.bam",
+        "--bed",
+        "tests/data/targets_tiled.bed",
+        "--probe-edge-tolerance",
+        "0",
+    ]);
+    assert_eq!(
+        exact.lines().filter(|l| !l.starts_with('#')).count(),
+        1,
+        "{exact}"
+    );
+}
+
+#[test]
 fn bam_and_cram_give_the_same_output() {
     for format in ["tsv", "bed", "json"] {
         let bam = scan(

@@ -126,6 +126,17 @@ pub struct ScanArgs {
         value_parser = parse_ratio, help_heading = "Clustering and filters")]
     pub min_signal_ratio: f64,
 
+    /// Distance to a probe start or end within which a soft-clip stops at the
+    /// probe edge (`probe_edge`, when no clip has a poly(A/T) tail and there
+    /// is no TSD)
+    #[arg(
+        long,
+        value_name = "BP",
+        default_value_t = 2,
+        help_heading = "Clustering and filters"
+    )]
+    pub probe_edge_tolerance: u64,
+
     /// Also output the candidates flagged `no_junction`, `no_tail`,
     /// `probe_edge` or `low_ratio`, with their filter status (low-support
     /// clusters are never output)
@@ -177,6 +188,7 @@ impl ScanArgs {
     pub fn filter_options(&self) -> FilterOptions {
         FilterOptions {
             min_signal_ratio: self.min_signal_ratio,
+            probe_edge_tolerance: self.probe_edge_tolerance,
         }
     }
 }
@@ -263,6 +275,8 @@ mod tests {
             "--allow-no-tail",
             "--min-signal-ratio",
             "0.1",
+            "--probe-edge-tolerance",
+            "0",
             "--keep-filtered",
         ])
         .unwrap();
@@ -271,6 +285,7 @@ mod tests {
         assert_eq!(args.cluster_options().min_clips, 4);
         assert!(!args.cluster_options().require_tail);
         assert!((args.filter_options().min_signal_ratio - 0.1).abs() < f64::EPSILON);
+        assert_eq!(args.filter_options().probe_edge_tolerance, 0);
         assert!(args.keep_filtered);
         for (option, value) in [
             ("--window", "0"),

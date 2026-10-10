@@ -50,7 +50,8 @@ pub enum Filter {
     NoJunction,
     /// No soft-clip with a poly(A/T) tail.
     NoTail,
-    /// Every soft-clip stops exactly at a probe edge (capture artefact).
+    /// Every soft-clip stops at a probe edge, without a poly(A/T) tail or a
+    /// TSD (capture artefact).
     ProbeEdge,
     /// Too few supporting reads for the local depth.
     LowRatio,

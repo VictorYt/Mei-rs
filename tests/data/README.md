@@ -17,6 +17,7 @@ simulation and regenerate.
 |---|---|
 | `reference.fa`, `.fai` | Two random contigs: `chr1` (20 kb) and `chr2` (10 kb). `chr2:7001-7281` holds a reference copy of the Alu. |
 | `targets.bed` | Three capture targets (see below). |
+| `targets_tiled.bed` | The same, with `target_insertion` tiled with two overlapping probes (see below). |
 | `positive.bam`, `.bai`, `.cram`, `.crai` | Heterozygous Alu insertion, probe-edge artefact, PCR duplicates. |
 | `negative.bam`, `.bai`, `.cram`, `.crai` | Same targets without the insertion; same probe-edge artefact. |
 | `truth.tsv` | The simulated insertion, machine-readable. |
@@ -67,3 +68,12 @@ anchored.
 25 bp random soft-clip on their left side (`25S75M`), and no poly(A). Every
 soft-clip of that window stops at the probe edge: the probe-edge filter must
 flag it.
+
+## Insertion at probe edges (`targets_tiled.bed`)
+
+`target_insertion` is replaced by two overlapping probes,
+`target_insertion_left` (`chr1:9851-10012`) and `target_insertion_right`
+(`chr1:10001-10150`): the first ends at the left junction, the second starts
+at the right one. Every soft-clip of the insertion stops at a probe edge, but
+its poly(A) tail and TSD show a real insertion: it must stay `PASS`, while the
+probe-edge artefact stays flagged.
