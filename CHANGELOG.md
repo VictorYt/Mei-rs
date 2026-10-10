@@ -19,6 +19,9 @@ project follows [Semantic Versioning](https://semver.org/).
   and a soft-clip with a poly(A/T) tail (new `no_tail` filter); a TSD is only
   reported when each junction has `--min-clips` soft-clips. On the NA12878
   exome: 358 `PASS` candidates instead of 56,956. (#22)
+- Template lengths of proper pairs are counted in a bounded histogram instead
+  of being kept in memory: same insert size estimate and output, peak memory
+  on the NA12878 exome down from 3.2 GB to 1.7 GB. (#23)
 
 ## [0.1.0] - 2026-10-10
 
