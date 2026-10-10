@@ -6,6 +6,57 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-10
+
+Specificity on real data: `PASS` candidates need soft-clip junctions and a
+poly(A/T) tail, get a confidence level, and lose the length variants of
+reference poly(A) tracts; lower memory and faster CRAM reading.
+
+### Added
+
+- Confidence level of `PASS` candidates (`confidence` column): `high` (poly(A/T)
+  tail and TSD), `medium` (tail and mate signals), `low` (soft-clips only);
+  `left_junction_clips` and `right_junction_clips` columns. (#22)
+- `--min-clips` and `--allow-no-tail` options. (#22)
+- `--probe-edge-tolerance` option (default 2 bp). (#29)
+- `tests/data/targets_tiled.bed`: the fixture insertion with probe edges on
+  both junctions. (#29)
+- The log counts, among the soft-clips set aside for their base quality,
+  those without any base at the threshold (masked read ends): 2,682,180 of
+  2,870,963 on the NA12878 exome. The quality filter is unchanged: trimming
+  the low-quality read end would rescue 0.05% of them. (#25)
+- `tandem_repeat` filter, applied when `--reference` is given: the soft-clips
+  of the candidate are a length variant of a reference homopolymer or short
+  tandem repeat (typically a longer poly(A) tract at the 3' end of an Alu of
+  the reference), not an insertion. Such clips have a poly(A/T) tail and the
+  two junctions overlap like a TSD, so they made most `high` candidates.
+  On the NA12878 exome: 317 `PASS` (2 `high`, 315 `medium`) instead of 358
+  (6 `high`, 350 `medium`, 2 `low`); 4 of the 6 `high` were such variants.
+  Without `--reference`, a warning says the filter is off. (#42)
+- `tests/data/targets_tract.bed`: an expanded reference poly(A) tract in the
+  `positive` fixture. (#42)
+
+### Changed
+
+- `PASS` now requires soft-clips at the junctions (new `no_junction` filter)
+  and a soft-clip with a poly(A/T) tail (new `no_tail` filter); a TSD is only
+  reported when each junction has `--min-clips` soft-clips. On the NA12878
+  exome: 358 `PASS` candidates instead of 56,956. (#22)
+- `probe_edge` now applies within `--probe-edge-tolerance` of a probe edge,
+  and only to candidates without any poly(A/T) tail or TSD: a real insertion
+  next to a probe edge stays `PASS`. (#29)
+- Faster CRAM reading: neighbouring regions (and candidate breakpoints, for
+  the local depth) are read with one query, so that each CRAM container is
+  decoded once instead of once per region; regions are processed contig by
+  contig, with the reference sequence loaded once per contig and released
+  after it; the index is read once instead of once per reader; fewer readers
+  are opened. Same output. On the NA12878 exome (12 cores): CRAM 507 s and
+  6.5 GB -> 124 s (memory 1.4 GB with the macOS large-allocation cache
+  disabled, 3.8 GB with it); BAM 72 s and 1.65 GB -> 66 s and 1.2 GB. (#24)
+- Template lengths of proper pairs are counted in a bounded histogram instead
+  of being kept in memory: same insert size estimate and output, peak memory
+  on the NA12878 exome down from 3.2 GB to 1.7 GB. (#23)
+
 ## [0.1.0] - 2026-10-10
 
 First release: discovery of candidate mobile element insertion sites in
@@ -48,5 +99,6 @@ targeted capture and exome data.
   kept in memory (#23); most soft-clips of older data fall below the base
   quality threshold (#25).
 
-[Unreleased]: https://github.com/VictorYt/Mei-rs/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/VictorYt/Mei-rs/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/VictorYt/Mei-rs/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/VictorYt/Mei-rs/releases/tag/v0.1.0

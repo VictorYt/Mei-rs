@@ -8,7 +8,7 @@ use std::io::{self, Write};
 use serde::Serialize;
 
 use crate::cli::OutputFormat;
-use crate::cluster::Candidate;
+use crate::cluster::{Candidate, Confidence};
 use crate::reader::signals::{Side, Signal, SignalKind};
 
 /// What the outputs describe.
@@ -38,7 +38,7 @@ pub fn write(report: &Report<'_>, format: OutputFormat, out: &mut dyn Write) -> 
 }
 
 /// Columns of the TSV output.
-pub const TSV_COLUMNS: [&str; 21] = [
+pub const TSV_COLUMNS: [&str; 24] = [
     "id",
     "contig",
     "position",
@@ -47,9 +47,12 @@ pub const TSV_COLUMNS: [&str; 21] = [
     "tsd_length",
     "strand",
     "filter",
+    "confidence",
     "support",
     "left_clips",
     "right_clips",
+    "left_junction_clips",
+    "right_junction_clips",
     "unmapped_mates",
     "discordant_mates",
     "polya_clips",
@@ -82,9 +85,12 @@ fn write_tsv(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
             opt(c.tsd_length()),
             strand(c).to_owned(),
             filter(c),
+            confidence(c).to_owned(),
             c.support.to_string(),
             c.left_clips.to_string(),
             c.right_clips.to_string(),
+            c.left_junction_clips.to_string(),
+            c.right_junction_clips.to_string(),
             c.unmapped_mates.to_string(),
             c.discordant_mates.to_string(),
             c.polya_clips.to_string(),
@@ -112,11 +118,16 @@ fn write_bed(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
         };
         writeln!(
             out,
-            "{}\t{start}\t{end}\t{}\t{}\t{}",
+            "{}\t{start}\t{end}\t{}\t{}\t{}\t{}",
             report.contigs[c.contig],
             candidate_id(i),
             c.support.min(1000),
-            strand(c)
+            strand(c),
+            if c.is_pass() {
+                confidence(c).to_owned()
+            } else {
+                filter(c)
+            }
         )?;
     }
     Ok(())
@@ -159,6 +170,11 @@ fn filter(candidate: &Candidate) -> String {
     }
 }
 
+/// Confidence level, `.` for a filtered candidate.
+fn confidence(candidate: &Candidate) -> &'static str {
+    candidate.confidence().map_or(".", Confidence::name)
+}
+
 /// Insertion strand from the tails: poly(A) on the reference strand for a
 /// plus-strand element, poly(T) for a minus-strand one.
 fn strand(candidate: &Candidate) -> &'static str {
@@ -192,9 +208,12 @@ struct JsonCandidate {
     tsd_length: Option<u64>,
     strand: &'static str,
     filter: Vec<&'static str>,
+    confidence: Option<&'static str>,
     support: usize,
     left_clips: usize,
     right_clips: usize,
+    left_junction_clips: usize,
+    right_junction_clips: usize,
     unmapped_mates: usize,
     discordant_mates: usize,
     polya_clips: usize,
@@ -223,9 +242,12 @@ impl JsonCandidate {
             } else {
                 c.filters.iter().map(|f| f.name()).collect()
             },
+            confidence: c.confidence().map(Confidence::name),
             support: c.support,
             left_clips: c.left_clips,
             right_clips: c.right_clips,
+            left_junction_clips: c.left_junction_clips,
+            right_junction_clips: c.right_junction_clips,
             unmapped_mates: c.unmapped_mates,
             discordant_mates: c.discordant_mates,
             polya_clips: c.polya_clips,
@@ -371,11 +393,11 @@ mod tests {
         assert_eq!(lines[4], format!("#{}", TSV_COLUMNS.join("\t")));
         assert_eq!(
             lines[5],
-            "MEI_1\tchr1\t1000\t1012\t1000\t12\t+\tPASS\t7\t3\t3\t0\t1\t3\t0\tyes\t3\t40\t0.175\t1000\t1050"
+            "MEI_1\tchr1\t1000\t1012\t1000\t12\t+\tPASS\thigh\t7\t3\t3\t3\t3\t0\t1\t3\t0\tyes\t3\t40\t0.175\t1000\t1050"
         );
         assert_eq!(
             lines[6],
-            "MEI_2\tchr1\t5000\t.\t5000\t.\t.\tprobe_edge;low_ratio\t3\t3\t0\t0\t0\t0\t0\tno\t1\t100\t0.030\t5000\t5000"
+            "MEI_2\tchr1\t5000\t.\t5000\t.\t.\tprobe_edge;low_ratio\t.\t3\t3\t0\t0\t3\t0\t0\t0\t0\tno\t1\t100\t0.030\t5000\t5000"
         );
         assert_eq!(lines.len(), 7);
         for line in &lines[4..] {
@@ -387,7 +409,7 @@ mod tests {
     fn bed() {
         assert_eq!(
             render(OutputFormat::Bed),
-            "chr1\t1000\t1012\tMEI_1\t7\t+\nchr1\t4999\t5000\tMEI_2\t3\t.\n"
+            "chr1\t1000\t1012\tMEI_1\t7\t+\thigh\nchr1\t4999\t5000\tMEI_2\t3\t.\tprobe_edge;low_ratio\n"
         );
     }
 
@@ -399,6 +421,9 @@ mod tests {
         assert_eq!(first["id"], "MEI_1");
         assert_eq!(first["filter"], serde_json::json!(["PASS"]));
         assert_eq!(first["tsd_length"], 12);
+        assert_eq!(first["confidence"], "high");
+        assert_eq!(first["left_junction_clips"], 3);
+        assert!(json["candidates"][1]["confidence"].is_null());
         assert_eq!(first["signal_ratio"], 0.175);
         let signals = first["signals"].as_array().unwrap();
         assert_eq!(signals.len(), 7);

@@ -15,9 +15,11 @@ simulation and regenerate.
 
 | File | Content |
 |---|---|
-| `reference.fa`, `.fai` | Two random contigs: `chr1` (20 kb) and `chr2` (10 kb). `chr2:7001-7281` holds a reference copy of the Alu. |
+| `reference.fa`, `.fai` | Two random contigs: `chr1` (20 kb) and `chr2` (10 kb). `chr2:7001-7281` holds a reference copy of the Alu; `chr2:1961-2012` the last 40 bp of the Alu and a 12 bp poly(A) tract. |
 | `targets.bed` | Three capture targets (see below). |
-| `positive.bam`, `.bai`, `.cram`, `.crai` | Heterozygous Alu insertion, probe-edge artefact, PCR duplicates. |
+| `targets_tiled.bed` | The same, with `target_insertion` tiled with two overlapping probes (see below). |
+| `targets_tract.bed` | One target around a reference poly(A) tract on `chr2` (see below). |
+| `positive.bam`, `.bai`, `.cram`, `.crai` | Heterozygous Alu insertion, probe-edge artefact, PCR duplicates; expanded reference poly(A) tract. |
 | `negative.bam`, `.bai`, `.cram`, `.crai` | Same targets without the insertion; same probe-edge artefact. |
 | `truth.tsv` | The simulated insertion, machine-readable. |
 
@@ -67,3 +69,30 @@ anchored.
 25 bp random soft-clip on their left side (`25S75M`), and no poly(A). Every
 soft-clip of that window stops at the probe edge: the probe-edge filter must
 flag it.
+
+## Insertion at probe edges (`targets_tiled.bed`)
+
+`target_insertion` is replaced by two overlapping probes,
+`target_insertion_left` (`chr1:9851-10012`) and `target_insertion_right`
+(`chr1:10001-10150`): the first ends at the left junction, the second starts
+at the right one. Every soft-clip of the insertion stops at a probe edge, but
+its poly(A) tail and TSD show a real insertion: it must stay `PASS`, while the
+probe-edge artefact stays flagged.
+
+## Expanded reference poly(A) tract (`positive`, `targets_tract.bed`)
+
+`chr2:1961-2000` holds the last 40 bp of the Alu, followed by a 12 bp poly(A)
+tract (`chr2:2001-2012`). One haplotype of `positive` carries 14 more A
+(`chr2[1..2012] + A(14) + chr2[2013..]`), about 50x, simulated after the other
+reads with their own random generator (the other reads do not change). A read
+crossing the expansion is anchored on its longer side, as an aligner does:
+
+- anchored upstream, it matches through the reference tract and is clipped
+  after `chr2:2012` (the extra A, then the downstream flank);
+- anchored downstream, it matches from `chr2:2001` and is clipped before it
+  (the upstream flank, then the extra A).
+
+The clips have a poly(A) tail and the two junctions overlap by 12 bp, like a
+TSD: without the reference this is a `PASS` `high` candidate. With
+`--reference`, the far ends of the clips are the reference flanks of the
+tract: `tandem_repeat`.

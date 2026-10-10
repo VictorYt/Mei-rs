@@ -91,6 +91,7 @@ fn positive_sample_has_one_pass_candidate_at_the_insertion() {
         "position {position} not within 5 bp of {right}-{left}"
     );
     assert_eq!(column(&tsv, row, "filter"), "PASS");
+    assert_eq!(column(&tsv, row, "confidence"), "high");
     assert_eq!(column(&tsv, row, "contig"), truth[0]);
     assert_eq!(column(&tsv, row, "left_junction"), truth[1]);
     assert_eq!(column(&tsv, row, "right_junction"), (right - 1).to_string());
@@ -120,8 +121,84 @@ fn negative_sample_has_no_pass_candidate() {
     ]);
     let rows = rows(&tsv);
     assert_eq!(rows.len(), 1);
-    assert_eq!(column(&tsv, &rows[0], "filter"), "probe_edge");
+    // No poly(A/T) tail in the artefact either.
+    assert_eq!(column(&tsv, &rows[0], "filter"), "no_tail;probe_edge");
     assert_eq!(column(&tsv, &rows[0], "position"), "3000");
+}
+
+#[test]
+fn insertion_at_probe_edges_stays_pass() {
+    // The insertion target tiled with two probes whose edges fall on the two
+    // junctions: every soft-clip stops at a probe edge, but the poly(A) tail
+    // and the TSD rule out a capture artefact. The artefact stays flagged.
+    let tsv = scan(&[
+        "--bam",
+        "tests/data/positive.bam",
+        "--bed",
+        "tests/data/targets_tiled.bed",
+        "--keep-filtered",
+    ]);
+    let rows = rows(&tsv);
+    assert_eq!(rows.len(), 2, "{tsv}");
+    let artefact = rows.iter().find(|r| column(&tsv, r, "position") == "3000");
+    assert_eq!(
+        column(&tsv, artefact.unwrap(), "filter"),
+        "no_tail;probe_edge"
+    );
+    let insertion = rows.iter().find(|r| column(&tsv, r, "position") != "3000");
+    let insertion = insertion.unwrap();
+    assert_eq!(column(&tsv, insertion, "filter"), "PASS");
+    assert_eq!(column(&tsv, insertion, "confidence"), "high");
+
+    // The clips are exactly at the edges: the hallmarks keep it, not the
+    // tolerance.
+    let exact = scan(&[
+        "--bam",
+        "tests/data/positive.bam",
+        "--bed",
+        "tests/data/targets_tiled.bed",
+        "--probe-edge-tolerance",
+        "0",
+    ]);
+    assert_eq!(
+        exact.lines().filter(|l| !l.starts_with('#')).count(),
+        1,
+        "{exact}"
+    );
+}
+
+#[test]
+fn reference_tract_length_variant() {
+    // A heterozygous expansion of a reference poly(A) tract
+    // (tests/data/README.md): without the reference, its clips look like an
+    // insertion with a poly(A) tail and a 12 bp TSD.
+    let tract = ["--bed", "tests/data/targets_tract.bed", "--keep-filtered"];
+    let tsv = scan(&[&["--bam", "tests/data/positive.bam"][..], &tract].concat());
+    let found = rows(&tsv);
+    assert_eq!(found.len(), 1, "{tsv}");
+    assert_eq!(column(&tsv, &found[0], "filter"), "PASS");
+    assert_eq!(column(&tsv, &found[0], "confidence"), "high");
+    assert_eq!(column(&tsv, &found[0], "tsd_length"), "12");
+
+    // With the reference, the clips are the reference with a longer tract.
+    for bam in ["tests/data/positive.bam", "tests/data/positive.cram"] {
+        let tsv = scan(
+            &[
+                &["--bam", bam, "--reference", "tests/data/reference.fa"][..],
+                &tract,
+            ]
+            .concat(),
+        );
+        let found = rows(&tsv);
+        assert_eq!(found.len(), 1, "{tsv}");
+        assert_eq!(column(&tsv, &found[0], "filter"), "tandem_repeat", "{bam}");
+    }
+
+    // The simulated Alu insertion stays PASS.
+    let tsv = scan(&[&POSITIVE[..], &["--reference", "tests/data/reference.fa"]].concat());
+    let found = rows(&tsv);
+    assert_eq!(found.len(), 1, "{tsv}");
+    assert_eq!(column(&tsv, &found[0], "confidence"), "high");
 }
 
 #[test]

@@ -33,6 +33,7 @@ in pure Rust.
 mei-rs scan \
   --bam sample.bam \
   --bed targets.bed \
+  --reference genome.fa \
   --output sample.candidates.tsv \
   --threads 8
 
@@ -50,7 +51,7 @@ error.
 |---|---|
 | `--bam` | BAM or CRAM, coordinate-sorted and indexed (`.bam.bai`, `.bam.csi`, `.bai`, `.cram.crai` or `.crai`). The sample name is the `SM` of the read groups, or else the file name. |
 | `--bed` | capture targets: at least 3 columns (contig, 0-based start, end), tabs or spaces, plain or gzipped. `#`, `track` and `browser` lines are skipped. The contig names must match the alignment (`chr1` vs `1` is reported). |
-| `--reference` | reference genome indexed with `samtools faidx` (`.fai`); required for CRAM. When given, its contigs must match the lengths of the alignment header. |
+| `--reference` | reference genome indexed with `samtools faidx` (`.fai`); required for CRAM, and recommended for BAM: without it, the `tandem_repeat` filter is off. When given, its contigs must match the lengths of the alignment header. |
 
 Inconsistent inputs fail early with a message that says how to fix them.
 Targets on contigs absent from the alignment, or beyond their contig, are
@@ -74,8 +75,11 @@ skipped with a warning.
 | **Clustering and filters** | | |
 | `--window` | 100 | maximum distance between two consecutive signals of a candidate |
 | `--min-support` | 3 | minimum number of distinct supporting reads of a candidate |
+| `--min-clips` | 2 | minimum number of soft-clips at the junctions (`no_junction` below); each junction needs as many to give a TSD |
+| `--allow-no-tail` | off | do not require a soft-clip with a poly(A/T) tail (`no_tail`) |
 | `--min-signal-ratio` | 0.05 | minimum number of supporting reads per read of local depth |
-| `--keep-filtered` | off | also write the candidates flagged `probe_edge` or `low_ratio` |
+| `--probe-edge-tolerance` | 2 | distance in bp to a probe start or end within which a soft-clip stops at the probe edge |
+| `--keep-filtered` | off | also write the candidates flagged `no_junction`, `no_tail`, `tandem_repeat`, `probe_edge` or `low_ratio` |
 | **Output** | | |
 | `-o`, `--output` | stdout | output file |
 | `--format` | `tsv` | `tsv`, `bed` or `json` (with every signal of every candidate) |
@@ -96,9 +100,18 @@ skipped with a warning.
 2. **Clustering**: signals at most `--window` bases apart form a candidate.
    Its position is the most supported junction; the junctions of the two
    flanks give the TSD.
-3. **Capture filters**: `probe_edge` when every soft-clip stops exactly at a
-   probe start or end (digestion or ligation artefact of the capture);
-   `low_ratio` when the supporting reads are too few for the local depth.
+3. **Filters**: `no_junction` when fewer than `--min-clips` soft-clips mark
+   the junctions (mate signals alone); `no_tail` without any poly(A/T) tail;
+   `tandem_repeat` (with `--reference`) when the soft-clips are the reference
+   with a longer homopolymer or tandem repeat, such as the poly(A) tract of
+   an Alu of the reference, rather than an insertion;
+   `probe_edge` when every soft-clip stops within `--probe-edge-tolerance`
+   of a probe start or end, without any poly(A/T) tail or TSD (digestion or
+   ligation artefact of the capture); `low_ratio` when the
+   supporting reads are too few for the local depth.
+4. **Confidence** of the `PASS` candidates: `high` with a poly(A/T) tail and a
+   TSD (complete evidence of a retrotransposition), `medium` with a tail and
+   mate signals, `low` with soft-clips only.
 
 ### Output
 
@@ -106,8 +119,8 @@ One line per candidate, sorted by position. Positions are 1-based: a position
 `p` means the insertion is right after base `p`. Example:
 
 ```
-#id    contig  position  left_junction  right_junction  tsd_length  strand  filter  support  ...
-MEI_1  chr1    10012     10012          10000           12          +       PASS    160      ...
+#id    contig  position  left_junction  right_junction  tsd_length  strand  filter  confidence  support  ...
+MEI_1  chr1    10012     10012          10000           12          +       PASS    high        160      ...
 ```
 
 Every column of the TSV, BED and JSON formats is described in
@@ -115,22 +128,22 @@ Every column of the TSV, BED and JSON formats is described in
 
 ## Limitations
 
-v0.1.0 finds candidate sites but **is not yet specific on real data**. On the
+v0.1.0 found candidate sites but was not specific on real data. On the
 NA12878 exome of the 1000 Genomes Project (GRCh38, 172 million reads,
-1000 Genomes exome targets), it writes 56,956 `PASS` candidates, while a few
-dozen insertions are expected in the targets:
+1000 Genomes exome targets), it wrote 56,956 `PASS` candidates, mostly
+clusters of unmapped mates or of mates on another contig without any soft-clip
+junction, while a few dozen insertions are expected in the targets.
 
-- most `PASS` candidates are clusters of unmapped mates or of mates on another
-  contig, without any soft-clip junction (chimeric fragments are frequent in
-  exome libraries);
-- their TSD lengths are spread evenly from 1 to 50 bp, instead of peaking at
-  7-20 bp;
-- only 25 `PASS` candidates combine signals from both sides, a poly(A/T) tail
-  and a 5-25 bp TSD.
-
-Until v0.1.1, rank the candidates yourself: keep those with `both_sides` =
-`yes`, `polya_clips` or `polyt_clips` above 0 and a `tsd_length` of about 5 to
-25 bp.
+Since #22, a `PASS` candidate needs soft-clips at its junctions
+(`no_junction`) and at least one soft-clip with a poly(A/T) tail (`no_tail`),
+the only evidence that the inserted sequence is a retrotransposon until
+element typing; each `PASS` candidate gets a confidence level. On the same
+exome: 358 `PASS` (6 `high`, 350 `medium`, 2 `low`). Four of the 6 `high`
+candidates were longer poly(A) tracts of reference Alus: their clips have a
+tail and their junctions overlap like a TSD. Since #42, with `--reference`,
+the `tandem_repeat` filter rejects them: **317 `PASS`** (2 `high`, 315
+`medium`). The `medium` level (tail and mate signals, no TSD) still needs the
+mates to be checked against MEI sequences (#31): favour `high` candidates.
 
 Other limitations:
 
@@ -138,18 +151,25 @@ Other limitations:
 - Candidates closer than `--window` are merged into one.
 - The TSD length comes from the soft-clip junctions only, and the length of a
   poly(A/T) tail is approximate (it can extend over a few bases after it).
-- On older data, most soft-clips fall below `--min-clip-quality` (2.9 million
-  set aside against 105,000 kept on NA12878).
-- CRAM is slower than BAM and uses more memory (NA12878 on 12 cores: BAM 70 s
-  and 2.9 GB, CRAM 507 s and 6.5 GB, same output).
+- On older data, most soft-clips fall below `--min-clip-quality`: 2.9 million
+  set aside against 105,000 kept on NA12878. They are not lost junctions:
+  93% have no base at the threshold (read ends masked by the base caller,
+  soft-clipped because they mismatch the reference), and trimming the
+  low-quality read end, as BWA `-q` does, would rescue 0.05% of them (chr1).
+  The log reports both counts (#25).
+- CRAM is slower than BAM: decoding its blocks costs more than reading BAM
+  (NA12878 on 12 cores, same output: BAM 66 s and 1.2 GB, CRAM 124 s; CRAM
+  was 507 s and 6.5 GB before #24). On macOS, the allocator keeps the freed
+  reference sequences in memory (3.8 GB, 1.4 GB with `MallocLargeCache=0`).
 
-### Next steps (v0.1.1)
+### Next steps (v0.2.0)
 
-- Require soft-clip junctions for `PASS` (#22).
-- Insert size distribution as a histogram, to cut memory (#23).
-- Faster, lighter CRAM decoding (#24).
-- Soft-clip base quality filter suited to older data (#25).
-- Precision and recall against truth sets: HGSVC trios, GIAB HG002 (#26).
+- Element typing against MEI consensus sequences (#30), and mates checked
+  against them (#31), so that the `medium` level gets specific.
+- Short soft-clips of 2x75 bp reads (#32), local assembly of the junctions
+  and TSD (#33), scoring and genotype (#34), VCF output (#35).
+- Precision and recall against truth sets (HGSVC, GIAB HG002) and comparison
+  with Scramble, MELT and xTea (#26).
 
 Calls are research results: confirm them with an orthogonal method before any
 clinical use.

@@ -1,2 +1,2 @@
-chr1	2999	3000	MEI_1	10	.
-chr1	10000	10012	MEI_2	160	+
+chr1	2999	3000	MEI_1	10	.	no_tail;probe_edge
+chr1	10000	10012	MEI_2	160	+	high
