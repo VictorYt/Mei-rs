@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use coitrees::{COITree, Interval, IntervalTree};
+use coitrees::{COITree, GenericInterval, Interval, IntervalTree};
 use thiserror::Error;
 
 use super::Region;
@@ -293,7 +293,7 @@ impl TargetSet {
         let last = to_i32(boundary.saturating_add(max_distance));
         let mut nearest: Option<u64> = None;
         tree.query(first, last, |node| {
-            let probe = &self.probes[*node.metadata];
+            let probe = &self.probes[*GenericInterval::<usize>::metadata(node)];
             for edge in [probe.start, probe.end] {
                 let distance = edge.abs_diff(boundary);
                 if distance <= max_distance && nearest.is_none_or(|d| distance < d) {
