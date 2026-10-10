@@ -151,13 +151,13 @@ Other limitations:
   soft-clipped because they mismatch the reference), and trimming the
   low-quality read end, as BWA `-q` does, would rescue 0.05% of them (chr1).
   The log reports both counts (#25).
-- CRAM is slower than BAM and uses more memory (NA12878 on 12 cores: BAM 70 s
-  and 2.9 GB, CRAM 507 s and 6.5 GB, same output).
+- CRAM is slower than BAM: decoding its blocks costs more than reading BAM
+  (NA12878 on 12 cores, same output: BAM 66 s and 1.2 GB, CRAM 124 s; CRAM
+  was 507 s and 6.5 GB before #24). On macOS, the allocator keeps the freed
+  reference sequences in memory (3.8 GB, 1.4 GB with `MallocLargeCache=0`).
 
 ### Next steps (v0.1.1)
 
-- Faster, lighter CRAM decoding (#24).
-- Soft-clip base quality filter suited to older data (#25).
 - Precision and recall against truth sets (HGSVC trios, GIAB HG002) and
   comparison with Scramble, MELT and xTea (#26).
 
