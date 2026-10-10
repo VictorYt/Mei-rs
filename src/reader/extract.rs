@@ -32,7 +32,7 @@ pub struct ExtractOptions {
 }
 
 /// Template lengths above which proper pairs are only counted, not binned.
-const MAX_BINNED_LENGTH: u64 = 10_000;
+pub const MAX_BINNED_LENGTH: u64 = 10_000;
 
 /// Template lengths of proper pairs, counted per length up to
 /// [`MAX_BINNED_LENGTH`], plus an overflow count.
