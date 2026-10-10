@@ -6,7 +6,7 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-10-09
+## [0.1.0] - 2026-10-10
 
 First release: discovery of candidate mobile element insertion sites in
 targeted capture and exome data.
@@ -38,6 +38,15 @@ targeted capture and exome data.
   tail, a negative sample, a probe-edge artefact) and end-to-end tests. (#4,
   #15)
 - GitHub Actions CI: lint, tests on Linux and macOS, MSRV 1.91, audit. (#3)
+
+### Known limitations
+
+- Not yet specific on real data: on the NA12878 exome (1000 Genomes,
+  GRCh38), 56,956 `PASS` candidates, mostly mate-only clusters without a
+  soft-clip junction; to be fixed in v0.1.1 (#22). See the README.
+- CRAM is about 7 times slower than BAM (#24); the insert size sample is
+  kept in memory (#23); most soft-clips of older data fall below the base
+  quality threshold (#25).
 
 [Unreleased]: https://github.com/VictorYt/Mei-rs/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/VictorYt/Mei-rs/releases/tag/v0.1.0

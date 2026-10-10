@@ -115,11 +115,41 @@ Every column of the TSV, BED and JSON formats is described in
 
 ## Limitations
 
+v0.1.0 finds candidate sites but **is not yet specific on real data**. On the
+NA12878 exome of the 1000 Genomes Project (GRCh38, 172 million reads,
+1000 Genomes exome targets), it writes 56,956 `PASS` candidates, while a few
+dozen insertions are expected in the targets:
+
+- most `PASS` candidates are clusters of unmapped mates or of mates on another
+  contig, without any soft-clip junction (chimeric fragments are frequent in
+  exome libraries);
+- their TSD lengths are spread evenly from 1 to 50 bp, instead of peaking at
+  7-20 bp;
+- only 25 `PASS` candidates combine signals from both sides, a poly(A/T) tail
+  and a 5-25 bp TSD.
+
+Until v0.1.1, rank the candidates yourself: keep those with `both_sides` =
+`yes`, `polya_clips` or `polyt_clips` above 0 and a `tsd_length` of about 5 to
+25 bp.
+
+Other limitations:
+
 - No element typing (Alu / LINE-1 / SVA), local assembly, genotype or VCF yet.
 - Candidates closer than `--window` are merged into one.
 - The TSD length comes from the soft-clip junctions only, and the length of a
   poly(A/T) tail is approximate (it can extend over a few bases after it).
-- Validated on synthetic data so far (see [tests/data](tests/data/README.md)).
+- On older data, most soft-clips fall below `--min-clip-quality` (2.9 million
+  set aside against 105,000 kept on NA12878).
+- CRAM is slower than BAM and uses more memory (NA12878 on 12 cores: BAM 70 s
+  and 2.9 GB, CRAM 507 s and 6.5 GB, same output).
+
+### Next steps (v0.1.1)
+
+- Require soft-clip junctions for `PASS` (#22).
+- Insert size distribution as a histogram, to cut memory (#23).
+- Faster, lighter CRAM decoding (#24).
+- Soft-clip base quality filter suited to older data (#25).
+- Precision and recall against truth sets: HGSVC trios, GIAB HG002 (#26).
 
 Calls are research results: confirm them with an orthogonal method before any
 clinical use.
