@@ -1,0 +1,141 @@
+//! End-to-end tests of the command-line interface.
+
+use assert_cmd::Command;
+use predicates::prelude::*;
+
+fn mei_rs() -> Command {
+    Command::cargo_bin("mei-rs").unwrap()
+}
+
+#[test]
+fn help_lists_scan() {
+    mei_rs()
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("scan"));
+}
+
+#[test]
+fn scan_help_lists_every_option() {
+    let assert = mei_rs().args(["scan", "--help"]).assert().success();
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    for option in [
+        "--bam",
+        "--bed",
+        "--reference",
+        "--padding",
+        "--region",
+        "--min-mapq",
+        "--include-duplicates",
+        "--min-clip-len",
+        "--min-clip-quality",
+        "--polya-min-len",
+        "--polya-min-frac",
+        "--output",
+        "--format",
+        "--threads",
+        "--verbose",
+        "--quiet",
+    ] {
+        assert!(stdout.contains(option), "{option} missing from scan --help");
+    }
+}
+
+#[test]
+fn version() {
+    mei_rs()
+        .arg("--version")
+        .assert()
+        .success()
+        .stdout(predicate::str::starts_with(concat!(
+            "mei-rs ",
+            env!("CARGO_PKG_VERSION")
+        )));
+}
+
+#[test]
+fn invalid_option_fails_with_usage_error() {
+    mei_rs()
+        .args([
+            "scan", "--bam", "s.bam", "--bed", "t.bed", "--format", "vcf",
+        ])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("invalid value 'vcf'"));
+}
+
+fn data(name: &str) -> String {
+    format!("{}/tests/data/{name}", env!("CARGO_MANIFEST_DIR"))
+}
+
+#[test]
+fn scan_logs_a_summary() {
+    for (bam, reference) in [
+        ("positive.bam", None),
+        ("positive.cram", Some("reference.fa")),
+    ] {
+        let mut cmd = mei_rs();
+        cmd.args(["scan", "--bam", &data(bam), "--bed", &data("targets.bed")]);
+        if let Some(reference) = reference {
+            cmd.args(["--reference", &data(reference)]);
+        }
+        cmd.assert()
+            .success()
+            .stderr(predicate::str::contains("sample positive"))
+            .stderr(predicate::str::contains(
+                "3 targets (800 bp), 3 regions to scan (2600 bp with 300 bp of padding)",
+            ))
+            .stderr(predicate::str::contains("2023 reads: 2005 kept, 4 duplicates"))
+            .stderr(predicate::str::contains(
+                "215 signals: 78 soft-clips (21 with a poly(A/T) tail, 0 more set aside for their base quality), 14 unmapped mates, 123 low-MAPQ mates, 0 mates on another contig, 0 large inserts",
+            ))
+            .stderr(predicate::str::contains(
+                "2 clusters, 2 with enough support: 1 PASS, 1 filtered",
+            ));
+    }
+}
+
+#[test]
+fn scan_input_errors() {
+    let bed = data("targets.bed");
+    for (args, message) in [
+        (
+            vec!["--bam", "missing.bam", "--bed", &bed],
+            "cannot read missing.bam",
+        ),
+        (
+            vec!["--bam", &data("positive.bam"), "--bed", "missing.bed"],
+            "cannot read BED file missing.bed",
+        ),
+        (
+            vec!["--bam", &data("positive.cram"), "--bed", &bed],
+            "--reference is required",
+        ),
+    ] {
+        mei_rs()
+            .arg("scan")
+            .args(args)
+            .assert()
+            .code(1)
+            .stderr(predicate::str::contains(message));
+    }
+}
+
+#[test]
+fn scan_region() {
+    mei_rs()
+        .args([
+            "scan",
+            "--bam",
+            &data("positive.bam"),
+            "--bed",
+            &data("targets.bed"),
+        ])
+        .args(["--region", "chr1:1-100"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "--region chr1:1-100 holds no target",
+        ));
+}

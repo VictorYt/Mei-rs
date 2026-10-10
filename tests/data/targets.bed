@@ -1,0 +1,3 @@
+chr1	9850	10150	target_insertion
+chr1	3000	3200	target_probe_edge
+chr2	4000	4300	target_negative

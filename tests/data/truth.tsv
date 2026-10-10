@@ -1,0 +1,2 @@
+#contig	left_junction	right_junction	tsd_start	tsd_end	tsd	element	length	polya	strand	genotype
+chr1	10012	10001	10001	10012	CGCGGTCCCCCG	AluY	281	30	+	0/1

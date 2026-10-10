@@ -1,0 +1,107 @@
+# CI only runs where it is needed (macOS minutes count several times):
+#
+# - Pull requests into `main` (releases): full CI, Linux and macOS.
+# - Pull requests into `develop`: only when the `run-ci` label is set (large
+#   features); Linux only, without the MSRV and audit jobs.
+# - Manual runs (workflow_dispatch): full CI, macOS optional.
+# - Pushes do not trigger CI, nor do documentation-only changes.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+  workflow_dispatch:
+    inputs:
+      macos:
+        description: "Also run the tests on macOS (uses more minutes)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# A new push cancels the run in progress. Labels other than `run-ci` get a
+# group of their own: setting several labels at once (e.g. when opening a pull
+# request) must not cancel the run started by `opened` or `labeled run-ci`.
+concurrency:
+  group: >-
+    ${{ github.workflow }}-${{ github.ref }}${{
+    github.event.action == 'labeled' && github.event.label.name != 'run-ci'
+    && format('-label-{0}', github.run_id) || '' }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  # Format, Clippy and rustdoc in one job: every job is billed rounded up to
+  # the minute, and they share the build cache.
+  lint:
+    name: Lint
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (!github.event.pull_request.draft
+          && (github.event.action != 'labeled' || github.event.label.name == 'run-ci')
+          && (github.base_ref == 'main'
+              || contains(github.event.pull_request.labels.*.name, 'run-ci')))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --no-deps --locked
+
+  test:
+    name: Test (${{ matrix.os }})
+    needs: lint
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON((github.base_ref == 'main' || inputs.macos) && '["ubuntu-latest", "macos-latest"]' || '["ubuntu-latest"]') }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked
+      - name: Release build
+        run: cargo build --release --locked
+
+  msrv:
+    name: MSRV (1.91)
+    needs: lint
+    if: github.event_name == 'workflow_dispatch' || github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@1.91
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --all-targets --locked
+
+  audit:
+    name: Security audit
+    needs: lint
+    if: github.event_name == 'workflow_dispatch' || github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - run: cargo audit
