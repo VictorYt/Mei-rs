@@ -31,34 +31,108 @@ pub struct ExtractOptions {
     pub clip: ClipOptions,
 }
 
-/// Insert size distribution of the proper pairs.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct InsertSize {
-    /// Number of proper pairs sampled (read 1 of each pair).
-    pub pairs: usize,
-    /// Median template length.
-    pub median: u64,
-    /// Median absolute deviation.
-    pub mad: u64,
-    /// Template length beyond which a same-contig pair is a large insert.
-    pub threshold: u64,
+/// Template lengths above which proper pairs are only counted, not binned.
+pub const MAX_BINNED_LENGTH: u64 = 10_000;
+
+/// Template lengths of proper pairs, counted per length up to
+/// [`MAX_BINNED_LENGTH`], plus an overflow count.
+///
+/// Memory is bounded whatever the number of pairs. The median and the MAD are
+/// exact while the median is at most half the bound and the deviation rank of
+/// the MAD falls below the overflow, which holds for any library of proper
+/// pairs; otherwise overflowing lengths count as `MAX_BINNED_LENGTH + 1`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct InsertSizeHistogram {
+    /// Pairs per template length (allocated on the first one).
+    counts: Vec<u64>,
+    /// Pairs above [`MAX_BINNED_LENGTH`].
+    overflow: u64,
+    /// All pairs.
+    total: u64,
 }
 
-impl InsertSize {
-    /// Distribution of a sample of template lengths; `None` if empty.
+impl InsertSizeHistogram {
+    /// Count one template length.
+    pub fn add(&mut self, length: u64) {
+        self.total += 1;
+        if length > MAX_BINNED_LENGTH {
+            self.overflow += 1;
+            return;
+        }
+        #[allow(clippy::cast_possible_truncation)]
+        if self.counts.is_empty() {
+            self.counts = vec![0; MAX_BINNED_LENGTH as usize + 1];
+        }
+        #[allow(clippy::cast_possible_truncation)]
+        let bin = length as usize;
+        self.counts[bin] += 1;
+    }
+
+    /// Add the counts of another histogram.
+    pub fn merge(&mut self, other: &Self) {
+        if other.counts.is_empty() {
+            self.overflow += other.overflow;
+            self.total += other.total;
+            return;
+        }
+        if self.counts.is_empty() {
+            self.counts = vec![0; other.counts.len()];
+        }
+        for (count, other) in self.counts.iter_mut().zip(&other.counts) {
+            *count += other;
+        }
+        self.overflow += other.overflow;
+        self.total += other.total;
+    }
+
+    /// Number of pairs of a template length (overflow beyond the bound).
+    fn count(&self, length: u64) -> u64 {
+        if length > MAX_BINNED_LENGTH {
+            return 0;
+        }
+        #[allow(clippy::cast_possible_truncation)]
+        self.counts.get(length as usize).copied().unwrap_or(0)
+    }
+
+    /// Distribution of the counted lengths; `None` if empty.
     #[must_use]
-    pub fn estimate(mut lengths: Vec<u64>) -> Option<Self> {
-        let median = median(&mut lengths)?;
-        let mut deviations: Vec<u64> = lengths.iter().map(|&l| l.abs_diff(median)).collect();
-        let mad = median_of(&mut deviations).unwrap_or(0);
+    pub fn estimate(&self) -> Option<InsertSize> {
+        if self.total == 0 {
+            return None;
+        }
+        // Lower median, as `select_nth_unstable((n - 1) / 2)` on the values.
+        let rank = (self.total - 1) / 2;
+        let mut seen = 0;
+        let mut median = MAX_BINNED_LENGTH + 1;
+        for (length, &count) in (0..).zip(&self.counts) {
+            seen += count;
+            if seen > rank {
+                median = length;
+                break;
+            }
+        }
+        // Deviations in increasing order: each distance d gathers the
+        // lengths median - d and median + d; overflowing lengths come last.
+        let mut seen = 0;
+        let mut mad = (MAX_BINNED_LENGTH + 1).saturating_sub(median);
+        for distance in 0..=median.max(MAX_BINNED_LENGTH.saturating_sub(median)) {
+            seen += self.count(median + distance);
+            if distance > 0 && distance <= median {
+                seen += self.count(median - distance);
+            }
+            if seen > rank {
+                mad = distance;
+                break;
+            }
+        }
         #[allow(
             clippy::cast_possible_truncation,
             clippy::cast_sign_loss,
             clippy::cast_precision_loss
         )]
         let spread = (LARGE_INSERT_MADS * MAD_SCALE * mad as f64).ceil() as u64;
-        Some(Self {
-            pairs: lengths.len(),
+        Some(InsertSize {
+            pairs: self.total,
             median,
             mad,
             threshold: median + spread.max(1),
@@ -66,16 +140,17 @@ impl InsertSize {
     }
 }
 
-fn median(values: &mut [u64]) -> Option<u64> {
-    median_of(values)
-}
-
-fn median_of(values: &mut [u64]) -> Option<u64> {
-    if values.is_empty() {
-        return None;
-    }
-    let mid = (values.len() - 1) / 2;
-    Some(*values.select_nth_unstable(mid).1)
+/// Insert size distribution of the proper pairs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InsertSize {
+    /// Number of proper pairs sampled (read 1 of each pair).
+    pub pairs: u64,
+    /// Median template length.
+    pub median: u64,
+    /// Median absolute deviation.
+    pub mad: u64,
+    /// Template length beyond which a same-contig pair is a large insert.
+    pub threshold: u64,
 }
 
 /// Signals of all the regions, and statistics.
@@ -121,6 +196,39 @@ struct RegionResult {
     low_quality_clips: u64,
 }
 
+/// Results of the regions processed by one worker, with the template lengths
+/// counted in a histogram.
+#[derive(Default)]
+struct Accumulator {
+    signals: Vec<Signal>,
+    large_inserts: Vec<Signal>,
+    insert_sizes: InsertSizeHistogram,
+    stats: FilterStats,
+    low_quality_clips: u64,
+}
+
+impl Accumulator {
+    fn add(mut self, region: RegionResult) -> Self {
+        self.signals.extend(region.signals);
+        self.large_inserts.extend(region.large_inserts);
+        for length in region.insert_sizes {
+            self.insert_sizes.add(length);
+        }
+        self.stats.merge(&region.stats);
+        self.low_quality_clips += region.low_quality_clips;
+        self
+    }
+
+    fn merge(mut self, other: Self) -> Self {
+        self.signals.extend(other.signals);
+        self.large_inserts.extend(other.large_inserts);
+        self.insert_sizes.merge(&other.insert_sizes);
+        self.stats.merge(&other.stats);
+        self.low_quality_clips += other.low_quality_clips;
+        self
+    }
+}
+
 /// Extract the signals of every region to scan.
 ///
 /// # Errors
@@ -132,7 +240,7 @@ pub fn extract(
     options: &ExtractOptions,
 ) -> Result<Extraction, AlignmentError> {
     let regions = targets.regions();
-    let results = regions
+    let result = regions
         .par_iter()
         .enumerate()
         .map_init(
@@ -151,27 +259,29 @@ pub fn extract(
                 scan_region(reader, file, region, previous_end, options)
             },
         )
-        .collect::<io::Result<Vec<RegionResult>>>()
+        // The template lengths of each region go into one histogram per
+        // split, not a list of all the pairs.
+        .try_fold(Accumulator::default, |acc, region| {
+            region.map(|region| acc.add(region))
+        })
+        .try_reduce(Accumulator::default, |a, b| Ok(a.merge(b)))
         .map_err(|source| AlignmentError::Io {
             path: file.path().to_path_buf(),
             source,
         })?;
 
-    let mut extraction = Extraction::default();
-    let mut large_inserts = Vec::new();
-    let mut insert_sizes = Vec::new();
-    for result in results {
-        extraction.signals.extend(result.signals);
-        large_inserts.extend(result.large_inserts);
-        insert_sizes.extend(result.insert_sizes);
-        extraction.stats.merge(&result.stats);
-        extraction.low_quality_clips += result.low_quality_clips;
-    }
-    extraction.insert_size = InsertSize::estimate(insert_sizes);
+    let mut extraction = Extraction {
+        signals: result.signals,
+        stats: result.stats,
+        low_quality_clips: result.low_quality_clips,
+        insert_size: result.insert_sizes.estimate(),
+    };
     if let Some(insert_size) = extraction.insert_size {
-        extraction.signals.extend(large_inserts.into_iter().filter(|s| {
-            matches!(s.kind, SignalKind::LargeInsert { length } if length > insert_size.threshold)
-        }));
+        extraction
+            .signals
+            .extend(result.large_inserts.into_iter().filter(|s| {
+                matches!(s.kind, SignalKind::LargeInsert { length } if length > insert_size.threshold)
+            }));
     }
     extraction.signals.sort_unstable();
     extraction.signals.dedup();
@@ -351,13 +461,65 @@ mod tests {
         assert_eq!(a.signals, b.signals);
     }
 
+    fn histogram(lengths: &[u64]) -> InsertSizeHistogram {
+        let mut histogram = InsertSizeHistogram::default();
+        for &length in lengths {
+            histogram.add(length);
+        }
+        histogram
+    }
+
+    /// Median and MAD of the values themselves (the estimate before #23).
+    fn exact(mut lengths: Vec<u64>) -> (u64, u64) {
+        let mid = (lengths.len() - 1) / 2;
+        let median = *lengths.select_nth_unstable(mid).1;
+        let mut deviations: Vec<u64> = lengths.iter().map(|&l| l.abs_diff(median)).collect();
+        (median, *deviations.select_nth_unstable(mid).1)
+    }
+
     #[test]
     fn insert_size_estimate() {
-        assert_eq!(InsertSize::estimate(vec![]), None);
-        let estimate = InsertSize::estimate(vec![290, 300, 310, 300, 1_000]).unwrap();
+        assert_eq!(histogram(&[]).estimate(), None);
+        let estimate = histogram(&[290, 300, 310, 300, 1_000]).estimate().unwrap();
         assert_eq!(estimate.pairs, 5);
         assert_eq!(estimate.median, 300);
         assert_eq!(estimate.mad, 10);
         assert_eq!(estimate.threshold, 300 + 89);
+        // Lengths beyond the bound only count.
+        let estimate = histogram(&[300, 300, 20_000]).estimate().unwrap();
+        assert_eq!((estimate.pairs, estimate.median, estimate.mad), (3, 300, 0));
+    }
+
+    #[test]
+    fn histogram_matches_the_exact_estimate() {
+        // Deterministic pseudo-random samples (xorshift), with outliers and
+        // lengths beyond the bound.
+        let mut state = 0x2545_f491_4f6c_dd1d_u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for n in [1, 2, 3, 10, 101, 1_000, 10_000] {
+            let lengths: Vec<u64> = (0..n)
+                .map(|_| match next() % 20 {
+                    0 => next() % 50_000,
+                    1 => 1 + next() % 100,
+                    _ => 200 + next() % 200,
+                })
+                .collect();
+            // Split in two histograms and merge, as the workers do.
+            let (a, b) = lengths.split_at(n / 3);
+            let mut merged = histogram(a);
+            merged.merge(&histogram(b));
+            assert_eq!(merged, histogram(&lengths));
+            let estimate = merged.estimate().unwrap();
+            assert_eq!(
+                (estimate.median, estimate.mad),
+                exact(lengths.clone()),
+                "{n} lengths"
+            );
+        }
     }
 }
