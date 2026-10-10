@@ -170,11 +170,12 @@ fn log_extraction(extraction: &Extraction) {
         warn!("no proper pair: large inserts are not detected");
     }
     info!(
-        "{} signals: {} soft-clips ({} with a poly(A/T) tail, {} more set aside for their base quality), {} unmapped mates, {} low-MAPQ mates, {} mates on another contig, {} large inserts",
+        "{} signals: {} soft-clips ({} with a poly(A/T) tail, {} more set aside for their base quality, {} of which are masked read ends), {} unmapped mates, {} low-MAPQ mates, {} mates on another contig, {} large inserts",
         extraction.signals.len(),
         extraction.count("soft_clip"),
         extraction.tailed_clips(),
         extraction.low_quality_clips,
+        extraction.masked_clips,
         extraction.count("mate_unmapped"),
         extraction.count("mate_low_mapq"),
         extraction.count("mate_elsewhere"),
