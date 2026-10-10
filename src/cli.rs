@@ -52,7 +52,8 @@ pub struct ScanArgs {
     #[arg(long, value_name = "FILE", help_heading = "Input")]
     pub bed: PathBuf,
 
-    /// Reference genome (FASTA, indexed); required for CRAM
+    /// Reference genome (FASTA, indexed); required for CRAM, and for the
+    /// `tandem_repeat` filter
     #[arg(long, value_name = "FILE", help_heading = "Input")]
     pub reference: Option<PathBuf>,
 
@@ -138,7 +139,7 @@ pub struct ScanArgs {
     pub probe_edge_tolerance: u64,
 
     /// Also output the candidates flagged `no_junction`, `no_tail`,
-    /// `probe_edge` or `low_ratio`, with their filter status (low-support
+    /// `tandem_repeat`, `probe_edge` or `low_ratio`, with their filter status (low-support
     /// clusters are never output)
     #[arg(long, help_heading = "Clustering and filters")]
     pub keep_filtered: bool,

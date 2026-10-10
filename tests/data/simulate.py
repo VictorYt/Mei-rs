@@ -5,8 +5,10 @@ Writes, into the directory given as the only argument:
 - targets.bed: three capture targets;
 - targets_tiled.bed: the same, with the insertion target split into two
   overlapping probes whose edges fall on the insertion junctions;
+- targets_tract.bed: one target around a reference poly(A) tract on chr2;
 - positive.sam: heterozygous Alu insertion with a TSD and a poly(A) tail on
-  chr1, a probe-edge artefact and a few marked PCR duplicates;
+  chr1, a probe-edge artefact, a few marked PCR duplicates, and a
+  heterozygous expansion of the chr2 poly(A) tract;
 - negative.sam: same targets, without the insertion;
 - truth.tsv: the simulated insertion.
 
@@ -62,6 +64,15 @@ TILED_TARGETS = [
     ("chr1", 9850, INS_POS + TSD_LEN, "target_insertion_left"),
     ("chr1", INS_POS, 10150, "target_insertion_right"),
 ] + TARGETS[1:]
+
+# Reference poly(A) tract at the end of an Alu fragment on chr2 (outside the
+# targets above), expanded by TRACT_EXPANSION bases on one haplotype of
+# `positive`: alt = chr2[:TRACT_POS + TRACT_LEN] + A(expansion) + chr2[TRACT_POS + TRACT_LEN:].
+TRACT_POS = 2000
+TRACT_LEN = 12
+TRACT_EXPANSION = 14
+TRACT_FLANK = ALU[-40:]
+TRACT_TARGET = ("chr2", 1850, 2150, "target_tract")
 
 COMPLEMENT = str.maketrans("ACGT", "TGCA")
 
@@ -159,6 +170,40 @@ class Haplotype:
             # Multi-mapping read: placed on the reference copy, MAPQ 0.
             offset = start - ins_start
             return Mapping("chr2", ALU_COPY_POS + offset, f"{end - start}M", 0)
+        return Mapping()
+
+
+class TractHaplotype:
+    """A haplotype of chr2 with the poly(A) tract expanded, aligned like a
+    read aligner does: a read crossing the expansion is anchored on its longer
+    side. Anchored upstream, it matches through the reference tract and the
+    extra bases and the downstream flank are clipped (clip after the tract);
+    anchored downstream, it matches back through the reference tract and the
+    upstream flank and the extra bases are clipped (clip before the tract)."""
+
+    def __init__(self, contig, reference):
+        self.contig = contig
+        self.end = TRACT_POS + TRACT_LEN
+        self.sequence = reference[: self.end] + "A" * TRACT_EXPANSION + reference[self.end :]
+
+    def to_alt(self, ref_pos):
+        return ref_pos if ref_pos < self.end else ref_pos + TRACT_EXPANSION
+
+    def align(self, start, end):
+        shift = TRACT_EXPANSION
+        if end <= self.end:
+            return Mapping(self.contig, start, f"{end - start}M", 60)
+        if start >= TRACT_POS + shift:
+            # Starts in the tract: its A run matches the reference tract.
+            return Mapping(self.contig, start - shift, f"{end - start}M", 60)
+        upstream = self.end - start
+        # Matches from the start of the tract once the extra bases are clipped.
+        downstream = end - (TRACT_POS + shift)
+        if upstream >= downstream and upstream >= MIN_ANCHOR:
+            return Mapping(self.contig, start, f"{upstream}M{end - start - upstream}S", 60)
+        if downstream >= MIN_ANCHOR:
+            clip = end - start - downstream
+            return Mapping(self.contig, TRACT_POS, f"{clip}S{downstream}M", 60)
         return Mapping()
 
 
@@ -298,7 +343,10 @@ def main(out_dir):
     rng = Rng(SEED)
     reference = {name: rng.sequence(length) for name, length in CONTIGS}
     chr2 = reference["chr2"]
-    reference["chr2"] = chr2[:ALU_COPY_POS] + ALU + chr2[ALU_COPY_POS + len(ALU) :]
+    chr2 = chr2[:ALU_COPY_POS] + ALU + chr2[ALU_COPY_POS + len(ALU) :]
+    tract = TRACT_FLANK + "A" * TRACT_LEN
+    start = TRACT_POS - len(TRACT_FLANK)
+    reference["chr2"] = chr2[:start] + tract + chr2[start + len(tract) :]
 
     with open(os.path.join(out_dir, "reference.fa"), "w") as fa:
         for name, _ in CONTIGS:
@@ -307,7 +355,11 @@ def main(out_dir):
             for i in range(0, len(seq), 60):
                 fa.write(seq[i : i + 60] + "\n")
 
-    for file_name, targets in (("targets.bed", TARGETS), ("targets_tiled.bed", TILED_TARGETS)):
+    for file_name, targets in (
+        ("targets.bed", TARGETS),
+        ("targets_tiled.bed", TILED_TARGETS),
+        ("targets_tract.bed", [TRACT_TARGET]),
+    ):
         with open(os.path.join(out_dir, file_name), "w") as bed:
             for contig, start, end, name in targets:
                 bed.write(f"{contig}\t{start}\t{end}\t{name}\n")
@@ -335,6 +387,13 @@ def main(out_dir):
                 fragments(rng, ref_hap, target, writer)
                 fragments(rng, ref_hap, target, writer)
         probe_edge_artefact(rng, reference, writer)
+        if with_insertion:
+            # Own random generator: the reads above do not change.
+            main_rng, writer.rng = writer.rng, Rng(SEED + 1)
+            contig = TRACT_TARGET[0]
+            fragments(writer.rng, Haplotype(contig, reference[contig]), TRACT_TARGET, writer)
+            fragments(writer.rng, TractHaplotype(contig, reference[contig]), TRACT_TARGET, writer)
+            writer.rng = main_rng
         writer.close()
 
 

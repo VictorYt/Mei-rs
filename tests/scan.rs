@@ -168,6 +168,40 @@ fn insertion_at_probe_edges_stays_pass() {
 }
 
 #[test]
+fn reference_tract_length_variant() {
+    // A heterozygous expansion of a reference poly(A) tract
+    // (tests/data/README.md): without the reference, its clips look like an
+    // insertion with a poly(A) tail and a 12 bp TSD.
+    let tract = ["--bed", "tests/data/targets_tract.bed", "--keep-filtered"];
+    let tsv = scan(&[&["--bam", "tests/data/positive.bam"][..], &tract].concat());
+    let found = rows(&tsv);
+    assert_eq!(found.len(), 1, "{tsv}");
+    assert_eq!(column(&tsv, &found[0], "filter"), "PASS");
+    assert_eq!(column(&tsv, &found[0], "confidence"), "high");
+    assert_eq!(column(&tsv, &found[0], "tsd_length"), "12");
+
+    // With the reference, the clips are the reference with a longer tract.
+    for bam in ["tests/data/positive.bam", "tests/data/positive.cram"] {
+        let tsv = scan(
+            &[
+                &["--bam", bam, "--reference", "tests/data/reference.fa"][..],
+                &tract,
+            ]
+            .concat(),
+        );
+        let found = rows(&tsv);
+        assert_eq!(found.len(), 1, "{tsv}");
+        assert_eq!(column(&tsv, &found[0], "filter"), "tandem_repeat", "{bam}");
+    }
+
+    // The simulated Alu insertion stays PASS.
+    let tsv = scan(&[&POSITIVE[..], &["--reference", "tests/data/reference.fa"]].concat());
+    let found = rows(&tsv);
+    assert_eq!(found.len(), 1, "{tsv}");
+    assert_eq!(column(&tsv, &found[0], "confidence"), "high");
+}
+
+#[test]
 fn bam_and_cram_give_the_same_output() {
     for format in ["tsv", "bed", "json"] {
         let bam = scan(
