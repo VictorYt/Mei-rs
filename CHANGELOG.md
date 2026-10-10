@@ -19,6 +19,16 @@ project follows [Semantic Versioning](https://semver.org/).
   those without any base at the threshold (masked read ends): 2,682,180 of
   2,870,963 on the NA12878 exome. The quality filter is unchanged: trimming
   the low-quality read end would rescue 0.05% of them. (#25)
+- `tandem_repeat` filter, applied when `--reference` is given: the soft-clips
+  of the candidate are a length variant of a reference homopolymer or short
+  tandem repeat (typically a longer poly(A) tract at the 3' end of an Alu of
+  the reference), not an insertion. Such clips have a poly(A/T) tail and the
+  two junctions overlap like a TSD, so they made most `high` candidates.
+  On the NA12878 exome: 317 `PASS` (2 `high`, 315 `medium`) instead of 358
+  (6 `high`, 350 `medium`, 2 `low`); 4 of the 6 `high` were such variants.
+  Without `--reference`, a warning says the filter is off. (#42)
+- `tests/data/targets_tract.bed`: an expanded reference poly(A) tract in the
+  `positive` fixture. (#42)
 
 ### Changed
 

@@ -50,7 +50,7 @@ error.
 |---|---|
 | `--bam` | BAM or CRAM, coordinate-sorted and indexed (`.bam.bai`, `.bam.csi`, `.bai`, `.cram.crai` or `.crai`). The sample name is the `SM` of the read groups, or else the file name. |
 | `--bed` | capture targets: at least 3 columns (contig, 0-based start, end), tabs or spaces, plain or gzipped. `#`, `track` and `browser` lines are skipped. The contig names must match the alignment (`chr1` vs `1` is reported). |
-| `--reference` | reference genome indexed with `samtools faidx` (`.fai`); required for CRAM. When given, its contigs must match the lengths of the alignment header. |
+| `--reference` | reference genome indexed with `samtools faidx` (`.fai`); required for CRAM, and recommended for BAM: without it, the `tandem_repeat` filter is off. When given, its contigs must match the lengths of the alignment header. |
 
 Inconsistent inputs fail early with a message that says how to fix them.
 Targets on contigs absent from the alignment, or beyond their contig, are
@@ -78,7 +78,7 @@ skipped with a warning.
 | `--allow-no-tail` | off | do not require a soft-clip with a poly(A/T) tail (`no_tail`) |
 | `--min-signal-ratio` | 0.05 | minimum number of supporting reads per read of local depth |
 | `--probe-edge-tolerance` | 2 | distance in bp to a probe start or end within which a soft-clip stops at the probe edge |
-| `--keep-filtered` | off | also write the candidates flagged `no_junction`, `no_tail`, `probe_edge` or `low_ratio` |
+| `--keep-filtered` | off | also write the candidates flagged `no_junction`, `no_tail`, `tandem_repeat`, `probe_edge` or `low_ratio` |
 | **Output** | | |
 | `-o`, `--output` | stdout | output file |
 | `--format` | `tsv` | `tsv`, `bed` or `json` (with every signal of every candidate) |
@@ -101,6 +101,9 @@ skipped with a warning.
    flanks give the TSD.
 3. **Filters**: `no_junction` when fewer than `--min-clips` soft-clips mark
    the junctions (mate signals alone); `no_tail` without any poly(A/T) tail;
+   `tandem_repeat` (with `--reference`) when the soft-clips are the reference
+   with a longer homopolymer or tandem repeat, such as the poly(A) tract of
+   an Alu of the reference, rather than an insertion;
    `probe_edge` when every soft-clip stops within `--probe-edge-tolerance`
    of a probe start or end, without any poly(A/T) tail or TSD (digestion or
    ligation artefact of the capture); `low_ratio` when the
@@ -134,10 +137,12 @@ Since #22, a `PASS` candidate needs soft-clips at its junctions
 (`no_junction`) and at least one soft-clip with a poly(A/T) tail (`no_tail`),
 the only evidence that the inserted sequence is a retrotransposon until
 element typing; each `PASS` candidate gets a confidence level. On the same
-exome: **358 `PASS`** (6 `high`, 350 `medium`, 2 `low`); the 6 `high` ones all
-have signals from both sides and a 6-25 bp TSD. The `medium` level (tail and
-mate signals, no TSD) still needs the mates to be checked against MEI
-sequences (#31): favour `high` candidates.
+exome: 358 `PASS` (6 `high`, 350 `medium`, 2 `low`). Four of the 6 `high`
+candidates were longer poly(A) tracts of reference Alus: their clips have a
+tail and their junctions overlap like a TSD. Since #42, with `--reference`,
+the `tandem_repeat` filter rejects them: **317 `PASS`** (2 `high`, 315
+`medium`). The `medium` level (tail and mate signals, no TSD) still needs the
+mates to be checked against MEI sequences (#31): favour `high` candidates.
 
 Other limitations:
 

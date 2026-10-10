@@ -5,13 +5,16 @@ use std::io::{self, BufWriter, Write};
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use noodles::core::{Position, Region};
+use noodles::fasta;
 use tracing::{info, warn};
 
 use crate::cli::ScanArgs;
-use crate::cluster::{Candidate, Confidence, Filter, cluster, filters};
+use crate::cluster::{Candidate, Confidence, Filter, cluster, filters, tracts};
 use crate::inputs::Inputs;
 use crate::reader::depth::local_depths;
 use crate::reader::extract::{Extraction, extract};
+use crate::regions::targets::Contig;
 use crate::writer::{self, Report};
 
 /// Run `mei-rs scan`.
@@ -42,12 +45,8 @@ pub fn run(args: &ScanArgs) -> Result<()> {
     let extraction = extract(&inputs.alignment, targets, &extract_options)?;
     log_extraction(&extraction);
 
-    let contigs: Vec<String> = inputs
-        .alignment
-        .contigs()
-        .into_iter()
-        .map(|c| c.name)
-        .collect();
+    let header_contigs = inputs.alignment.contigs();
+    let contigs: Vec<String> = header_contigs.iter().map(|c| c.name.clone()).collect();
     let mut candidates = cluster(extraction.signals, &args.cluster_options());
     let clusters = candidates.len();
     candidates.retain(|c| !c.is_low_support());
@@ -57,6 +56,13 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         .map(|c| (contigs[c.contig].clone(), c.breakpoint))
         .collect();
     let depths = local_depths(&inputs.alignment, &boundaries, &extract_options.filter)?;
+    if let Some(reference) = &args.reference {
+        flag_tandem_repeats(&mut candidates, &header_contigs, reference)?;
+    } else {
+        warn!(
+            "no --reference: the tandem_repeat filter is off (length variants of reference poly(A) tracts and tandem repeats can pass as insertions)"
+        );
+    }
     let filter_options = args.filter_options();
     for (candidate, depth) in candidates.iter_mut().zip(depths) {
         candidate.depth = Some(depth);
@@ -86,6 +92,7 @@ pub fn run(args: &ScanArgs) -> Result<()> {
     for filter in [
         Filter::NoJunction,
         Filter::NoTail,
+        Filter::TandemRepeat,
         Filter::ProbeEdge,
         Filter::LowRatio,
     ] {
@@ -107,6 +114,53 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         candidates: &candidates,
     };
     write_output(&report, args)
+}
+
+/// Flag the candidates whose soft-clips are length variants of reference
+/// tracts ([`tracts`]), reading the reference around each candidate with
+/// junction soft-clips.
+fn flag_tandem_repeats(
+    candidates: &mut [Candidate],
+    contigs: &[Contig],
+    reference: &Path,
+) -> Result<()> {
+    let mut reader = fasta::io::indexed_reader::Builder::default()
+        .build_from_path(reference)
+        .with_context(|| format!("cannot open the reference {}", reference.display()))?;
+    let mut sequence = Vec::new();
+    for candidate in candidates
+        .iter_mut()
+        .filter(|c| c.left_junction.is_some() || c.right_junction.is_some())
+    {
+        let contig = &contigs[candidate.contig];
+        // 0-based half-open, read as a 1-based inclusive region.
+        let (start, end) = tracts::window(candidate, contig.length);
+        let (Some(first), Some(last)) = (
+            usize::try_from(start + 1)
+                .ok()
+                .and_then(|p| Position::try_from(p).ok()),
+            usize::try_from(end)
+                .ok()
+                .and_then(|p| Position::try_from(p).ok()),
+        ) else {
+            continue;
+        };
+        let region = Region::new(contig.name.as_str(), first..=last);
+        let record = reader
+            .query(&region)
+            .with_context(|| format!("cannot read {region} from {}", reference.display()))?;
+        sequence.clear();
+        sequence.extend_from_slice(record.sequence().as_ref());
+        sequence.make_ascii_uppercase();
+        tracts::apply(
+            candidate,
+            &tracts::ReferenceWindow {
+                start,
+                sequence: &sequence,
+            },
+        );
+    }
+    Ok(())
 }
 
 /// Write the report to the output file, or to standard output.

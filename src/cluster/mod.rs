@@ -1,11 +1,13 @@
 //! Phase 2: spatial clustering of the signals into candidate insertion sites,
-//! breakpoint estimation and capture artefact filters ([`filters`]).
+//! breakpoint estimation, capture artefact filters ([`filters`]) and length
+//! variants of reference tracts ([`tracts`]).
 //!
 //! Positions are *boundaries* (see [`crate::reader::signals`]): a junction at
 //! boundary `b` means the insertion lies between bases `b - 1` and `b`
 //! (0-based), i.e. right after base `b` in 1-based coordinates.
 
 pub mod filters;
+pub mod tracts;
 
 use std::collections::{BTreeMap, HashSet};
 
@@ -50,6 +52,9 @@ pub enum Filter {
     NoJunction,
     /// No soft-clip with a poly(A/T) tail.
     NoTail,
+    /// The soft-clips are a length variant of a reference homopolymer or
+    /// tandem repeat, not an insertion (see [`tracts`]).
+    TandemRepeat,
     /// Every soft-clip stops at a probe edge, without a poly(A/T) tail or a
     /// TSD (capture artefact).
     ProbeEdge,
@@ -65,6 +70,7 @@ impl Filter {
             Self::LowSupport => "low_support",
             Self::NoJunction => "no_junction",
             Self::NoTail => "no_tail",
+            Self::TandemRepeat => "tandem_repeat",
             Self::ProbeEdge => "probe_edge",
             Self::LowRatio => "low_ratio",
         }
