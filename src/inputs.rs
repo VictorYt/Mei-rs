@@ -432,9 +432,9 @@ mod tests {
             args.reference = reference;
             let inputs = Inputs::load(&args).unwrap();
             assert_eq!(inputs.sample, "positive");
-            assert_eq!(inputs.targets.probes().len(), 3);
-            assert_eq!(inputs.targets.probe_bases(), 300 + 200 + 300);
-            assert_eq!(inputs.targets.scanned_bases(), 900 + 800 + 900);
+            assert_eq!(inputs.targets.probes().len(), 5);
+            assert_eq!(inputs.targets.probe_bases(), 4 * 300 + 200);
+            assert_eq!(inputs.targets.scanned_bases(), 4 * 900 + 800);
         }
     }
 
@@ -514,8 +514,9 @@ mod tests {
         let mut args = args(&data("targets.bed"));
         args.region = Some("chr1:10001-20000".parse().unwrap());
         let inputs = Inputs::load(&args).unwrap();
-        assert_eq!(inputs.targets.regions().len(), 1);
-        assert_eq!(inputs.targets.scanned_bases(), 10_450 - 10_000);
+        // The end of the Alu target region and the LINE-1 one.
+        assert_eq!(inputs.targets.regions().len(), 2);
+        assert_eq!(inputs.targets.scanned_bases(), 10_450 - 10_000 + 900);
 
         args.region = Some("1:1-100".parse().unwrap());
         let err = Inputs::load(&args).unwrap_err();

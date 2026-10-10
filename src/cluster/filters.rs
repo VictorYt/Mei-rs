@@ -1,5 +1,6 @@
-//! Filters specific to capture data: probe-edge artefacts and the ratio of
-//! supporting reads to the local depth.
+//! Filters applied once the candidate is typed and its depth known: element
+//! typing, probe-edge artefacts of capture data and the ratio of supporting
+//! reads to the local depth.
 
 use super::{Candidate, Filter};
 use crate::reader::signals::SignalKind;
@@ -13,6 +14,8 @@ pub struct FilterOptions {
     /// Maximum distance, in bp, between a soft-clip and a probe start or end
     /// for the clip to count as stopping at the probe edge.
     pub probe_edge_tolerance: u64,
+    /// Minimum number of junction soft-clips typed to an MEI consensus.
+    pub min_typed_clips: usize,
 }
 
 impl Default for FilterOptions {
@@ -20,16 +23,19 @@ impl Default for FilterOptions {
         Self {
             min_signal_ratio: 0.05,
             probe_edge_tolerance: 2,
+            min_typed_clips: 2,
         }
     }
 }
 
-/// Flag a candidate whose depth is known.
+/// Flag a candidate once typed and its depth known.
 ///
+/// - [`Filter::Untyped`]: fewer junction soft-clips typed to an MEI consensus
+///   than the minimum.
 /// - [`Filter::ProbeEdge`]: it has soft-clips, every one stops within the
-///   tolerance of a probe start or end, none has a poly(A/T) tail and there
-///   is no TSD (digestion or ligation artefact of the capture). A real
-///   insertion next to a probe edge keeps its hallmarks.
+///   tolerance of a probe start or end, none has a poly(A/T) tail, none is
+///   typed and there is no TSD (digestion or ligation artefact of the
+///   capture). A real insertion next to a probe edge keeps its hallmarks.
 /// - [`Filter::LowRatio`]: supporting reads per read of local depth below
 ///   the threshold.
 pub fn apply(
@@ -38,8 +44,13 @@ pub fn apply(
     targets: &TargetSet,
     options: &FilterOptions,
 ) {
-    let hallmarks =
-        candidate.polya_clips + candidate.polyt_clips > 0 || candidate.tsd_length().is_some();
+    let typed_clips = candidate.typing.as_ref().map_or(0, |t| t.typed_clips);
+    if typed_clips < options.min_typed_clips {
+        candidate.filters.push(Filter::Untyped);
+    }
+    let hallmarks = candidate.polya_clips + candidate.polyt_clips > 0
+        || candidate.tsd_length().is_some()
+        || typed_clips > 0;
     let mut clips = candidate
         .signals
         .iter()
@@ -100,7 +111,7 @@ mod tests {
 
     #[test]
     fn probe_edge() {
-        let options = FilterOptions::default();
+        let options = untyped_ok();
         let mut c = candidate(
             (0..5)
                 .map(|i| clip(1_000, Side::Left, &format!("r{i}"), None))
@@ -163,6 +174,37 @@ mod tests {
         assert_eq!(c.filters, [Filter::NoJunction]);
     }
 
+    /// Default options, without the typing requirement (these tests are
+    /// not about it).
+    fn untyped_ok() -> FilterOptions {
+        FilterOptions {
+            min_typed_clips: 0,
+            ..FilterOptions::default()
+        }
+    }
+
+    #[test]
+    fn untyped() {
+        let signals: Vec<_> = (0..5)
+            .map(|i| clip(1_100, Side::Left, &format!("r{i}"), Some(b'A')))
+            .collect();
+        let mut c = candidate(signals, 20);
+        apply(&mut c, "chr1", &targets(), &FilterOptions::default());
+        assert_eq!(c.filters, [Filter::Untyped]);
+        c.filters.clear();
+        c.typing = Some(crate::typer::Typing {
+            family: crate::typer::consensus::Family::Alu,
+            subfamily: "AluY".to_owned(),
+            reverse: false,
+            element_start: 250,
+            element_end: 281,
+            identity: 1.0,
+            typed_clips: 2,
+        });
+        apply(&mut c, "chr1", &targets(), &FilterOptions::default());
+        assert!(c.is_pass(), "{:?}", c.filters);
+    }
+
     /// Re-apply the filters from scratch.
     fn apply_fresh(c: &mut Candidate, options: &FilterOptions) {
         c.filters.clear();
@@ -171,7 +213,7 @@ mod tests {
 
     #[test]
     fn probe_edge_spares_insertion_hallmarks() {
-        let options = FilterOptions::default();
+        let options = untyped_ok();
         // A poly(A/T) tail at the edge: not an artefact.
         let mut signals: Vec<_> = (0..5)
             .map(|i| clip(1_000, Side::Left, &format!("r{i}"), None))
@@ -197,7 +239,7 @@ mod tests {
         let signals: Vec<_> = (0..5)
             .map(|i| clip(1_100, Side::Left, &format!("r{i}"), None))
             .collect();
-        let options = FilterOptions::default();
+        let options = untyped_ok();
         let mut c = candidate(signals.clone(), 100);
         apply(&mut c, "chr1", &targets(), &options);
         assert!(c.is_pass());

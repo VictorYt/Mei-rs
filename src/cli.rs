@@ -57,6 +57,12 @@ pub struct ScanArgs {
     #[arg(long, value_name = "FILE", help_heading = "Input")]
     pub reference: Option<PathBuf>,
 
+    /// MEI consensus sequences (FASTA, headers `>name#SINE/Alu`,
+    /// `>name#LINE/L1` or `>name#Retroposon/SVA`) [default: the Dfam Alu,
+    /// LINE-1 and SVA consensus sequences built into mei-rs]
+    #[arg(long, value_name = "FILE", help_heading = "Input")]
+    pub consensus: Option<PathBuf>,
+
     /// Bases added on each side of every target
     #[arg(long, value_name = "BP", default_value_t = 300, help_heading = "Input")]
     pub padding: u32,
@@ -118,9 +124,19 @@ pub struct ScanArgs {
         value_parser = clap::value_parser!(u64).range(1..), help_heading = "Clustering and filters")]
     pub min_clips: u64,
 
-    /// Do not require a soft-clip with a poly(A/T) tail (`no_tail`) to pass
+    /// Require a soft-clip with a poly(A/T) tail (`no_tail`) to pass
     #[arg(long, help_heading = "Clustering and filters")]
-    pub allow_no_tail: bool,
+    pub require_tail: bool,
+
+    /// Minimum number of junction soft-clips typed to an MEI consensus
+    /// (fewer: `untyped`; 0 turns the filter off)
+    #[arg(
+        long,
+        value_name = "READS",
+        default_value_t = 2,
+        help_heading = "Clustering and filters"
+    )]
+    pub min_typed_clips: u64,
 
     /// Minimum number of supporting reads per read of local depth
     #[arg(long, value_name = "RATIO", default_value_t = 0.05,
@@ -139,7 +155,7 @@ pub struct ScanArgs {
     pub probe_edge_tolerance: u64,
 
     /// Also output the candidates flagged `no_junction`, `no_tail`,
-    /// `tandem_repeat`, `probe_edge` or `low_ratio`, with their filter status (low-support
+    /// `untyped`, `tandem_repeat`, `probe_edge` or `low_ratio`, with their filter status (low-support
     /// clusters are never output)
     #[arg(long, help_heading = "Clustering and filters")]
     pub keep_filtered: bool,
@@ -180,7 +196,7 @@ impl ScanArgs {
             window: self.window,
             min_support: usize::try_from(self.min_support).unwrap_or(usize::MAX),
             min_clips: usize::try_from(self.min_clips).unwrap_or(usize::MAX),
-            require_tail: !self.allow_no_tail,
+            require_tail: self.require_tail,
         }
     }
 
@@ -190,6 +206,7 @@ impl ScanArgs {
         FilterOptions {
             min_signal_ratio: self.min_signal_ratio,
             probe_edge_tolerance: self.probe_edge_tolerance,
+            min_typed_clips: usize::try_from(self.min_typed_clips).unwrap_or(usize::MAX),
         }
     }
 }
@@ -273,7 +290,9 @@ mod tests {
             "5",
             "--min-clips",
             "4",
-            "--allow-no-tail",
+            "--require-tail",
+            "--min-typed-clips",
+            "3",
             "--min-signal-ratio",
             "0.1",
             "--probe-edge-tolerance",
@@ -284,7 +303,8 @@ mod tests {
         assert_eq!(args.cluster_options().window, 50);
         assert_eq!(args.cluster_options().min_support, 5);
         assert_eq!(args.cluster_options().min_clips, 4);
-        assert!(!args.cluster_options().require_tail);
+        assert!(args.cluster_options().require_tail);
+        assert_eq!(args.filter_options().min_typed_clips, 3);
         assert!((args.filter_options().min_signal_ratio - 0.1).abs() < f64::EPSILON);
         assert_eq!(args.filter_options().probe_edge_tolerance, 0);
         assert!(args.keep_filtered);

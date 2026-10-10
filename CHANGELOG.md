@@ -6,6 +6,33 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Element typing (#30): the junction soft-clips of each candidate, without
+  the pure run of their tail, are seeded against a k-mer index (k = 11, both
+  strands) of MEI consensus sequences and aligned locally (Smith-Waterman,
+  affine gaps); a clip is typed when 70% of it aligns with 90% identity.
+  New columns `family` (`ALU`, `LINE1`, `SVA`), `subfamily`,
+  `element_strand`, `element_start`, `element_end`, `identity` and
+  `typed_clips` (TSV and JSON).
+- Default consensus sequences built into the binary: 42 Alu, 9 young LINE-1
+  (L1HS 5' and 3' ends, L1PA2-L1PA8 3' ends) and 6 SVA consensus sequences of
+  Dfam 4.0 (CC0), with the script that downloads them
+  (`data/consensus/`); `--consensus` replaces them. (#30)
+- `untyped` filter: fewer than `--min-typed-clips` (2) junction soft-clips
+  typed to an MEI consensus. (#30)
+- Fixtures: the simulated Alu is the AluY consensus of Dfam, and `positive`
+  also holds a minus-strand 5'-truncated LINE-1 and an SVA insertion. (#30)
+
+### Changed
+
+- The poly(A/T) tail is no longer required to pass (`--require-tail` turns
+  `no_tail` back on; `--allow-no-tail` is removed): typed clips are the
+  evidence of a retrotransposon. Confidence levels: `high` (tail and TSD),
+  `medium` (tail), `low` (no tail). A typed clip also keeps a candidate from
+  `probe_edge`. On the NA12878 exome (`--reference`): 40 `PASS` (1 `high`, 4
+  `medium`, 35 `low`) instead of 317 (2 `high`, 315 `medium`). (#30)
+
 ## [0.1.1] - 2026-10-10
 
 Specificity on real data: `PASS` candidates need soft-clip junctions and a

@@ -7,6 +7,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use noodles::core::{Position, Region};
 use noodles::fasta;
+use rayon::prelude::*;
 use tracing::{info, warn};
 
 use crate::cli::ScanArgs;
@@ -15,6 +16,10 @@ use crate::inputs::Inputs;
 use crate::reader::depth::local_depths;
 use crate::reader::extract::{Extraction, extract};
 use crate::regions::targets::Contig;
+use crate::typer::{
+    self,
+    consensus::{ConsensusSet, Family},
+};
 use crate::writer::{self, Report};
 
 /// Run `mei-rs scan`.
@@ -25,6 +30,7 @@ use crate::writer::{self, Report};
 /// be written.
 pub fn run(args: &ScanArgs) -> Result<()> {
     let inputs = Inputs::load(args)?;
+    let consensus = ConsensusSet::load(args.consensus.as_deref())?;
     let targets = &inputs.targets;
     info!(
         "sample {}: {} {}",
@@ -63,6 +69,7 @@ pub fn run(args: &ScanArgs) -> Result<()> {
             "no --reference: the tandem_repeat filter is off (length variants of reference poly(A) tracts and tandem repeats can pass as insertions)"
         );
     }
+    type_candidates(&mut candidates, &consensus, args.consensus.as_deref());
     let filter_options = args.filter_options();
     for (candidate, depth) in candidates.iter_mut().zip(depths) {
         candidate.depth = Some(depth);
@@ -92,6 +99,7 @@ pub fn run(args: &ScanArgs) -> Result<()> {
     for filter in [
         Filter::NoJunction,
         Filter::NoTail,
+        Filter::Untyped,
         Filter::TandemRepeat,
         Filter::ProbeEdge,
         Filter::LowRatio,
@@ -114,6 +122,31 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         candidates: &candidates,
     };
     write_output(&report, args)
+}
+
+/// Type the candidates with junction soft-clips ([`typer`]), in parallel.
+fn type_candidates(candidates: &mut [Candidate], consensus: &ConsensusSet, path: Option<&Path>) {
+    candidates
+        .par_iter_mut()
+        .filter(|c| c.left_junction.is_some() || c.right_junction.is_some())
+        .for_each(|c| c.typing = typer::type_candidate(consensus, c));
+    let typed = |family| {
+        candidates
+            .iter()
+            .filter(|c| c.typing.as_ref().is_some_and(|t| t.family == family))
+            .count()
+    };
+    info!(
+        "{} consensus sequences ({}); candidates typed: {} ALU, {} LINE1, {} SVA",
+        consensus.sequences().len(),
+        path.map_or_else(
+            || "built-in Dfam set".to_owned(),
+            |p| p.display().to_string()
+        ),
+        typed(Family::Alu),
+        typed(Family::Line1),
+        typed(Family::Sva)
+    );
 }
 
 /// Flag the candidates whose soft-clips are length variants of reference

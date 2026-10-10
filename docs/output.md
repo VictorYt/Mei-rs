@@ -3,7 +3,8 @@
 `mei-rs scan` writes one line (or JSON object) per candidate insertion site,
 sorted by contig (alignment header order) and position. By default only the
 candidates that pass every filter are written; `--keep-filtered` also writes
-those flagged `no_junction`, `no_tail`, `tandem_repeat`, `probe_edge` or `low_ratio`. Clusters with fewer than
+those flagged `no_junction`, `no_tail`, `untyped`, `tandem_repeat`,
+`probe_edge` or `low_ratio`. Clusters with fewer than
 `--min-support` distinct reads are never written.
 
 ## Coordinates
@@ -28,8 +29,8 @@ convention), then one `#` line names the columns:
 | `right_junction` | Start of the downstream flank: most supported junction of the reads clipped on their left end (`.` if none). |
 | `tsd_length` | `left_junction - right_junction` when each junction has at least `--min-clips` soft-clips and the flanks overlap by 1 to 50 bp: the length of the target site duplication (`.` otherwise). |
 | `strand` | Strand of the inserted element: `+` when poly(A) tails outnumber poly(T) tails in the soft-clips, `-` for the reverse, `.` on ties. |
-| `filter` | `PASS`, or the failed filters separated by `;`: `no_junction` (fewer than `--min-clips` soft-clips at the junctions: mate signals alone do not resolve the insertion to the base), `no_tail` (no soft-clip with a poly(A/T) tail; disabled by `--allow-no-tail`), `tandem_repeat` (with `--reference` only: the soft-clips are a length variant of a reference homopolymer or tandem repeat, such as a longer poly(A) tract of an Alu of the reference: at least 2 junction soft-clips, and half of the informative ones, end in the reference where a longer tract would put them, or the tailed soft-clips hold only their tail and the reference has a homopolymer of at least 10 bp of the tail base at their junction), `probe_edge` (every soft-clip stops within `--probe-edge-tolerance` of a probe start or end, none has a poly(A/T) tail and there is no TSD: capture artefact), `low_ratio` (`signal_ratio` below `--min-signal-ratio`). |
-| `confidence` | For `PASS` candidates: `high` (a poly(A/T) tail and a TSD: complete evidence of a retrotransposition), `medium` (mate signals, without a TSD or, with `--allow-no-tail`, without a tail), `low` (soft-clips only, without a TSD); `.` for filtered candidates. |
+| `filter` | `PASS`, or the failed filters separated by `;`: `no_junction` (fewer than `--min-clips` soft-clips at the junctions: mate signals alone do not resolve the insertion to the base), `no_tail` (no soft-clip with a poly(A/T) tail; only with `--require-tail`), `untyped` (fewer than `--min-typed-clips` junction soft-clips typed to an MEI consensus: nothing shows that the inserted sequence is a mobile element), `tandem_repeat` (with `--reference` only: the soft-clips are a length variant of a reference homopolymer or tandem repeat, such as a longer poly(A) tract of an Alu of the reference: at least 2 junction soft-clips, and half of the informative ones, end in the reference where a longer tract would put them, or the tailed soft-clips hold only their tail and the reference has a homopolymer of at least 10 bp of the tail base at their junction), `probe_edge` (every soft-clip stops within `--probe-edge-tolerance` of a probe start or end, none has a poly(A/T) tail, none is typed and there is no TSD: capture artefact), `low_ratio` (`signal_ratio` below `--min-signal-ratio`). |
+| `confidence` | For `PASS` candidates (typed, unless `--min-typed-clips 0`): `high` (a poly(A/T) tail and a TSD: complete evidence of a retrotransposition), `medium` (a poly(A/T) tail, without a TSD), `low` (no poly(A/T) tail: often the tailed junction is not covered by clips long enough); `.` for filtered candidates. |
 | `support` | Distinct supporting reads (by name). |
 | `left_clips` | Reads soft-clipped on their left end (the insertion lies before them). |
 | `right_clips` | Reads soft-clipped on their right end (the insertion lies after them). |
@@ -44,6 +45,12 @@ convention), then one `#` line names the columns:
 | `depth` | Reads (after filtering) covering one of the two bases around `position`. |
 | `signal_ratio` | `support / depth` (3 decimals). Mate signals come from reads that do not cover `position`, so it can exceed 1. |
 | `start`, `end` | Positions of the first and last signal of the cluster. |
+| `family` | Family of the inserted element, typed from the junction soft-clips: `ALU`, `LINE1` or `SVA` (`.` if no clip is typed). |
+| `subfamily` | Best-scoring consensus of that family, e.g. `AluYa5`, `L1HS_3end`, `SVA_F`. Close subfamilies differ by a few bases: short clips often cannot tell them apart. |
+| `element_strand` | Strand of the element on the reference: `+` when the clips match the consensus, `-` when they match its reverse complement. It should agree with `strand` (from the tails) when both are known. |
+| `element_start`, `element_end` | Part of the `subfamily` consensus covered by its clips, 1-based inclusive (e.g. `1` for a clip of the 5' end of the element). |
+| `identity` | Mean identity of the clips aligned to the `subfamily` consensus (3 decimals). |
+| `typed_clips` | Junction soft-clips typed to `family`. |
 
 Missing values are written `.`.
 

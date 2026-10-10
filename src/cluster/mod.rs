@@ -23,8 +23,9 @@ pub struct ClusterOptions {
     /// Minimum number of soft-clips at the junctions; each junction needs as
     /// many to give a TSD.
     pub min_clips: usize,
-    /// Require a soft-clip with a poly(A/T) tail: until element typing, the
-    /// only evidence that the inserted sequence is a retrotransposon.
+    /// Require a soft-clip with a poly(A/T) tail (`no_tail`). Off by default:
+    /// typed clips (`untyped`) are the evidence of a retrotransposon, and the
+    /// tail sets the confidence level.
     pub require_tail: bool,
 }
 
@@ -34,7 +35,7 @@ impl Default for ClusterOptions {
             window: 100,
             min_support: 3,
             min_clips: 2,
-            require_tail: true,
+            require_tail: false,
         }
     }
 }
@@ -50,8 +51,12 @@ pub enum Filter {
     /// Fewer soft-clips at the junctions than `--min-clips`: mate signals
     /// alone do not resolve the insertion to the base.
     NoJunction,
-    /// No soft-clip with a poly(A/T) tail.
+    /// No soft-clip with a poly(A/T) tail (only with `--require-tail`).
     NoTail,
+    /// Fewer junction soft-clips typed to an MEI consensus than
+    /// `--min-typed-clips`: nothing shows that the inserted sequence is a
+    /// mobile element.
+    Untyped,
     /// The soft-clips are a length variant of a reference homopolymer or
     /// tandem repeat, not an insertion (see [`tracts`]).
     TandemRepeat,
@@ -70,6 +75,7 @@ impl Filter {
             Self::LowSupport => "low_support",
             Self::NoJunction => "no_junction",
             Self::NoTail => "no_tail",
+            Self::Untyped => "untyped",
             Self::TandemRepeat => "tandem_repeat",
             Self::ProbeEdge => "probe_edge",
             Self::LowRatio => "low_ratio",
@@ -80,13 +86,13 @@ impl Filter {
 /// Confidence level of a candidate that passes the filters.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Confidence {
-    /// Soft-clips with a poly(A/T) tail and a TSD: complete evidence of a
-    /// retrotransposition.
+    /// Typed soft-clips with a poly(A/T) tail and a TSD: complete evidence
+    /// of a retrotransposition.
     High,
-    /// Soft-clips and mate signals, without a TSD (or without a tail when
-    /// tails are not required).
+    /// Typed soft-clips with a poly(A/T) tail, without a TSD.
     Medium,
-    /// Soft-clips only, without a TSD.
+    /// Typed soft-clips without a poly(A/T) tail (often the tailed junction
+    /// is not covered by clips long enough).
     Low,
 }
 
@@ -149,6 +155,8 @@ pub struct Candidate {
     pub distinct_starts: usize,
     /// Local depth at the breakpoint (filtered reads), once computed.
     pub depth: Option<u64>,
+    /// Element typed from the junction soft-clips, once typed.
+    pub typing: Option<crate::typer::Typing>,
     /// Filters the candidate fails; empty if it passes.
     pub filters: Vec<Filter>,
 }
@@ -228,6 +236,7 @@ impl Candidate {
             polyt_clips: tails(b'T'),
             distinct_starts,
             depth: None,
+            typing: None,
             filters: Vec::new(),
             signals,
         };
@@ -283,9 +292,11 @@ impl Candidate {
     pub fn confidence(&self) -> Option<Confidence> {
         if !self.is_pass() {
             None
-        } else if self.tsd.is_some() && self.polya_clips + self.polyt_clips > 0 {
+        } else if self.polya_clips + self.polyt_clips == 0 {
+            Some(Confidence::Low)
+        } else if self.tsd.is_some() {
             Some(Confidence::High)
-        } else if self.unmapped_mates + self.discordant_mates > 0 {
+        } else if self.polya_clips + self.polyt_clips > 0 {
             Some(Confidence::Medium)
         } else {
             Some(Confidence::Low)
@@ -542,7 +553,7 @@ pub(crate) mod tests {
         let c = &cluster(sorted(two), &options)[0];
         assert!(c.is_pass());
         assert_eq!(c.left_junction_clips, 2);
-        assert_eq!(c.confidence(), Some(Confidence::Medium));
+        assert_eq!(c.confidence(), Some(Confidence::Low));
 
         // A clip 3 bp away does not support the junction.
         let far = sorted(vec![
@@ -578,16 +589,29 @@ pub(crate) mod tests {
         let high = &cluster(sorted(signals.clone()), &options)[0];
         assert_eq!(high.confidence(), Some(Confidence::High));
 
-        // A tail without a TSD: medium with mates, low without.
+        // A tail without a TSD: medium, with or without mates.
         let mut one_junction: Vec<Signal> = (0..3)
             .map(|i| clip(1_000, Side::Left, &format!("l{i}"), Some(b'T')))
             .collect();
-        let low = &cluster(sorted(one_junction.clone()), &options)[0];
-        assert_eq!(low.tsd_length(), None);
-        assert_eq!(low.confidence(), Some(Confidence::Low));
+        let medium = &cluster(sorted(one_junction.clone()), &options)[0];
+        assert_eq!(medium.tsd_length(), None);
+        assert_eq!(medium.confidence(), Some(Confidence::Medium));
         one_junction.push(mate(1_050, Side::Left, "m", SignalKind::MateUnmapped));
         let medium = &cluster(sorted(one_junction), &options)[0];
         assert_eq!(medium.confidence(), Some(Confidence::Medium));
+
+        // No tail: low, even with a TSD.
+        let untailed: Vec<Signal> = (0..3)
+            .flat_map(|i| {
+                [
+                    clip(1_012, Side::Right, &format!("r{i}"), None),
+                    clip(1_000, Side::Left, &format!("l{i}"), None),
+                ]
+            })
+            .collect();
+        let low = &cluster(sorted(untailed), &options)[0];
+        assert_eq!(low.tsd_length(), Some(12));
+        assert_eq!(low.confidence(), Some(Confidence::Low));
     }
 
     #[test]
@@ -605,18 +629,20 @@ pub(crate) mod tests {
                     .collect(),
             )
         };
-        let c = &cluster(untailed(), &ClusterOptions::default())[0];
-        assert_eq!(c.filters, [Filter::NoTail]);
-        assert_eq!(c.confidence(), None);
-
-        // --allow-no-tail: the TSD alone is not `high`.
+        // --require-tail.
         let options = ClusterOptions {
-            require_tail: false,
+            require_tail: true,
             ..ClusterOptions::default()
         };
         let c = &cluster(untailed(), &options)[0];
+        assert_eq!(c.filters, [Filter::NoTail]);
+        assert_eq!(c.confidence(), None);
+
+        // By default the tail is not required, and the TSD alone is not
+        // `high`.
+        let c = &cluster(untailed(), &ClusterOptions::default())[0];
         assert_eq!(c.tsd_length(), Some(12));
-        assert_eq!(c.confidence(), Some(Confidence::Medium));
+        assert_eq!(c.confidence(), Some(Confidence::Low));
     }
 
     #[test]
