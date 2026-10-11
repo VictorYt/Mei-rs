@@ -15,10 +15,13 @@ project follows [Semantic Versioning](https://semver.org/).
   New columns `family` (`ALU`, `LINE1`, `SVA`), `subfamily`,
   `element_strand`, `element_start`, `element_end`, `identity` and
   `typed_clips` (TSV and JSON).
-- Default consensus sequences built into the binary: 42 Alu, 9 young LINE-1
-  (L1HS 5' and 3' ends, L1PA2-L1PA8 3' ends) and 6 SVA consensus sequences of
-  Dfam 4.0 (CC0), with the script that downloads them
-  (`data/consensus/`); `--consensus` replaces them. (#30)
+- Default consensus sequences built into the binary: 42 Alu, 10 young LINE-1
+  (L1HS 5' and 3' ends, L1PA2-L1PA8 3' ends, L1P1 ORF2) and 6 SVA consensus
+  sequences of Dfam 4.0 (CC0), with the script that downloads them
+  (`data/consensus/`); `--consensus` replaces them. (#30) The L1P1 ORF2 model
+  covers the middle of LINE-1, missing from the L1HS and L1PA models: a
+  5'-truncated LINE-1 whose 5' junction falls there is now typed (HGSVC3
+  exomes: LINE-1 recall 6 / 32 to 14 / 32). (#56)
 - `untyped` filter: fewer than `--min-typed-clips` (2) junction soft-clips
   typed to an MEI consensus. (#30)
 - Fixtures: the simulated Alu is the AluY consensus of Dfam, and `positive`
@@ -69,8 +72,8 @@ project follows [Semantic Versioning](https://semver.org/).
   (Python standard library) computes precision, recall, genotype concordance
   and precision by `--min-qual` from `mei-rs` TSV or VCF files, or the VCF of
   another caller, and lifts the truth set to GRCh37 with a UCSC chain file.
-  Seven 1000 Genomes exomes: precision 0.669, recall 0.245 (0.897 and 0.210
-  with `--min-qual 5`); HG002: 0.364 and 0.245; Scramble 1.0.2 on the same
+  Seven 1000 Genomes exomes: precision 0.673, recall 0.267 (0.901 and 0.221
+  with `--min-qual 5`); HG002: 0.382 and 0.265; Scramble 1.0.2 on the same
   exomes: 0.687 and 0.154. Results, method and run times in
   `docs/validation/README.md`.
 

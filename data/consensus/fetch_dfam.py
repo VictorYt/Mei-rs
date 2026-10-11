@@ -2,8 +2,9 @@
 """Download the default MEI consensus sequences of mei-rs from Dfam.
 
 Writes mei_consensus.fa (see README.md): the human Alu (AluY, AluS and AluJ
-subfamilies), young LINE-1 (L1HS 5' and 3' ends, L1PA2-L1PA8 3' ends) and SVA
-(SVA_A-SVA_F) consensus sequences of Dfam, released under CC0 1.0.
+subfamilies), young LINE-1 (L1HS 5' and 3' ends, L1PA2-L1PA8 3' ends, and
+the L1P1 ORF2 model for the middle of the element) and SVA (SVA_A-SVA_F)
+consensus sequences of Dfam, released under CC0 1.0.
 
 Headers: `>name#class accession`, class `SINE/Alu`, `LINE/L1` or
 `Retroposon/SVA`. Only the Python standard library is used.
@@ -20,9 +21,13 @@ GROUPS = [
     ("AluJ", "SINE/Alu"),
     ("L1HS", "LINE/L1"),
     ("L1PA", "LINE/L1"),
+    ("L1P1", "LINE/L1"),
     ("SVA_", "Retroposon/SVA"),
 ]
 YOUNG_L1PA = {f"L1PA{n}_3end" for n in range(2, 9)}
+# Dfam models L1HS and L1PA as 5' and 3' ends only: the youngest ORF2 model
+# (L1P1, 96-99% identical to the ORF2 of L1HS insertions) covers the middle.
+ORF2 = {"L1P1_orf2"}
 
 
 def get(url):
@@ -41,6 +46,8 @@ def main(path):
         for family in families(prefix):
             name = family["name"]
             if prefix == "L1PA" and name not in YOUNG_L1PA:
+                continue
+            if prefix == "L1P1" and name not in ORF2:
                 continue
             fasta = get(f"{API}/{family['accession']}/sequence?format=fasta")
             header, *lines = fasta.strip().split("\n")

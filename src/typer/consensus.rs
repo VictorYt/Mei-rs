@@ -269,7 +269,7 @@ mod tests {
                 .count()
         };
         assert_eq!(count(Family::Alu), 42);
-        assert_eq!(count(Family::Line1), 9);
+        assert_eq!(count(Family::Line1), 10);
         assert_eq!(count(Family::Sva), 6);
         let alu = &set.sequences()[0];
         assert_eq!(alu.name, "AluY");

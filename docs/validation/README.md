@@ -75,38 +75,38 @@ python3 docs/validation/evaluate.py \
 
 ## Results
 
-v0.2.0 (`develop` after #35), default options with `--reference`.
+v0.2.0 (`develop` after #56), default options with `--reference`.
 
 | Sample | Truth MEIs | PASS | True PASS | Precision | Recall (PASS) | Recall (any) |
 |---|---|---|---|---|---|---|
-| HG00512 | 49 | 24 | 15 | 0.652 | 0.306 | 0.429 |
-| HG00513 | 45 | 24 | 16 | 0.667 | 0.356 | 0.467 |
-| HG00731 | 45 | 10 | 6 | 0.600 | 0.133 | 0.244 |
-| HG00733 | 45 | 15 | 9 | 0.643 | 0.200 | 0.311 |
-| NA19238 | 59 | 27 | 21 | 0.778 | 0.356 | 0.678 |
+| HG00512 | 49 | 25 | 16 | 0.667 | 0.327 | 0.429 |
+| HG00513 | 45 | 25 | 17 | 0.680 | 0.378 | 0.467 |
+| HG00731 | 45 | 11 | 7 | 0.636 | 0.156 | 0.244 |
+| HG00733 | 45 | 16 | 10 | 0.667 | 0.222 | 0.311 |
+| NA19238 | 59 | 30 | 23 | 0.767 | 0.390 | 0.678 |
 | NA19239 | 60 | 20 | 12 | 0.632 | 0.200 | 0.300 |
-| NA19240 | 68 | 19 | 12 | 0.632 | 0.176 | 0.412 |
-| **All seven** | **371** | **139** | **91** | **0.669** | **0.245** | **0.412** |
-| HG002 (held out) | 49 | 33 | 12 | 0.364 | 0.245 | 0.408 |
+| NA19240 | 68 | 23 | 14 | 0.609 | 0.206 | 0.412 |
+| **All seven** | **371** | **150** | **99** | **0.673** | **0.267** | **0.412** |
+| HG002 (held out) | 49 | 34 | 13 | 0.382 | 0.265 | 0.408 |
 
 (Precision is true PASS over true and false PASS; 3 PASS calls of the seven
 exomes are near an MEI of another sample or of a missing haplotype.)
 
-By confidence (seven exomes): `high` 12 true of 13, `medium` 31 of 35, `low`
-48 of 91. HG002: `high` 1 of 2, `medium` 3 of 6, `low` 8 of 25.
+By confidence (seven exomes): `high` 12 true of 13, `medium` 33 of 38, `low`
+54 of 99. HG002: `high` 1 of 2, `medium` 3 of 6, `low` 9 of 26.
 
 Recall by distance of the truth MEI to the unpadded target (seven exomes):
 
 | Distance | Any candidate | PASS |
 |---|---|---|
-| inside the target | 32 / 36 | 18 / 36 |
-| 1-100 bp | 71 / 95 | 47 / 95 |
+| inside the target | 32 / 36 | 20 / 36 |
+| 1-100 bp | 71 / 95 | 53 / 95 |
 | 101-300 bp | 50 / 240 | 26 / 240 |
 
-Recall (PASS) by family: Alu 82 / 325, L1 6 / 32, SVA 3 / 14.
+Recall (PASS) by family: Alu 82 / 325, L1 14 / 32, SVA 3 / 14.
 
-Genotypes of the true PASS calls: 76 of 91 right (heterozygous called `0/1`
-53 of 67, homozygous called `1/1` 23 of 24); HG002 8 of 12.
+Genotypes of the true PASS calls: 81 of 99 right (heterozygous called `0/1`
+57 of 74, homozygous called `1/1` 24 of 25); HG002 8 of 13.
 
 ### Quality threshold
 
@@ -115,27 +115,30 @@ threshold:
 
 | `--min-qual` | Seven exomes: true / false | Precision | Recall | HG002: true / false | Precision | Recall |
 |---|---|---|---|---|---|---|
-| 0 (default) | 91 / 45 | 0.669 | 0.245 | 12 / 21 | 0.364 | 0.245 |
-| 2 | 90 / 17 | 0.841 | 0.243 | 12 / 11 | 0.522 | 0.245 |
-| 5 | 78 / 9 | 0.897 | 0.210 | 9 / 7 | 0.562 | 0.184 |
+| 0 (default) | 99 / 48 | 0.673 | 0.267 | 13 / 21 | 0.382 | 0.265 |
+| 2 | 97 / 18 | 0.843 | 0.261 | 13 / 11 | 0.542 | 0.265 |
+| 5 | 82 / 9 | 0.901 | 0.221 | 10 / 7 | 0.588 | 0.204 |
 | 10 | 48 / 4 | 0.923 | 0.129 | 6 / 6 | 0.500 | 0.122 |
 | 15 | 19 / 0 | 1.000 | 0.051 | 1 / 1 | 0.500 | 0.020 |
 
 The score was fitted on the seven exomes, so their rows are in sample; HG002
-is not. On both, a threshold of 2 removes more than half of the false
-positives for at most one true call.
+is not. On both, a threshold of 2 removes about half of the false positives
+for at most two true calls.
 
 ### Remaining errors
 
-* False positives are mostly `low` (no poly(A/T) tail): 42 of the 45 of the
+* False positives are mostly `low` (no poly(A/T) tail): 44 of the 48 of the
   seven exomes, 17 of the 21 of HG002 (14 of these 17 are called `1/1`).
-* Recall is limited by coverage in the padding: 18 of 36 truth MEIs inside
-  the targets are called PASS, 26 of 240 at 101-300 bp from them.
-* LINE-1: the Dfam LINE-1 models are split into a 5' end (`L1HS_5end`,
-  2.1 kb) and a 3' end (`L1*_3end`, 0.9 kb), without the middle of ORF2. A
-  5'-truncated LINE-1 whose 5' junction falls in ORF2 has clips that match no
-  model and stays `untyped` (chr22:43928710 in six samples, chr11:112213886 in
-  two, found by Scramble).
+* Recall is limited by coverage in the padding: 20 of 36 truth MEIs inside
+  the targets are called PASS, 26 of 240 at 101-300 bp from them. The
+  missed MEIs within 100 bp of the targets are analysed in the v0.3.0 issues
+  (#57, #58, #59): candidates left untyped or without enough junction clips,
+  and mate-only candidates placed tens of bases off the insertion.
+* LINE-1: Dfam models L1HS and L1PA as a 5' end and a 3' end, without the
+  middle of ORF2, where the 5' junction of many 5'-truncated LINE-1 falls.
+  The L1P1 ORF2 model of Dfam, added in #56, types them (identity 0.96-1.00 on
+  the clips): LINE-1 recall 6 / 32 before, 14 / 32 after, for 3 more false
+  positives (`qual` 0 to 4).
 
 ## Comparison with Scramble
 
@@ -147,17 +150,19 @@ PASS records of its VCF.
 | | PASS | True | False | Precision | Recall (PASS) | HG002: true / false | HG002 recall |
 |---|---|---|---|---|---|---|---|
 | Scramble | 84 | 57 | 26 | 0.687 | 0.154 | 6 / 5 | 0.122 |
-| `mei-rs` (default) | 139 | 91 | 45 | 0.669 | 0.245 | 12 / 21 | 0.245 |
-| `mei-rs --min-qual 5` | 87 | 78 | 9 | 0.897 | 0.210 | 9 / 7 | 0.184 |
+| `mei-rs` (default) | 150 | 99 | 48 | 0.673 | 0.267 | 13 / 21 | 0.265 |
+| `mei-rs --min-qual 5` | 91 | 82 | 9 | 0.901 | 0.221 | 10 / 7 | 0.204 |
 
-Of the 371 truth MEIs of the seven exomes, 99 are called PASS by either tool:
-49 by both, 42 by `mei-rs` only, 8 by Scramble only (all LINE-1, the two
-untyped sites above). Recall by family: Scramble Alu 45 / 325, L1 10 / 32,
-SVA 2 / 14. Scramble does not genotype.
+Of the 371 truth MEIs of the seven exomes, 57 are called PASS by both tools
+and 42 by `mei-rs` only; every MEI called by Scramble is called by `mei-rs`.
+Before #56, 8 of them (all LINE-1, at two sites whose 5' junction falls in
+ORF2) were left untyped by `mei-rs`. Recall by family: Scramble Alu 45 / 325,
+L1 10 / 32, SVA 2 / 14. Scramble does not genotype.
 
 Run time and memory, both tools one after the other in the same Linux arm64
 container (Docker on an Apple M5 Pro, 18 cores; alignment files on an
-external USB SSD). `mei-rs` writes the VCF (PASS only); its wall time uses all
+external USB SSD; `mei-rs` before #56, whose one more consensus sequence does
+not change the time). `mei-rs` writes the VCF (PASS only); its wall time uses all
 cores, Scramble is single-threaded (`cluster_identifier`, then R):
 
 | Sample | `mei-rs` wall | CPU | Max RSS | Scramble wall | CPU | Max RSS |
@@ -196,9 +201,10 @@ Same seven exomes, PASS calls:
 | #30 typing | 216 | 72 | 0.338 | 0.194 | 5 / 6 |
 | #31 MEI mates | 110 | 70 | 0.654 | 0.189 | 5 / 6 |
 | #32 short clips | 140 | 91 | 0.664 | 0.245 | 9 / 10 |
-| #33 assembly, #34 score, #35 VCF (v0.2.0) | 139 | 91 | 0.669 | 0.245 | 12 / 13 |
+| #33 assembly, #34 score, #35 VCF | 139 | 91 | 0.669 | 0.245 | 12 / 13 |
+| #56 LINE-1 ORF2 (v0.2.0) | 150 | 99 | 0.673 | 0.267 | 12 / 13 |
 
 Before typing, most false positives were poly(A) length variants of reference
 Alus (`high`) and background unmapped mates of the deep samples (`medium`):
-#42 and #31 address them. The last row leaves out one PASS call outside the
+#42 and #31 address them. The last two rows leave out one PASS call outside the
 padded targets, counted before the evaluation restricted the calls to them.

@@ -100,7 +100,7 @@ fn scan_logs_a_summary() {
                 "5 clusters, 5 with enough support: 3 PASS (3 high, 0 medium, 0 low confidence), 2 filtered",
             ))
             .stderr(predicate::str::contains(
-                "57 consensus sequences (built-in Dfam set); candidates typed: 2 ALU, 1 LINE1, 1 SVA",
+                "58 consensus sequences (built-in Dfam set); candidates typed: 2 ALU, 1 LINE1, 1 SVA",
             ));
     }
 }
