@@ -6,6 +6,8 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-11
+
 ### Added
 
 - Element typing (#30): the junction soft-clips of each candidate, without
@@ -179,6 +181,7 @@ targeted capture and exome data.
   kept in memory (#23); most soft-clips of older data fall below the base
   quality threshold (#25).
 
-[Unreleased]: https://github.com/VictorYt/Mei-rs/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/VictorYt/Mei-rs/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/VictorYt/Mei-rs/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/VictorYt/Mei-rs/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/VictorYt/Mei-rs/releases/tag/v0.1.0

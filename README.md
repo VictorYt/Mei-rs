@@ -10,7 +10,7 @@ inserted element against Alu, LINE-1 and SVA consensus sequences, and removes
 the artefacts specific to capture data, such as soft-clips that stop at the
 probe edges.
 
-> **Status: v0.2 in progress.** `mei-rs scan` finds candidate insertion
+> **Status: v0.2.0.** `mei-rs scan` finds candidate insertion
 > sites, types the element (family, subfamily, strand), assembles the
 > junctions (TSD, poly(A) tail), genotypes and scores the candidates, and
 > writes TSV, BED, JSON or VCF. Precision and recall on real exomes are in
