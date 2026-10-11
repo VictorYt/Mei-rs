@@ -10,6 +10,7 @@ use serde::Serialize;
 use crate::cli::OutputFormat;
 use crate::cluster::{Candidate, Confidence};
 use crate::reader::signals::{Side, Signal, SignalKind};
+use crate::typer::Typing;
 
 /// What the outputs describe.
 #[derive(Clone, Copy, Debug)]
@@ -38,7 +39,7 @@ pub fn write(report: &Report<'_>, format: OutputFormat, out: &mut dyn Write) -> 
 }
 
 /// Columns of the TSV output.
-pub const TSV_COLUMNS: [&str; 24] = [
+pub const TSV_COLUMNS: [&str; 31] = [
     "id",
     "contig",
     "position",
@@ -63,6 +64,13 @@ pub const TSV_COLUMNS: [&str; 24] = [
     "signal_ratio",
     "start",
     "end",
+    "family",
+    "subfamily",
+    "element_strand",
+    "element_start",
+    "element_end",
+    "identity",
+    "typed_clips",
 ];
 
 fn write_tsv(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
@@ -103,7 +111,18 @@ fn write_tsv(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
             c.start.to_string(),
             c.end.to_string(),
         ];
-        writeln!(out, "{}", fields.join("\t"))?;
+        let typing = c.typing.as_ref();
+        let typed = |f: &dyn Fn(&Typing) -> String| typing.map_or_else(|| ".".to_owned(), f);
+        let typing_fields = [
+            typed(&|t| t.family.name().to_owned()),
+            typed(&|t| t.subfamily.clone()),
+            typed(&|t| element_strand(t).to_owned()),
+            typed(&|t| (t.element_start + 1).to_string()),
+            typed(&|t| t.element_end.to_string()),
+            typed(&|t| format!("{:.3}", ratio(t.identity))),
+            typing.map_or(0, |t| t.typed_clips).to_string(),
+        ];
+        writeln!(out, "{}\t{}", fields.join("\t"), typing_fields.join("\t"))?;
     }
     Ok(())
 }
@@ -185,6 +204,12 @@ fn strand(candidate: &Candidate) -> &'static str {
     }
 }
 
+/// Strand of the typed element: `-` when the clips match the reverse
+/// complement of the consensus.
+fn element_strand(typing: &Typing) -> &'static str {
+    if typing.reverse { "-" } else { "+" }
+}
+
 fn ratio(value: f64) -> f64 {
     (value * 1000.0).round() / 1000.0
 }
@@ -224,6 +249,13 @@ struct JsonCandidate {
     signal_ratio: Option<f64>,
     start: u64,
     end: u64,
+    family: Option<&'static str>,
+    subfamily: Option<String>,
+    element_strand: Option<&'static str>,
+    element_start: Option<usize>,
+    element_end: Option<usize>,
+    identity: Option<f64>,
+    typed_clips: usize,
     signals: Vec<JsonSignal>,
 }
 
@@ -258,6 +290,13 @@ impl JsonCandidate {
             signal_ratio: c.signal_ratio().map(ratio),
             start: c.start,
             end: c.end,
+            family: c.typing.as_ref().map(|t| t.family.name()),
+            subfamily: c.typing.as_ref().map(|t| t.subfamily.clone()),
+            element_strand: c.typing.as_ref().map(element_strand),
+            element_start: c.typing.as_ref().map(|t| t.element_start + 1),
+            element_end: c.typing.as_ref().map(|t| t.element_end),
+            identity: c.typing.as_ref().map(|t| ratio(t.identity)),
+            typed_clips: c.typing.as_ref().map_or(0, |t| t.typed_clips),
             signals: c
                 .signals
                 .iter()
@@ -365,6 +404,15 @@ mod tests {
         signals.sort();
         let mut candidates = cluster(signals, &ClusterOptions::default());
         candidates[0].depth = Some(40);
+        candidates[0].typing = Some(Typing {
+            family: crate::typer::consensus::Family::Alu,
+            subfamily: "AluYa5".to_owned(),
+            reverse: false,
+            element_start: 0,
+            element_end: 281,
+            identity: 0.98765,
+            typed_clips: 6,
+        });
         candidates[1].depth = Some(100);
         candidates[1].filters = vec![Filter::ProbeEdge, Filter::LowRatio];
         candidates
@@ -393,11 +441,11 @@ mod tests {
         assert_eq!(lines[4], format!("#{}", TSV_COLUMNS.join("\t")));
         assert_eq!(
             lines[5],
-            "MEI_1\tchr1\t1000\t1012\t1000\t12\t+\tPASS\thigh\t7\t3\t3\t3\t3\t0\t1\t3\t0\tyes\t3\t40\t0.175\t1000\t1050"
+            "MEI_1\tchr1\t1000\t1012\t1000\t12\t+\tPASS\thigh\t7\t3\t3\t3\t3\t0\t1\t3\t0\tyes\t3\t40\t0.175\t1000\t1050\tALU\tAluYa5\t+\t1\t281\t0.988\t6"
         );
         assert_eq!(
             lines[6],
-            "MEI_2\tchr1\t5000\t.\t5000\t.\t.\tprobe_edge;low_ratio\t.\t3\t3\t0\t0\t3\t0\t0\t0\t0\tno\t1\t100\t0.030\t5000\t5000"
+            "MEI_2\tchr1\t5000\t.\t5000\t.\t.\tprobe_edge;low_ratio\t.\t3\t3\t0\t0\t3\t0\t0\t0\t0\tno\t1\t100\t0.030\t5000\t5000\t.\t.\t.\t.\t.\t.\t0"
         );
         assert_eq!(lines.len(), 7);
         for line in &lines[4..] {
@@ -425,6 +473,17 @@ mod tests {
         assert_eq!(first["left_junction_clips"], 3);
         assert!(json["candidates"][1]["confidence"].is_null());
         assert_eq!(first["signal_ratio"], 0.175);
+        assert_eq!(first["family"], "ALU");
+        assert_eq!(first["subfamily"], "AluYa5");
+        assert_eq!(first["element_strand"], "+");
+        assert_eq!(
+            (first["element_start"].clone(), first["element_end"].clone()),
+            (1.into(), 281.into())
+        );
+        assert_eq!(first["identity"], 0.988);
+        assert_eq!(first["typed_clips"], 6);
+        assert!(json["candidates"][1]["family"].is_null());
+        assert_eq!(json["candidates"][1]["typed_clips"], 0);
         let signals = first["signals"].as_array().unwrap();
         assert_eq!(signals.len(), 7);
         let clip = &signals[0];

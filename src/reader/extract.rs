@@ -381,18 +381,25 @@ mod tests {
     fn positive_sample() {
         let extraction = run("positive.bam", 4);
         // Same counts as samtools (see tests/data/README.md for the truth).
-        assert_eq!(extraction.stats.kept, 2005);
+        assert_eq!(extraction.stats.kept, 3329);
         // The other 2 duplicates are mates placed on chr2, outside the regions.
         assert_eq!(extraction.stats.duplicate, 4);
         assert_eq!(
             clips(&extraction),
             [
                 (3000, Side::Left, None, 10),
+                // SVA, plus strand.
+                (6000, Side::Left, Some(b'A'), 20),
+                (6010, Side::Right, None, 39),
+                // Alu, plus strand.
                 (10000, Side::Left, Some(b'A'), 21),
                 (10012, Side::Right, None, 47),
+                // LINE-1, minus strand: the poly(T) is on the left junction.
+                (15000, Side::Left, None, 24),
+                (15015, Side::Right, Some(b'T'), 45),
             ]
         );
-        // Every poly(A) clip holds at least 20 A from the junction.
+        // Every poly(A/T) clip holds at least 20 A (T) from the junction.
         for signal in &extraction.signals {
             if let SignalKind::SoftClip {
                 tail: Some(PolyTail { length, .. }),
@@ -402,23 +409,29 @@ mod tests {
                 assert!(length >= 20, "{signal:?}");
             }
         }
-        assert_eq!(extraction.count("mate_unmapped"), 14);
+        // Reads inside the LINE-1 and the SVA (no reference copy) are
+        // unmapped, those inside the Alu map to its chr2 copy.
+        assert_eq!(extraction.count("mate_unmapped"), 264);
         assert_eq!(extraction.count("mate_low_mapq"), 123);
         assert_eq!(extraction.count("mate_elsewhere"), 0);
         assert_eq!(extraction.count("large_insert"), 0);
-        // Mate signals point to the insertion: reads of the left flank end
-        // before the right junction (10012), reads of the right flank start
-        // after the left one (10000); the flanks overlap on the TSD.
+        // Mate signals point to an insertion: reads of its left flank end
+        // before its right junction, reads of its right flank start after
+        // its left one; the flanks overlap on the TSD.
+        let insertions = [(6_000, 6_010), (10_000, 10_012), (15_000, 15_015)];
         for signal in extraction
             .signals
             .iter()
             .filter(|s| s.kind.is_mate_signal())
         {
             assert_eq!(signal.contig, 0);
-            match signal.side {
-                Side::Right => assert!((9_550..=10_012).contains(&signal.position), "{signal:?}"),
-                Side::Left => assert!((10_000..10_450).contains(&signal.position), "{signal:?}"),
-            }
+            assert!(
+                insertions.iter().any(|&(left, right)| match signal.side {
+                    Side::Right => (left - 450..=right).contains(&signal.position),
+                    Side::Left => (left..right + 450).contains(&signal.position),
+                }),
+                "{signal:?}"
+            );
         }
         let insert_size = extraction.insert_size.unwrap();
         assert!((280..=320).contains(&insert_size.median), "{insert_size:?}");

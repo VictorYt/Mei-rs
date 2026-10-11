@@ -75,30 +75,39 @@ const POSITIVE: [&str; 4] = [
 ];
 
 #[test]
-fn positive_sample_has_one_pass_candidate_at_the_insertion() {
+fn positive_sample_has_one_pass_candidate_per_insertion() {
     let tsv = scan(&POSITIVE);
     let rows = rows(&tsv);
-    assert_eq!(rows.len(), 1, "{tsv}");
-    let row = &rows[0];
-    // Truth: tests/data/truth.tsv (insertion between the TSD copies of
-    // chr1:10001-10012).
+    // Truth: tests/data/truth.tsv (SVA, Alu and LINE-1 insertions, each
+    // between the copies of its TSD), in position order.
     let truth = fs::read_to_string(Path::new(ROOT).join("tests/data/truth.tsv")).unwrap();
-    let truth: Vec<&str> = truth.lines().nth(1).unwrap().split('\t').collect();
-    let (left, right): (u64, u64) = (truth[1].parse().unwrap(), truth[2].parse().unwrap());
-    let position: u64 = column(&tsv, row, "position").parse().unwrap();
-    assert!(
-        (right - 5..=left + 5).contains(&position),
-        "position {position} not within 5 bp of {right}-{left}"
-    );
-    assert_eq!(column(&tsv, row, "filter"), "PASS");
-    assert_eq!(column(&tsv, row, "confidence"), "high");
-    assert_eq!(column(&tsv, row, "contig"), truth[0]);
-    assert_eq!(column(&tsv, row, "left_junction"), truth[1]);
-    assert_eq!(column(&tsv, row, "right_junction"), (right - 1).to_string());
-    assert_eq!(column(&tsv, row, "tsd_length"), truth[5].len().to_string());
-    assert_eq!(column(&tsv, row, "strand"), truth[9]);
-    assert_eq!(column(&tsv, row, "both_sides"), "yes");
-    assert!(column(&tsv, row, "polya_clips").parse::<u32>().unwrap() > 0);
+    let truth: Vec<Vec<&str>> = truth
+        .lines()
+        .skip(1)
+        .map(|l| l.split('\t').collect())
+        .collect();
+    assert_eq!(rows.len(), truth.len(), "{tsv}");
+    for (row, truth) in rows.iter().zip(&truth) {
+        let (left, right): (u64, u64) = (truth[1].parse().unwrap(), truth[2].parse().unwrap());
+        let position: u64 = column(&tsv, row, "position").parse().unwrap();
+        assert!(
+            (right - 5..=left + 5).contains(&position),
+            "position {position} not within 5 bp of {right}-{left}"
+        );
+        assert_eq!(column(&tsv, row, "filter"), "PASS");
+        assert_eq!(column(&tsv, row, "confidence"), "high");
+        assert_eq!(column(&tsv, row, "contig"), truth[0]);
+        assert_eq!(column(&tsv, row, "left_junction"), truth[1]);
+        assert_eq!(column(&tsv, row, "right_junction"), (right - 1).to_string());
+        assert_eq!(column(&tsv, row, "tsd_length"), truth[5].len().to_string());
+        assert_eq!(column(&tsv, row, "strand"), truth[10]);
+        assert_eq!(column(&tsv, row, "both_sides"), "yes");
+        // Typed: family, subfamily and orientation of the element.
+        assert_eq!(column(&tsv, row, "family"), truth[7]);
+        assert_eq!(column(&tsv, row, "subfamily"), truth[6]);
+        assert_eq!(column(&tsv, row, "element_strand"), truth[10]);
+        assert!(column(&tsv, row, "typed_clips").parse::<u32>().unwrap() >= 2);
+    }
 }
 
 #[test]
@@ -122,7 +131,7 @@ fn negative_sample_has_no_pass_candidate() {
     let rows = rows(&tsv);
     assert_eq!(rows.len(), 1);
     // No poly(A/T) tail in the artefact either.
-    assert_eq!(column(&tsv, &rows[0], "filter"), "no_tail;probe_edge");
+    assert_eq!(column(&tsv, &rows[0], "filter"), "untyped;probe_edge");
     assert_eq!(column(&tsv, &rows[0], "position"), "3000");
 }
 
@@ -139,13 +148,14 @@ fn insertion_at_probe_edges_stays_pass() {
         "--keep-filtered",
     ]);
     let rows = rows(&tsv);
-    assert_eq!(rows.len(), 2, "{tsv}");
+    // The artefact and the three insertions.
+    assert_eq!(rows.len(), 4, "{tsv}");
     let artefact = rows.iter().find(|r| column(&tsv, r, "position") == "3000");
     assert_eq!(
         column(&tsv, artefact.unwrap(), "filter"),
-        "no_tail;probe_edge"
+        "untyped;probe_edge"
     );
-    let insertion = rows.iter().find(|r| column(&tsv, r, "position") != "3000");
+    let insertion = rows.iter().find(|r| column(&tsv, r, "position") == "10012");
     let insertion = insertion.unwrap();
     assert_eq!(column(&tsv, insertion, "filter"), "PASS");
     assert_eq!(column(&tsv, insertion, "confidence"), "high");
@@ -162,7 +172,7 @@ fn insertion_at_probe_edges_stays_pass() {
     ]);
     assert_eq!(
         exact.lines().filter(|l| !l.starts_with('#')).count(),
-        1,
+        3,
         "{exact}"
     );
 }
@@ -194,11 +204,13 @@ fn reference_tract_length_variant() {
         assert_eq!(column(&tsv, &found[0], "filter"), "tandem_repeat", "{bam}");
     }
 
-    // The simulated Alu insertion stays PASS.
+    // The simulated insertions stay PASS.
     let tsv = scan(&[&POSITIVE[..], &["--reference", "tests/data/reference.fa"]].concat());
     let found = rows(&tsv);
-    assert_eq!(found.len(), 1, "{tsv}");
-    assert_eq!(column(&tsv, &found[0], "confidence"), "high");
+    assert_eq!(found.len(), 3, "{tsv}");
+    for row in &found {
+        assert_eq!(column(&tsv, row, "confidence"), "high");
+    }
 }
 
 #[test]
@@ -269,8 +281,8 @@ fn output_file() {
     );
     assert_eq!(stdout, "");
     let bed = fs::read_to_string(&path).unwrap();
-    assert_eq!(bed.lines().count(), 1);
-    assert!(bed.starts_with("chr1\t10000\t10012\tMEI_1\t"), "{bed}");
+    assert_eq!(bed.lines().count(), 3);
+    assert!(bed.starts_with("chr1\t6000\t6010\tMEI_1\t"), "{bed}");
     fs::remove_dir_all(&dir).unwrap();
 }
 
