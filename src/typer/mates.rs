@@ -201,7 +201,7 @@ pub fn fetch_mapped_mates(
 
 /// Type the sampled mates of a candidate with a sequence: `checked_mates` and
 /// `mei_mates` (typed to its family, or to any family if it is untyped). An
-/// untyped candidate is first typed by its mates ([`mate_typing`]).
+/// untyped candidate is first typed by its mates (see the module documentation).
 pub fn type_mates(set: &ConsensusSet, candidate: &mut Candidate) {
     let hits: Vec<Option<Option<ClipHit>>> = candidate
         .mate_checks
