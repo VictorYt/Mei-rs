@@ -2,3 +2,4 @@ chr1	2999	3000	MEI_1	10	.	untyped;probe_edge
 chr1	6000	6010	MEI_2	148	+	high
 chr1	10000	10012	MEI_3	160	+	high
 chr1	15000	15015	MEI_4	139	-	high
+chr2	4149	4150	MEI_5	9	.	non_mei_mates

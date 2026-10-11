@@ -13,12 +13,13 @@ use tracing::{info, warn};
 use crate::cli::ScanArgs;
 use crate::cluster::{Candidate, Confidence, Filter, cluster, filters, tracts};
 use crate::inputs::Inputs;
-use crate::reader::depth::local_depths;
 use crate::reader::extract::{Extraction, extract};
+use crate::reader::{self, alignment::AlignmentFile, depth::local_depths, mates::MateRequest};
 use crate::regions::targets::Contig;
 use crate::typer::{
     self,
     consensus::{ConsensusSet, Family},
+    mates,
 };
 use crate::writer::{self, Report};
 
@@ -70,6 +71,13 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         );
     }
     type_candidates(&mut candidates, &consensus, args.consensus.as_deref());
+    check_mates(
+        &mut candidates,
+        &inputs.alignment,
+        &header_contigs,
+        &consensus,
+        args.reference.as_deref(),
+    )?;
     let filter_options = args.filter_options();
     for (candidate, depth) in candidates.iter_mut().zip(depths) {
         candidate.depth = Some(depth);
@@ -100,6 +108,7 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         Filter::NoJunction,
         Filter::NoTail,
         Filter::Untyped,
+        Filter::NonMeiMates,
         Filter::TandemRepeat,
         Filter::ProbeEdge,
         Filter::LowRatio,
@@ -147,6 +156,49 @@ fn type_candidates(candidates: &mut [Candidate], consensus: &ConsensusSet, path:
         typed(Family::Line1),
         typed(Family::Sva)
     );
+}
+
+/// Check a sample of the mates of each candidate against the consensus
+/// sequences ([`mates`]); mapped mates need the reference.
+fn check_mates(
+    candidates: &mut [Candidate],
+    alignment: &AlignmentFile,
+    contigs: &[Contig],
+    consensus: &ConsensusSet,
+    reference: Option<&Path>,
+) -> Result<()> {
+    candidates.iter_mut().for_each(mates::sample_mates);
+    let names: Vec<String> = contigs.iter().map(|c| c.name.clone()).collect();
+    let requests = mates::unmapped_requests(candidates);
+    let groups: Vec<Vec<MateRequest>> = requests
+        .iter()
+        .map(|(_, group)| group.iter().map(|&(_, r)| r).collect())
+        .collect();
+    let sequences = reader::mates::fetch_unmapped_mates(alignment, &names, &groups)?;
+    for ((c, group), found) in requests.into_iter().zip(sequences) {
+        for ((k, _), sequence) in group.into_iter().zip(found) {
+            candidates[c].mate_checks[k].sequence = sequence;
+        }
+    }
+    if let Some(reference) = reference {
+        mates::fetch_mapped_mates(candidates, contigs, reference)
+            .with_context(|| format!("cannot read the mate loci from {}", reference.display()))?;
+    }
+    candidates
+        .par_iter_mut()
+        .filter(|c| mates::checked(c))
+        .for_each(|c| mates::type_mates(consensus, c));
+    info!(
+        "mates checked against the consensus sequences{}: {} of {} MEI mates",
+        if reference.is_some() {
+            ""
+        } else {
+            " (unmapped ones only: no --reference)"
+        },
+        candidates.iter().map(|c| c.mei_mates).sum::<usize>(),
+        candidates.iter().map(|c| c.checked_mates).sum::<usize>()
+    );
+    Ok(())
 }
 
 /// Flag the candidates whose soft-clips are length variants of reference

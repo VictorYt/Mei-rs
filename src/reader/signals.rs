@@ -60,17 +60,30 @@ pub enum SignalKind {
     MateLowMapq {
         /// Mapping quality of the mate.
         mapq: u8,
+        /// Where the mate maps.
+        mate: Option<Locus>,
     },
     /// The mate maps to another contig.
     MateElsewhere {
-        /// Contig of the mate (index in the header).
-        contig: usize,
+        /// Where the mate maps.
+        mate: Locus,
     },
     /// The mate maps to the same contig, unusually far away.
     LargeInsert {
         /// Absolute template length.
         length: u64,
+        /// Where the mate maps.
+        mate: Option<Locus>,
     },
+}
+
+/// Alignment start of a mapped mate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Locus {
+    /// Contig (index in the header).
+    pub contig: usize,
+    /// 0-based alignment start.
+    pub start: u64,
 }
 
 impl SignalKind {
@@ -83,6 +96,16 @@ impl SignalKind {
             Self::MateLowMapq { .. } => "mate_low_mapq",
             Self::MateElsewhere { .. } => "mate_elsewhere",
             Self::LargeInsert { .. } => "large_insert",
+        }
+    }
+
+    /// Where the mate maps, for a mapped mate.
+    #[must_use]
+    pub fn mate_locus(&self) -> Option<Locus> {
+        match self {
+            Self::MateLowMapq { mate, .. } | Self::LargeInsert { mate, .. } => *mate,
+            Self::MateElsewhere { mate } => Some(*mate),
+            Self::SoftClip { .. } | Self::MateUnmapped => None,
         }
     }
 
@@ -217,16 +240,25 @@ pub fn read_signals(
             out.signals.push(mate(SignalKind::MateUnmapped));
         } else {
             let mate_contig = record.mate_reference_sequence_id(header).transpose()?;
+            let mate_start = record.mate_alignment_start().transpose()?;
+            let locus = mate_contig.zip(mate_start).map(|(contig, start)| Locus {
+                contig,
+                start: start.get() as u64 - 1,
+            });
             let mate_mapq = mate_mapq(record)?;
             if let Some(mapq) = mate_mapq.filter(|&q| q < min_mapq && !proper) {
-                out.signals.push(mate(SignalKind::MateLowMapq { mapq }));
-            } else if let Some(other) = mate_contig.filter(|&c| c != contig) {
                 out.signals
-                    .push(mate(SignalKind::MateElsewhere { contig: other }));
+                    .push(mate(SignalKind::MateLowMapq { mapq, mate: locus }));
+            } else if let Some(locus) = locus.filter(|l| l.contig != contig) {
+                out.signals
+                    .push(mate(SignalKind::MateElsewhere { mate: locus }));
             } else {
                 let length = u64::from(record.template_length()?.unsigned_abs());
                 if !proper {
-                    out.large_insert = Some(mate(SignalKind::LargeInsert { length }));
+                    out.large_insert = Some(mate(SignalKind::LargeInsert {
+                        length,
+                        mate: locus,
+                    }));
                 } else if anchor.first_segment && length > 0 {
                     out.insert_size = Some(length);
                 }
@@ -642,7 +674,17 @@ mod tests {
             .build();
         assert_eq!(
             mate_kinds(&low),
-            [(1100, Side::Right, SignalKind::MateLowMapq { mapq: 0 })]
+            [(
+                1100,
+                Side::Right,
+                SignalKind::MateLowMapq {
+                    mapq: 0,
+                    mate: Some(Locus {
+                        contig: 1,
+                        start: 499
+                    })
+                }
+            )]
         );
         let elsewhere = pair(Flags::empty())
             .set_mate_reference_sequence_id(1)
@@ -651,7 +693,16 @@ mod tests {
             .build();
         assert_eq!(
             mate_kinds(&elsewhere),
-            [(1100, Side::Right, SignalKind::MateElsewhere { contig: 1 })]
+            [(
+                1100,
+                Side::Right,
+                SignalKind::MateElsewhere {
+                    mate: Locus {
+                        contig: 1,
+                        start: 499
+                    }
+                }
+            )]
         );
         // A proper pair with a low-MAPQ mate (a repeat next to the read) is
         // not a signal.
@@ -678,7 +729,17 @@ mod tests {
         let large = out.large_insert.unwrap();
         assert_eq!(
             (large.position, large.side, large.kind),
-            (1000, Side::Left, SignalKind::LargeInsert { length: 59_100 })
+            (
+                1000,
+                Side::Left,
+                SignalKind::LargeInsert {
+                    length: 59_100,
+                    mate: Some(Locus {
+                        contig: 0,
+                        start: 59_999
+                    })
+                }
+            )
         );
         assert_eq!(out.insert_size, None);
 

@@ -23,6 +23,16 @@ project follows [Semantic Versioning](https://semver.org/).
   typed to an MEI consensus. (#30)
 - Fixtures: the simulated Alu is the AluY consensus of Dfam, and `positive`
   also holds a minus-strand 5'-truncated LINE-1 and an SVA insertion. (#30)
+- MEI mates (#31): up to 40 mate signals per candidate (evenly sampled, for
+  typed candidates with enough junction soft-clips) are checked against the MEI
+  consensus sequences: unmapped mates by their read, mapped mates (low MAPQ,
+  another contig, large insert) by the reference at their position, with
+  `--reference`. New columns `checked_mates` and `mei_mates`, and `mei_mate`
+  for each checked mate signal in JSON.
+- `non_mei_mates` filter: fewer than `--min-mei-mate-fraction` (0.3) of the
+  checked mates are mobile elements. (#31)
+- Fixture: a chimeric junction with Alu clips and random unmapped mates in
+  `positive`. (#31)
 
 ### Changed
 

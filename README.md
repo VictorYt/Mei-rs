@@ -52,7 +52,7 @@ error.
 |---|---|
 | `--bam` | BAM or CRAM, coordinate-sorted and indexed (`.bam.bai`, `.bam.csi`, `.bai`, `.cram.crai` or `.crai`). The sample name is the `SM` of the read groups, or else the file name. |
 | `--bed` | capture targets: at least 3 columns (contig, 0-based start, end), tabs or spaces, plain or gzipped. `#`, `track` and `browser` lines are skipped. The contig names must match the alignment (`chr1` vs `1` is reported). |
-| `--reference` | reference genome indexed with `samtools faidx` (`.fai`); required for CRAM, and recommended for BAM: without it, the `tandem_repeat` filter is off. When given, its contigs must match the lengths of the alignment header. |
+| `--reference` | reference genome indexed with `samtools faidx` (`.fai`); required for CRAM, and recommended for BAM: without it, the `tandem_repeat` filter is off and mapped mates are not checked against the MEI consensus sequences. When given, its contigs must match the lengths of the alignment header. |
 | `--consensus` | MEI consensus sequences (FASTA, headers `>name#SINE/Alu`, `>name#LINE/L1`, `>name#Retroposon/SVA`). Default: the Alu, young LINE-1 and SVA consensus sequences of Dfam (CC0) built into mei-rs, see [data/consensus](data/consensus/README.md). |
 
 Inconsistent inputs fail early with a message that says how to fix them.
@@ -79,10 +79,11 @@ skipped with a warning.
 | `--min-support` | 3 | minimum number of distinct supporting reads of a candidate |
 | `--min-clips` | 2 | minimum number of soft-clips at the junctions (`no_junction` below); each junction needs as many to give a TSD |
 | `--min-typed-clips` | 2 | minimum number of junction soft-clips typed to an MEI consensus (`untyped` below; 0 turns the filter off) |
+| `--min-mei-mate-fraction` | 0.3 | minimum fraction of MEI mates among the mates checked against the consensus sequences (`non_mei_mates` below; 0 turns the filter off) |
 | `--require-tail` | off | also require a soft-clip with a poly(A/T) tail (`no_tail`) |
 | `--min-signal-ratio` | 0.05 | minimum number of supporting reads per read of local depth |
 | `--probe-edge-tolerance` | 2 | distance in bp to a probe start or end within which a soft-clip stops at the probe edge |
-| `--keep-filtered` | off | also write the candidates flagged `no_junction`, `no_tail`, `untyped`, `tandem_repeat`, `probe_edge` or `low_ratio` |
+| `--keep-filtered` | off | also write the candidates flagged `no_junction`, `no_tail`, `untyped`, `non_mei_mates`, `tandem_repeat`, `probe_edge` or `low_ratio` |
 | **Output** | | |
 | `-o`, `--output` | stdout | output file |
 | `--format` | `tsv` | `tsv`, `bed` or `json` (with every signal of every candidate) |
@@ -108,10 +109,15 @@ skipped with a warning.
    aligned locally (Smith-Waterman) to the best ones; a clip is typed when at
    least 70% of it aligns with 90% identity or more. The candidate takes the
    family and subfamily with the highest summed score, the strand of the
-   element and the part of the consensus covered.
+   element and the part of the consensus covered. Then up to 40 mates per
+   typed candidate are checked the same way: unmapped mates by their read (placed
+   at the anchor, it is read with it), mapped ones (low MAPQ, another contig,
+   large insert) by the reference at their position, with `--reference`.
 4. **Filters**: `no_junction` when fewer than `--min-clips` soft-clips mark
    the junctions (mate signals alone); `untyped` when fewer than
-   `--min-typed-clips` of them are typed; `no_tail` (with `--require-tail`)
+   `--min-typed-clips` of them are typed; `non_mei_mates` when mates were
+   checked and fewer than `--min-mei-mate-fraction` of them are mobile
+   elements; `no_tail` (with `--require-tail`)
    without any poly(A/T) tail;
    `tandem_repeat` (with `--reference`) when the soft-clips are the reference
    with a longer homopolymer or tandem repeat, such as the poly(A) tract of

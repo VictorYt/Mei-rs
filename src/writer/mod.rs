@@ -39,7 +39,7 @@ pub fn write(report: &Report<'_>, format: OutputFormat, out: &mut dyn Write) -> 
 }
 
 /// Columns of the TSV output.
-pub const TSV_COLUMNS: [&str; 31] = [
+pub const TSV_COLUMNS: [&str; 33] = [
     "id",
     "contig",
     "position",
@@ -71,6 +71,8 @@ pub const TSV_COLUMNS: [&str; 31] = [
     "element_end",
     "identity",
     "typed_clips",
+    "checked_mates",
+    "mei_mates",
 ];
 
 fn write_tsv(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
@@ -121,6 +123,8 @@ fn write_tsv(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
             typed(&|t| t.element_end.to_string()),
             typed(&|t| format!("{:.3}", ratio(t.identity))),
             typing.map_or(0, |t| t.typed_clips).to_string(),
+            c.checked_mates.to_string(),
+            c.mei_mates.to_string(),
         ];
         writeln!(out, "{}\t{}", fields.join("\t"), typing_fields.join("\t"))?;
     }
@@ -256,6 +260,8 @@ struct JsonCandidate {
     element_end: Option<usize>,
     identity: Option<f64>,
     typed_clips: usize,
+    checked_mates: usize,
+    mei_mates: usize,
     signals: Vec<JsonSignal>,
 }
 
@@ -297,10 +303,20 @@ impl JsonCandidate {
             element_end: c.typing.as_ref().map(|t| t.element_end),
             identity: c.typing.as_ref().map(|t| ratio(t.identity)),
             typed_clips: c.typing.as_ref().map_or(0, |t| t.typed_clips),
+            checked_mates: c.checked_mates,
+            mei_mates: c.mei_mates,
             signals: c
                 .signals
                 .iter()
-                .map(|s| JsonSignal::new(s, contigs))
+                .enumerate()
+                .map(|(i, s)| {
+                    let mei = c
+                        .mate_checks
+                        .iter()
+                        .find(|m| m.signal == i)
+                        .and_then(|m| m.mei);
+                    JsonSignal::new(s, contigs, mei)
+                })
                 .collect(),
         }
     }
@@ -332,10 +348,12 @@ struct JsonSignal {
     mate_contig: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     insert_length: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mei_mate: Option<bool>,
 }
 
 impl JsonSignal {
-    fn new(s: &Signal, contigs: &[String]) -> Self {
+    fn new(s: &Signal, contigs: &[String], mei_mate: Option<bool>) -> Self {
         let mut json = Self {
             kind: s.kind.name(),
             position: s.position,
@@ -356,6 +374,7 @@ impl JsonSignal {
             mate_mapq: None,
             mate_contig: None,
             insert_length: None,
+            mei_mate,
         };
         match &s.kind {
             SignalKind::SoftClip {
@@ -370,11 +389,11 @@ impl JsonSignal {
                 json.supplementary = Some(*supplementary);
             }
             SignalKind::MateUnmapped => {}
-            SignalKind::MateLowMapq { mapq } => json.mate_mapq = Some(*mapq),
-            SignalKind::MateElsewhere { contig } => {
-                json.mate_contig = Some(contigs[*contig].clone());
+            SignalKind::MateLowMapq { mapq, .. } => json.mate_mapq = Some(*mapq),
+            SignalKind::MateElsewhere { mate } => {
+                json.mate_contig = Some(contigs[mate.contig].clone());
             }
-            SignalKind::LargeInsert { length } => json.insert_length = Some(*length),
+            SignalKind::LargeInsert { length, .. } => json.insert_length = Some(*length),
         }
         json
     }
@@ -396,7 +415,12 @@ mod tests {
             1_050,
             Side::Left,
             "m",
-            SignalKind::MateElsewhere { contig: 1 },
+            SignalKind::MateElsewhere {
+                mate: crate::reader::signals::Locus {
+                    contig: 1,
+                    start: 99,
+                },
+            },
         ));
         signals.push(clip(5_000, Side::Left, "e1", None));
         signals.push(clip(5_000, Side::Left, "e2", None));
@@ -441,11 +465,11 @@ mod tests {
         assert_eq!(lines[4], format!("#{}", TSV_COLUMNS.join("\t")));
         assert_eq!(
             lines[5],
-            "MEI_1\tchr1\t1000\t1012\t1000\t12\t+\tPASS\thigh\t7\t3\t3\t3\t3\t0\t1\t3\t0\tyes\t3\t40\t0.175\t1000\t1050\tALU\tAluYa5\t+\t1\t281\t0.988\t6"
+            "MEI_1\tchr1\t1000\t1012\t1000\t12\t+\tPASS\thigh\t7\t3\t3\t3\t3\t0\t1\t3\t0\tyes\t3\t40\t0.175\t1000\t1050\tALU\tAluYa5\t+\t1\t281\t0.988\t6\t0\t0"
         );
         assert_eq!(
             lines[6],
-            "MEI_2\tchr1\t5000\t.\t5000\t.\t.\tprobe_edge;low_ratio\t.\t3\t3\t0\t0\t3\t0\t0\t0\t0\tno\t1\t100\t0.030\t5000\t5000\t.\t.\t.\t.\t.\t.\t0"
+            "MEI_2\tchr1\t5000\t.\t5000\t.\t.\tprobe_edge;low_ratio\t.\t3\t3\t0\t0\t3\t0\t0\t0\t0\tno\t1\t100\t0.030\t5000\t5000\t.\t.\t.\t.\t.\t.\t0\t0\t0"
         );
         assert_eq!(lines.len(), 7);
         for line in &lines[4..] {

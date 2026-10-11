@@ -89,15 +89,15 @@ fn scan_logs_a_summary() {
             .stderr(predicate::str::contains(
                 "5 targets (1400 bp), 5 regions to scan (4400 bp with 300 bp of padding)",
             ))
-            .stderr(predicate::str::contains("3597 reads: 3329 kept, 4 duplicates"))
+            .stderr(predicate::str::contains("3615 reads: 3341 kept, 4 duplicates"))
             .stderr(predicate::str::contains(
-                "593 signals: 206 soft-clips (86 with a poly(A/T) tail, 0 more set aside for their base quality, 0 of which are masked read ends), 264 unmapped mates, 123 low-MAPQ mates, 0 mates on another contig, 0 large inserts",
+                "602 signals: 209 soft-clips (86 with a poly(A/T) tail, 0 more set aside for their base quality, 0 of which are masked read ends), 270 unmapped mates, 123 low-MAPQ mates, 0 mates on another contig, 0 large inserts",
             ))
             .stderr(predicate::str::contains(
-                "4 clusters, 4 with enough support: 3 PASS (3 high, 0 medium, 0 low confidence), 1 filtered",
+                "5 clusters, 5 with enough support: 3 PASS (3 high, 0 medium, 0 low confidence), 2 filtered",
             ))
             .stderr(predicate::str::contains(
-                "57 consensus sequences (built-in Dfam set); candidates typed: 1 ALU, 1 LINE1, 1 SVA",
+                "57 consensus sequences (built-in Dfam set); candidates typed: 2 ALU, 1 LINE1, 1 SVA",
             ));
     }
 }

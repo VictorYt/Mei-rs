@@ -16,6 +16,8 @@ pub struct FilterOptions {
     pub probe_edge_tolerance: u64,
     /// Minimum number of junction soft-clips typed to an MEI consensus.
     pub min_typed_clips: usize,
+    /// Minimum fraction of MEI mates among the checked mates.
+    pub min_mei_mate_fraction: f64,
 }
 
 impl Default for FilterOptions {
@@ -24,6 +26,7 @@ impl Default for FilterOptions {
             min_signal_ratio: 0.05,
             probe_edge_tolerance: 2,
             min_typed_clips: 2,
+            min_mei_mate_fraction: 0.3,
         }
     }
 }
@@ -32,6 +35,8 @@ impl Default for FilterOptions {
 ///
 /// - [`Filter::Untyped`]: fewer junction soft-clips typed to an MEI consensus
 ///   than the minimum.
+/// - [`Filter::NonMeiMates`]: some mates are checked, and MEI mates are a
+///   smaller fraction of them than the minimum.
 /// - [`Filter::ProbeEdge`]: it has soft-clips, every one stops within the
 ///   tolerance of a probe start or end, none has a poly(A/T) tail, none is
 ///   typed and there is no TSD (digestion or ligation artefact of the
@@ -47,6 +52,13 @@ pub fn apply(
     let typed_clips = candidate.typing.as_ref().map_or(0, |t| t.typed_clips);
     if typed_clips < options.min_typed_clips {
         candidate.filters.push(Filter::Untyped);
+    }
+    #[allow(clippy::cast_precision_loss)]
+    if candidate.checked_mates > 0
+        && (candidate.mei_mates as f64)
+            < options.min_mei_mate_fraction * candidate.checked_mates as f64
+    {
+        candidate.filters.push(Filter::NonMeiMates);
     }
     let hallmarks = candidate.polya_clips + candidate.polyt_clips > 0
         || candidate.tsd_length().is_some()
@@ -181,6 +193,32 @@ mod tests {
             min_typed_clips: 0,
             ..FilterOptions::default()
         }
+    }
+
+    #[test]
+    fn non_mei_mates() {
+        let signals: Vec<_> = (0..5)
+            .map(|i| clip(1_100, Side::Left, &format!("r{i}"), Some(b'A')))
+            .collect();
+        let mut c = candidate(signals, 20);
+        let options = untyped_ok();
+        // Nothing checked: not flagged.
+        apply(&mut c, "chr1", &targets(), &options);
+        assert!(c.is_pass());
+        // 3 MEI mates of 10: at the threshold; 2 of 10: below.
+        c.checked_mates = 10;
+        c.mei_mates = 3;
+        apply_fresh(&mut c, &options);
+        assert!(c.is_pass());
+        c.mei_mates = 2;
+        apply_fresh(&mut c, &options);
+        assert_eq!(c.filters, [Filter::NonMeiMates]);
+        let off = FilterOptions {
+            min_mei_mate_fraction: 0.0,
+            ..options
+        };
+        apply_fresh(&mut c, &off);
+        assert!(c.is_pass());
     }
 
     #[test]
