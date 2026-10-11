@@ -10,6 +10,7 @@ use serde::Serialize;
 use crate::assembly::Assembly;
 use crate::cli::OutputFormat;
 use crate::cluster::{Candidate, Confidence};
+use crate::genotype::Genotype;
 use crate::reader::signals::{Side, Signal, SignalKind};
 use crate::typer::Typing;
 
@@ -40,7 +41,7 @@ pub fn write(report: &Report<'_>, format: OutputFormat, out: &mut dyn Write) -> 
 }
 
 /// Columns of the TSV output.
-pub const TSV_COLUMNS: [&str; 38] = [
+pub const TSV_COLUMNS: [&str; 43] = [
     "id",
     "contig",
     "position",
@@ -79,6 +80,11 @@ pub const TSV_COLUMNS: [&str; 38] = [
     "assembled",
     "tsd",
     "polya_length",
+    "qual",
+    "genotype",
+    "gq",
+    "alt_reads",
+    "ref_reads",
 ];
 
 fn write_tsv(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
@@ -122,6 +128,8 @@ fn write_tsv(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
         ];
         let typing = c.typing.as_ref();
         let assembly = c.assembly.as_ref();
+        let genotyped =
+            |f: &dyn Fn(&Genotype) -> String| c.genotype.as_ref().map_or_else(|| ".".to_owned(), f);
         let typed = |f: &dyn Fn(&Typing) -> String| typing.map_or_else(|| ".".to_owned(), f);
         let typing_fields = [
             typed(&|t| t.family.name().to_owned()),
@@ -142,6 +150,11 @@ fn write_tsv(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
             assembly
                 .and_then(|a| a.tail)
                 .map_or_else(|| ".".to_owned(), |t| t.length.to_string()),
+            c.qual.map_or_else(|| ".".to_owned(), |q| q.to_string()),
+            genotyped(&|g| g.call.name().to_owned()),
+            genotyped(&|g| g.quality.to_string()),
+            genotyped(&|g| g.alternative.to_string()),
+            genotyped(&|g| g.reference.to_string()),
         ];
         writeln!(out, "{}\t{}", fields.join("\t"), typing_fields.join("\t"))?;
     }
@@ -327,6 +340,11 @@ struct JsonCandidate {
     mei_mates: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     assembly: Option<JsonAssembly>,
+    qual: Option<u32>,
+    genotype: Option<&'static str>,
+    gq: Option<u32>,
+    alt_reads: Option<u32>,
+    ref_reads: Option<u32>,
     signals: Vec<JsonSignal>,
 }
 
@@ -373,6 +391,11 @@ impl JsonCandidate {
             checked_mates: c.checked_mates,
             mei_mates: c.mei_mates,
             assembly: c.assembly.as_ref().map(JsonAssembly::new),
+            qual: c.qual,
+            genotype: c.genotype.map(|g| g.call.name()),
+            gq: c.genotype.map(|g| g.quality),
+            alt_reads: c.genotype.map(|g| g.alternative),
+            ref_reads: c.genotype.map(|g| g.reference),
             signals: c
                 .signals
                 .iter()
@@ -539,11 +562,11 @@ mod tests {
         assert_eq!(lines[4], format!("#{}", TSV_COLUMNS.join("\t")));
         assert_eq!(
             lines[5],
-            "MEI_1\tchr1\t1000\t1012\t1000\t12\t+\tPASS\thigh\t7\t3\t3\t3\t3\t0\t0\t1\t3\t0\tyes\t3\t40\t0.175\t1000\t1050\tALU\tAluYa5\t+\t1\t281\t0.988\t6\t0\t0\t0\t.\t.\t."
+            "MEI_1\tchr1\t1000\t1012\t1000\t12\t+\tPASS\thigh\t7\t3\t3\t3\t3\t0\t0\t1\t3\t0\tyes\t3\t40\t0.175\t1000\t1050\tALU\tAluYa5\t+\t1\t281\t0.988\t6\t0\t0\t0\t.\t.\t.\t.\t.\t.\t.\t."
         );
         assert_eq!(
             lines[6],
-            "MEI_2\tchr1\t5000\t.\t5000\t.\t.\tprobe_edge;low_ratio\t.\t3\t3\t0\t0\t3\t0\t0\t0\t0\t0\tno\t1\t100\t0.030\t5000\t5000\t.\t.\t.\t.\t.\t.\t0\t0\t0\t0\t.\t.\t."
+            "MEI_2\tchr1\t5000\t.\t5000\t.\t.\tprobe_edge;low_ratio\t.\t3\t3\t0\t0\t3\t0\t0\t0\t0\t0\tno\t1\t100\t0.030\t5000\t5000\t.\t.\t.\t.\t.\t.\t0\t0\t0\t0\t.\t.\t.\t.\t.\t.\t.\t."
         );
         assert_eq!(lines.len(), 7);
         for line in &lines[4..] {

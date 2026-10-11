@@ -144,6 +144,42 @@ fn assembly_resolves_the_tsd_and_the_tail() {
 }
 
 #[test]
+fn genotypes() {
+    // The simulated insertions of `positive` are heterozygous.
+    for reference in [false, true] {
+        let mut args = POSITIVE.to_vec();
+        if reference {
+            args.extend(["--reference", "tests/data/reference.fa"]);
+        }
+        let tsv = scan(&args);
+        let rows = rows(&tsv);
+        assert_eq!(rows.len(), 3, "{tsv}");
+        for row in &rows {
+            assert_eq!(column(&tsv, row, "genotype"), "0/1", "{tsv}");
+            assert_eq!(column(&tsv, row, "gq"), "99");
+        }
+    }
+    // The Alu of `homozygous` is on both haplotypes.
+    for (bam, reference) in [
+        ("tests/data/homozygous.bam", None),
+        (
+            "tests/data/homozygous.cram",
+            Some("tests/data/reference.fa"),
+        ),
+    ] {
+        let mut args = vec!["--bam", bam, "--bed", "tests/data/targets.bed"];
+        if let Some(reference) = reference {
+            args.extend(["--reference", reference]);
+        }
+        let tsv = scan(&args);
+        let rows = rows(&tsv);
+        assert_eq!(rows.len(), 1, "{tsv}");
+        assert_eq!(column(&tsv, &rows[0], "genotype"), "1/1");
+        assert_eq!(column(&tsv, &rows[0], "ref_reads"), "0");
+    }
+}
+
+#[test]
 fn negative_sample_has_no_pass_candidate() {
     let tsv = scan(&[
         "--bam",

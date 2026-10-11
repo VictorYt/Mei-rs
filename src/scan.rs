@@ -13,7 +13,9 @@ use tracing::{info, warn};
 use crate::assembly::{self, Assembly};
 use crate::cli::ScanArgs;
 use crate::cluster::{Candidate, Confidence, Filter, cluster, filters, tracts};
+use crate::genotype::{self, AlleleCounts};
 use crate::inputs::Inputs;
+use crate::reader::alleles::Site;
 use crate::reader::extract::ExtractOptions;
 use crate::reader::extract::{Extraction, extract};
 use crate::reader::junctions::JunctionRequest;
@@ -105,6 +107,12 @@ pub fn run(args: &ScanArgs) -> Result<()> {
     if !args.keep_filtered {
         candidates.retain(Candidate::is_pass);
     }
+    genotype_candidates(
+        &mut candidates,
+        &inputs.alignment,
+        &contigs,
+        &extract_options,
+    )?;
 
     let command = command_line();
     let report = Report {
@@ -158,6 +166,7 @@ fn log_candidates(candidates: &[Candidate], clusters: usize, keep_filtered: bool
         Filter::TandemRepeat,
         Filter::ProbeEdge,
         Filter::LowRatio,
+        Filter::LowQual,
     ] {
         let n = candidates
             .iter()
@@ -263,6 +272,47 @@ fn flag_tandem_repeats(
                 sequence: &sequence,
             },
         );
+    }
+    Ok(())
+}
+
+/// Genotype the candidates with junctions ([`genotype`]) from the reads of
+/// each allele at their junctions: alternative reads are clipped there by
+/// at least `--min-short-clip-len` bases of median quality at least
+/// `--min-clip-quality`, reference reads span the whole site by as many
+/// bases on each side.
+fn genotype_candidates(
+    candidates: &mut [Candidate],
+    alignment: &AlignmentFile,
+    contigs: &[String],
+    options: &ExtractOptions,
+) -> Result<()> {
+    let sites: Vec<Site> = candidates
+        .iter()
+        .map(|c| Site {
+            contig: contigs[c.contig].clone(),
+            left: c.left_junction,
+            right: c.right_junction,
+        })
+        .collect();
+    let counts = reader::alleles::allele_counts(
+        alignment,
+        &sites,
+        options.filter,
+        u64::from(options.clip.min_extracted_length()),
+        options.clip.min_quality,
+    )?;
+    for ((c, site), counts) in candidates.iter_mut().zip(&sites).zip(counts) {
+        // One count per junction, against the reference reads of the site.
+        let junctions: Vec<AlleleCounts> = [(site.left, counts.left), (site.right, counts.right)]
+            .into_iter()
+            .filter(|(junction, _)| junction.is_some())
+            .map(|(_, alternative)| AlleleCounts {
+                alternative,
+                reference: counts.reference,
+            })
+            .collect();
+        c.genotype = genotype::genotype(&junctions);
     }
     Ok(())
 }

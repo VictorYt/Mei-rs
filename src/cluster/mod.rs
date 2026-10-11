@@ -71,6 +71,8 @@ pub enum Filter {
     ProbeEdge,
     /// Too few supporting reads for the local depth.
     LowRatio,
+    /// Quality score below `--min-qual` (see [`crate::genotype::score`]).
+    LowQual,
 }
 
 impl Filter {
@@ -86,6 +88,7 @@ impl Filter {
             Self::TandemRepeat => "tandem_repeat",
             Self::ProbeEdge => "probe_edge",
             Self::LowRatio => "low_ratio",
+            Self::LowQual => "low_qual",
         }
     }
 }
@@ -178,6 +181,12 @@ pub struct Candidate {
     pub mei_mates: usize,
     /// Local assembly of the junctions, once done (see [`crate::assembly`]).
     pub assembly: Option<crate::assembly::Assembly>,
+    /// Genotype, once the reads of each allele are counted at the junctions
+    /// (see [`crate::genotype`]).
+    pub genotype: Option<crate::genotype::Genotype>,
+    /// Quality score, once the filters are applied (see
+    /// [`crate::genotype::score`]).
+    pub qual: Option<u32>,
     /// Filters the candidate fails; empty if it passes.
     pub filters: Vec<Filter>,
 }
@@ -266,6 +275,8 @@ impl Candidate {
             checked_mates: 0,
             mei_mates: 0,
             assembly: None,
+            genotype: None,
+            qual: None,
             filters: Vec::new(),
             signals,
         };

@@ -22,6 +22,8 @@ pub struct FilterOptions {
     pub min_typed_clips: usize,
     /// Minimum fraction of MEI mates among the checked mates.
     pub min_mei_mate_fraction: f64,
+    /// Minimum quality score (0: no minimum).
+    pub min_qual: u32,
 }
 
 impl Default for FilterOptions {
@@ -32,6 +34,7 @@ impl Default for FilterOptions {
             min_clips: 2,
             min_typed_clips: 2,
             min_mei_mate_fraction: 0.3,
+            min_qual: 0,
         }
     }
 }
@@ -51,6 +54,8 @@ impl Default for FilterOptions {
 ///   tolerance of a probe start or end, none has a poly(A/T) tail, none is
 ///   typed and there is no TSD (digestion or ligation artefact of the
 ///   capture). A real insertion next to a probe edge keeps its hallmarks.
+/// - [`Filter::LowQual`]: quality score ([`crate::genotype::score`]) below
+///   the minimum, also set as [`Candidate::qual`].
 /// - [`Filter::LowRatio`]: supporting reads per read of local depth below
 ///   the threshold.
 pub fn apply(
@@ -115,6 +120,11 @@ pub fn apply(
         .is_some_and(|ratio| ratio < options.min_signal_ratio)
     {
         candidate.filters.push(Filter::LowRatio);
+    }
+    let qual = crate::genotype::score::quality(candidate);
+    candidate.qual = Some(qual);
+    if qual < options.min_qual {
+        candidate.filters.push(Filter::LowQual);
     }
 }
 

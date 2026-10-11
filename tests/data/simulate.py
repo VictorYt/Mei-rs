@@ -11,6 +11,7 @@ Writes, into the directory given as the only argument:
   a heterozygous expansion of the chr2 poly(A) tract, and a chimeric
   junction with Alu clips and random unmapped mates on chr2;
 - negative.sam: same targets, without the insertions;
+- homozygous.sam: the Alu insertion on both haplotypes, in its target only;
 - truth.tsv: the simulated insertions.
 
 The elements are Dfam consensus sequences (data/consensus/mei_consensus.fa,
@@ -473,6 +474,16 @@ def main(out_dir):
             chimeras(writer.rng, reference, writer)
             writer.rng = main_rng
         writer.close()
+
+    # Homozygous Alu insertion (on both haplotypes) in target_insertion, with
+    # its own random generator: the samples above do not change.
+    rng = Rng(SEED + 3)
+    writer = Writer(os.path.join(out_dir, "homozygous.sam"), "homozygous", rng)
+    contig = TARGETS[0][0]
+    alt_hap = Haplotype(contig, reference[contig], INSERTIONS[0])
+    fragments(rng, alt_hap, TARGETS[0], writer)
+    fragments(rng, alt_hap, TARGETS[0], writer)
+    writer.close()
 
 
 if __name__ == "__main__":
