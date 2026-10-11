@@ -186,28 +186,29 @@ Genomes exomes and on HG002 (held out), with the method and commands in
 
 | | Precision | Recall (`PASS`) |
 |---|---|---|
-| Seven 1000 Genomes exomes, 371 MEIs | 0.669 | 0.245 |
-| Same, `--min-qual 5` | 0.897 | 0.210 |
-| HG002 (GRCh37), 49 MEIs | 0.364 | 0.245 |
+| Seven 1000 Genomes exomes, 371 MEIs | 0.673 | 0.267 |
+| Same, `--min-qual 5` | 0.901 | 0.221 |
+| HG002 (GRCh37), 49 MEIs | 0.382 | 0.265 |
 | Scramble 1.0.2, seven exomes | 0.687 | 0.154 |
 
-Recall counts every MEI within 300 bp of a target: 18 of the 36 MEIs inside
+Recall counts every MEI within 300 bp of a target: 20 of the 36 MEIs inside
 the targets are called `PASS`, against 26 of the 240 at 101-300 bp from them.
-`high` and `medium` candidates (with a tail) are the most reliable (43 true of
-48); most false positives are `low` (no tail): use `--min-qual` (0 by default)
+`high` and `medium` candidates (with a tail) are the most reliable (45 true of
+51); most false positives are `low` (no tail): use `--min-qual` (0 by default)
 to trade recall for precision.
 
 Other limitations:
 
 - Typing uses the junction soft-clips (15 bases or more without their tail),
   not the assembled contigs. Close subfamilies (e.g. AluY and AluYa5) are
-  often not told apart, and the middle of LINE-1 (most of ORF2) is not in the
-  default Dfam set: a 5'-truncated LINE-1 whose 5' junction falls there stays
-  `untyped`.
+  often not told apart; LINE-1 typed by the ORF2 model (#56) are reported as
+  `L1P1_orf2`, with coordinates in that model.
+- Candidates whose clips are tail-only or too few, typed by none of their
+  mates, stay `untyped` or `no_junction` (v0.3.0, #57-#59).
 - Assembly needs `--reference`, and few exome candidates have both junctions
   assembled; otherwise the TSD comes from the soft-clip junctions.
 - The genotype under-counts insertion reads (clips of 15 good bases): it
-  assumes 30% of them at a heterozygous site; 76 of 91 true calls are right.
+  assumes 30% of them at a heterozygous site; 81 of 99 true calls are right.
 - Candidates closer than `--window` are merged into one.
 - On older data, most soft-clips fall below `--min-clip-quality` (read ends
   masked by the base caller); the log reports how many are set aside (#25).

@@ -389,6 +389,24 @@ mod tests {
     }
 
     #[test]
+    fn line1_orf2_clips() {
+        // The middle of LINE-1 (ORF2), not in the L1HS 5' and 3' end models:
+        // a 5'-truncated LINE-1 can start there. L1HS differs from the L1P1
+        // ORF2 model by a few percent.
+        let set = set();
+        let mut piece = consensus(&set, "L1P1_orf2")[1400..1460].to_vec();
+        for i in (10..60).step_by(20) {
+            piece[i] = if piece[i] == b'A' { b'G' } else { b'A' };
+        }
+        let hits = type_sequence(&set, &reverse_complement(&piece));
+        let best = hits[0];
+        assert_eq!(set.sequences()[best.consensus].family, Family::Line1);
+        assert_eq!(set.sequences()[best.consensus].name, "L1P1_orf2");
+        assert!(best.reverse);
+        assert_eq!((best.element_start, best.element_end), (1400, 1460));
+    }
+
+    #[test]
     fn mismatches_are_tolerated_not_random_sequence() {
         let set = set();
         let mut piece = consensus(&set, "AluY")[30..90].to_vec();
