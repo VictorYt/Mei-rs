@@ -83,6 +83,9 @@ pub struct Typing {
     /// Of these, short clips (see
     /// [`crate::reader::signals::ClipOptions::is_short`]).
     pub short_typed_clips: usize,
+    /// Typed from the mates, no junction clip being typed
+    /// ([`mates::type_mates`]).
+    pub by_mates: bool,
 }
 
 /// Alignments of a sequence (reference orientation) that pass
@@ -305,6 +308,7 @@ pub fn type_candidate(set: &ConsensusSet, candidate: &Candidate) -> Option<Typin
         identity,
         typed_clips,
         short_typed_clips,
+        by_mates: false,
     })
 }
 

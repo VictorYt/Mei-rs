@@ -344,12 +344,15 @@ impl Candidate {
         self.filters.contains(&Filter::LowSupport)
     }
 
-    /// Confidence level, for a candidate that passes the filters.
+    /// Confidence level, for a candidate that passes the filters: `low` when
+    /// typed by its mates only (no clip typed), else from the tail and TSD.
     #[must_use]
     pub fn confidence(&self) -> Option<Confidence> {
         if !self.is_pass() {
             None
-        } else if self.polya_clips + self.polyt_clips == 0 {
+        } else if self.polya_clips + self.polyt_clips == 0
+            || self.typing.as_ref().is_some_and(|t| t.by_mates)
+        {
             Some(Confidence::Low)
         } else if self.tsd.is_some() {
             Some(Confidence::High)

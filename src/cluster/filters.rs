@@ -6,6 +6,13 @@ use super::{Candidate, Filter};
 use crate::reader::signals::SignalKind;
 use crate::regions::targets::TargetSet;
 
+/// Minimum identity of the mates to the consensus for a candidate typed by
+/// its mates to pass: a polymorphic insertion is young and its reads match
+/// the consensus closely, while background mates map to older copies of the
+/// reference (HGSVC3 exomes: true candidates typed by their mates at 0.96 or
+/// more, most false ones at 0.90-0.95).
+pub const MIN_MATE_IDENTITY: f64 = 0.96;
+
 /// Capture filter options.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FilterOptions {
@@ -47,7 +54,12 @@ impl Default for FilterOptions {
 /// `min_clips`) and of the typed clips.
 ///
 /// - [`Filter::Untyped`]: fewer junction soft-clips typed to an MEI consensus
-///   than the minimum.
+///   than the minimum, unless one typed clip, a poly(A/T) tail and as many
+///   MEI mates as the minimum stand for them; or, typed by its mates (no clip
+///   typed, [`crate::typer::Typing::by_mates`]), as many clips with a tail
+///   and MEI mates as the minimum, the mates matching the consensus with
+///   [`MIN_MATE_IDENTITY`]: on short reads the tail junction is often
+///   covered by tail-only clips (#57).
 /// - [`Filter::NonMeiMates`]: some mates are checked, and MEI mates are a
 ///   smaller fraction of them than the minimum.
 /// - [`Filter::ProbeEdge`]: it has soft-clips, every one stops within the
@@ -88,7 +100,13 @@ pub fn apply(
     let tail = candidate.polya_clips + candidate.polyt_clips > 0;
     let typed_with_mates =
         counted_typed_clips >= 1 && tail && candidate.mei_mates >= options.min_typed_clips;
-    if counted_typed_clips < options.min_typed_clips && !typed_with_mates {
+    let typed_by_mates = candidate.typing.as_ref().is_some_and(|t| {
+        t.by_mates
+            && t.identity >= MIN_MATE_IDENTITY
+            && candidate.polya_clips + candidate.polyt_clips >= options.min_typed_clips
+            && candidate.mei_mates >= options.min_typed_clips
+    });
+    if counted_typed_clips < options.min_typed_clips && !typed_with_mates && !typed_by_mates {
         candidate.filters.push(Filter::Untyped);
     }
     #[allow(clippy::cast_precision_loss)]
@@ -288,6 +306,7 @@ mod tests {
             identity: 1.0,
             typed_clips,
             short_typed_clips,
+            by_mates: false,
         }
     }
 
@@ -348,6 +367,49 @@ mod tests {
         c.typing = Some(alu_typing(1, 0));
         c.checked_mates = 2;
         c.mei_mates = 2;
+        apply(&mut c, "chr1", &targets(), &options);
+        assert_eq!(c.filters, [Filter::Untyped]);
+    }
+
+    #[test]
+    fn typed_by_mates() {
+        let tailed = |n: usize| {
+            let signals: Vec<_> = (0..3)
+                .map(|i| {
+                    let tail = (i < n).then_some(b'A');
+                    clip(1_100, Side::Left, &format!("r{i}"), tail)
+                })
+                .collect();
+            let mut c = candidate(signals, 20);
+            c.typing = Some(crate::typer::Typing {
+                typed_clips: 0,
+                identity: 0.97,
+                by_mates: true,
+                ..alu_typing(0, 0)
+            });
+            c.checked_mates = 4;
+            c.mei_mates = 2;
+            c
+        };
+        let options = FilterOptions::default();
+        // Two tailed clips, two MEI mates of 97% identity.
+        let mut c = tailed(2);
+        apply(&mut c, "chr1", &targets(), &options);
+        assert!(c.is_pass(), "{:?}", c.filters);
+        assert_eq!(c.confidence(), Some(crate::cluster::Confidence::Low));
+        // One tailed clip only.
+        let mut c = tailed(1);
+        apply(&mut c, "chr1", &targets(), &options);
+        assert_eq!(c.filters, [Filter::Untyped]);
+        // Mates of an older copy (below 96% identity).
+        let mut c = tailed(2);
+        c.typing.as_mut().unwrap().identity = 0.94;
+        apply(&mut c, "chr1", &targets(), &options);
+        assert_eq!(c.filters, [Filter::Untyped]);
+        // Too few MEI mates.
+        let mut c = tailed(2);
+        c.checked_mates = 2;
+        c.mei_mates = 1;
         apply(&mut c, "chr1", &targets(), &options);
         assert_eq!(c.filters, [Filter::Untyped]);
     }

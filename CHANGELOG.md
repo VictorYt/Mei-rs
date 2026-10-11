@@ -6,6 +6,17 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Typing by the mates (#57): untyped candidates with a poly(A/T) tail clip
+  have their mates checked too (on short reads the clips at the tail junction
+  are often the tail alone), and at least 2 mates of one family type them
+  (new column `typed_by`, `clips` or `mates`; VCF `TYPED_BY`). Such a
+  candidate passes `untyped` with at least `--min-typed-clips` tailed clips
+  and MEI mates, the mates matching the consensus with 96% identity, at
+  `low` confidence. New fixture `tailonly`. HGSVC3 exomes: 99 → 111 true,
+  48 → 49 false (precision 0.694, recall 0.299; `--min-qual 2`: 0.852).
+
 ## [0.2.0] - 2026-10-11
 
 ### Added

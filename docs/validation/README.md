@@ -203,6 +203,15 @@ Same seven exomes, PASS calls:
 | #32 short clips | 140 | 91 | 0.664 | 0.245 | 9 / 10 |
 | #33 assembly, #34 score, #35 VCF | 139 | 91 | 0.669 | 0.245 | 12 / 13 |
 | #56 LINE-1 ORF2 (v0.2.0) | 150 | 99 | 0.673 | 0.267 | 12 / 13 |
+| #57 typing by the mates | 163 | 111 | 0.694 | 0.299 | 12 / 13 |
+
+#57 types untyped candidates with a poly(A/T) tail clip by their mates
+(junction clips that are the tail alone): 12 more true calls, 1 more false
+(`--min-qual 2`: 109 true / 19 false, precision 0.852); within 100 bp of the
+targets, 81 of 131 truth MEIs are PASS (73 before). HG002: 16 true / 25
+false (13 / 21 before). Without the identity (96%) and tailed-clip (2)
+conditions, the mates typed 35 more false candidates for 13 true: most
+false ones had one tailed clip and mates matching older reference copies.
 
 Before typing, most false positives were poly(A) length variants of reference
 Alus (`high`) and background unmapped mates of the deep samples (`medium`):

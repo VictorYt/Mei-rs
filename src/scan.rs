@@ -247,14 +247,18 @@ fn check_mates(
         .filter(|c| mates::checked(c))
         .for_each(|c| mates::type_mates(consensus, c));
     info!(
-        "mates checked against the consensus sequences{}: {} of {} MEI mates",
+        "mates checked against the consensus sequences{}: {} of {} MEI mates; {} candidates typed by their mates",
         if reference.is_some() {
             ""
         } else {
             " (unmapped ones only: no --reference)"
         },
         candidates.iter().map(|c| c.mei_mates).sum::<usize>(),
-        candidates.iter().map(|c| c.checked_mates).sum::<usize>()
+        candidates.iter().map(|c| c.checked_mates).sum::<usize>(),
+        candidates
+            .iter()
+            .filter(|c| c.typing.as_ref().is_some_and(|t| t.by_mates))
+            .count()
     );
     Ok(())
 }
@@ -337,8 +341,8 @@ fn genotype_candidates(
 /// before the signals.
 const ASSEMBLY_MARGIN: u64 = 300;
 
-/// Assemble the junctions of the candidates that can pass (typed, with
-/// junction soft-clips: those whose mates are checked), in parallel
+/// Assemble the junctions of the candidates that can pass (typed by their
+/// clips or mates, with junction soft-clips: [`mates::may_pass`]), in parallel
 /// ([`assembly`]); it needs the reference.
 fn assemble_candidates(
     candidates: &mut [Candidate],
@@ -360,7 +364,7 @@ fn assemble_candidates(
     for (i, c) in candidates
         .iter()
         .enumerate()
-        .filter(|(_, c)| mates::checked(c))
+        .filter(|(_, c)| mates::may_pass(c))
     {
         let contig = &contigs[c.contig];
         let (start, end) = tracts::window(c, contig.length);

@@ -10,7 +10,7 @@
 
 use std::io::{self, Write};
 
-use super::{Report, candidate_id, confidence, filter};
+use super::{Report, candidate_id, confidence, filter, typed_by};
 use crate::cluster::{Candidate, Filter};
 use crate::typer::consensus::Family;
 
@@ -48,7 +48,7 @@ const FILTERS: [(Filter, &str); 8] = [
 ];
 
 /// `INFO` lines of the header: ID, number, type, description.
-const INFO: [(&str, &str, &str, &str); 19] = [
+const INFO: [(&str, &str, &str, &str); 20] = [
     ("SVTYPE", "1", "String", "Type of structural variant"),
     (
         "SVLEN",
@@ -128,6 +128,12 @@ const INFO: [(&str, &str, &str, &str); 19] = [
         "1",
         "Integer",
         "Junction soft-clips typed to the element family",
+    ),
+    (
+        "TYPED_BY",
+        "1",
+        "String",
+        "What typed the element: clips (junction soft-clips) or mates (no clip typed)",
     ),
     (
         "MATES",
@@ -293,6 +299,9 @@ fn info(c: &Candidate) -> Vec<String> {
     }
     if c.is_pass() {
         fields.push(format!("CONFIDENCE={}", confidence(c)));
+    }
+    if let Some(t) = &c.typing {
+        fields.push(format!("TYPED_BY={}", typed_by(t)));
     }
     fields.extend([
         format!("SUPPORT={}", c.support),

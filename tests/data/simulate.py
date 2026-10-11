@@ -12,6 +12,9 @@ Writes, into the directory given as the only argument:
   junction with Alu clips and random unmapped mates on chr2;
 - negative.sam: same targets, without the insertions;
 - homozygous.sam: the Alu insertion on both haplotypes, in its target only;
+- tailonly.sam: the Alu insertion (heterozygous, in its target only) whose
+  junction soft-clips are its poly(A) tail with at most TAIL_ONLY_ELEMENT
+  bases of the element: too few to type them, so only the mates type it;
 - truth.tsv: the simulated insertions.
 
 The elements are Dfam consensus sequences (data/consensus/mei_consensus.fa,
@@ -221,6 +224,30 @@ class Haplotype:
             contig, pos = ins.copy
             return Mapping(contig, pos + start - ins_start, f"{end - start}M", 0)
         return Mapping()
+
+
+# Element bases at most in the junction clips of `tailonly`, after the tail.
+TAIL_ONLY_ELEMENT = 2
+
+
+class TailOnlyHaplotype(Haplotype):
+    """A haplotype with an insertion whose junction reads are aligned as
+    short reads often are: the reads crossing the 5' junction (the element
+    start) are left unmapped, and those crossing the tail junction keep a
+    clip only when it is the tail and at most TAIL_ONLY_ELEMENT element
+    bases (longer ones are left unmapped)."""
+
+    def align(self, start, end):
+        mapping = super().align(start, end)
+        if not mapping.mapped or "S" not in mapping.cigar:
+            return mapping
+        if mapping.cigar.endswith("S"):
+            # Anchored upstream: the clip is the start of the element.
+            return Mapping()
+        clip = int(mapping.cigar.split("S")[0])
+        if clip > len(POLYA) + TAIL_ONLY_ELEMENT:
+            return Mapping()
+        return mapping
 
 
 class TractHaplotype:
@@ -483,6 +510,14 @@ def main(out_dir):
     alt_hap = Haplotype(contig, reference[contig], INSERTIONS[0])
     fragments(rng, alt_hap, TARGETS[0], writer)
     fragments(rng, alt_hap, TARGETS[0], writer)
+    writer.close()
+
+    # The Alu insertion with tail-only junction clips, heterozygous, in
+    # target_insertion, with its own random generator.
+    rng = Rng(SEED + 4)
+    writer = Writer(os.path.join(out_dir, "tailonly.sam"), "tailonly", rng)
+    fragments(rng, Haplotype(contig, reference[contig]), TARGETS[0], writer)
+    fragments(rng, TailOnlyHaplotype(contig, reference[contig], INSERTIONS[0]), TARGETS[0], writer)
     writer.close()
 
 
