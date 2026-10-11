@@ -65,6 +65,14 @@ project follows [Semantic Versioning](https://semver.org/).
   candidate is not an insertion, from its evidence (naive Bayes with
   likelihood ratios measured on the HGSVC3 exomes); `low_qual` filter below
   `--min-qual` (0, off, by default).
+- Validation against the HGSVC3 MEI calls (#26): `docs/validation/evaluate.py`
+  (Python standard library) computes precision, recall, genotype concordance
+  and precision by `--min-qual` from `mei-rs` TSV or VCF files, or the VCF of
+  another caller, and lifts the truth set to GRCh37 with a UCSC chain file.
+  Seven 1000 Genomes exomes: precision 0.669, recall 0.245 (0.897 and 0.210
+  with `--min-qual 5`); HG002: 0.364 and 0.245; Scramble 1.0.2 on the same
+  exomes: 0.687 and 0.154. Results, method and run times in
+  `docs/validation/README.md`.
 
 ### Changed
 
