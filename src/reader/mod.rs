@@ -6,5 +6,6 @@ pub mod batch;
 pub mod depth;
 pub mod extract;
 pub mod filter;
+pub mod junctions;
 pub mod mates;
 pub mod signals;

@@ -6,6 +6,7 @@
 //! ([`typer`]), then candidate export ([`writer`]). Local assembly and
 //! genotyping come in later releases.
 
+pub mod assembly;
 pub mod cli;
 pub mod cluster;
 pub mod inputs;

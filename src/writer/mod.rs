@@ -7,6 +7,7 @@ use std::io::{self, Write};
 
 use serde::Serialize;
 
+use crate::assembly::Assembly;
 use crate::cli::OutputFormat;
 use crate::cluster::{Candidate, Confidence};
 use crate::reader::signals::{Side, Signal, SignalKind};
@@ -39,7 +40,7 @@ pub fn write(report: &Report<'_>, format: OutputFormat, out: &mut dyn Write) -> 
 }
 
 /// Columns of the TSV output.
-pub const TSV_COLUMNS: [&str; 35] = [
+pub const TSV_COLUMNS: [&str; 38] = [
     "id",
     "contig",
     "position",
@@ -75,6 +76,9 @@ pub const TSV_COLUMNS: [&str; 35] = [
     "short_typed_clips",
     "checked_mates",
     "mei_mates",
+    "assembled",
+    "tsd",
+    "polya_length",
 ];
 
 fn write_tsv(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
@@ -117,6 +121,7 @@ fn write_tsv(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
             c.end.to_string(),
         ];
         let typing = c.typing.as_ref();
+        let assembly = c.assembly.as_ref();
         let typed = |f: &dyn Fn(&Typing) -> String| typing.map_or_else(|| ".".to_owned(), f);
         let typing_fields = [
             typed(&|t| t.family.name().to_owned()),
@@ -129,6 +134,14 @@ fn write_tsv(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
             typing.map_or(0, |t| t.short_typed_clips).to_string(),
             c.checked_mates.to_string(),
             c.mei_mates.to_string(),
+            assembly.map_or(".", Assembly::assembled).to_owned(),
+            assembly.and_then(|a| a.tsd.as_deref()).map_or_else(
+                || ".".to_owned(),
+                |t| String::from_utf8_lossy(t).into_owned(),
+            ),
+            assembly
+                .and_then(|a| a.tail)
+                .map_or_else(|| ".".to_owned(), |t| t.length.to_string()),
         ];
         writeln!(out, "{}\t{}", fields.join("\t"), typing_fields.join("\t"))?;
     }
@@ -231,6 +244,50 @@ struct JsonReport<'a> {
     candidates: Vec<JsonCandidate>,
 }
 
+/// Assembly of a candidate, in JSON.
+#[derive(Serialize)]
+struct JsonAssembly {
+    assembled: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    left: Option<JsonContig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    right: Option<JsonContig>,
+    tsd: Option<String>,
+    polya_length: Option<u32>,
+    tail_base: Option<String>,
+}
+
+/// An assembled junction, in JSON (junction 1-based: the last base of the
+/// upstream flank, or the base before the downstream flank).
+#[derive(Serialize)]
+struct JsonContig {
+    junction: u64,
+    contig: String,
+    inserted: String,
+}
+
+impl JsonAssembly {
+    fn new(a: &Assembly) -> Self {
+        let text = |s: &[u8]| String::from_utf8_lossy(s).into_owned();
+        Self {
+            assembled: a.assembled(),
+            left: a.left.as_ref().map(|l| JsonContig {
+                junction: l.junction,
+                contig: text(&l.contig),
+                inserted: text(l.left_insert()),
+            }),
+            right: a.right.as_ref().map(|r| JsonContig {
+                junction: r.junction,
+                contig: text(&r.contig),
+                inserted: text(r.right_insert()),
+            }),
+            tsd: a.tsd.as_deref().map(text),
+            polya_length: a.tail.map(|t| t.length),
+            tail_base: a.tail.map(|t| char::from(t.base).to_string()),
+        }
+    }
+}
+
 #[derive(Serialize)]
 struct JsonCandidate {
     id: String,
@@ -268,6 +325,8 @@ struct JsonCandidate {
     short_typed_clips: usize,
     checked_mates: usize,
     mei_mates: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    assembly: Option<JsonAssembly>,
     signals: Vec<JsonSignal>,
 }
 
@@ -313,6 +372,7 @@ impl JsonCandidate {
             short_typed_clips: c.typing.as_ref().map_or(0, |t| t.short_typed_clips),
             checked_mates: c.checked_mates,
             mei_mates: c.mei_mates,
+            assembly: c.assembly.as_ref().map(JsonAssembly::new),
             signals: c
                 .signals
                 .iter()
@@ -479,11 +539,11 @@ mod tests {
         assert_eq!(lines[4], format!("#{}", TSV_COLUMNS.join("\t")));
         assert_eq!(
             lines[5],
-            "MEI_1\tchr1\t1000\t1012\t1000\t12\t+\tPASS\thigh\t7\t3\t3\t3\t3\t0\t0\t1\t3\t0\tyes\t3\t40\t0.175\t1000\t1050\tALU\tAluYa5\t+\t1\t281\t0.988\t6\t0\t0\t0"
+            "MEI_1\tchr1\t1000\t1012\t1000\t12\t+\tPASS\thigh\t7\t3\t3\t3\t3\t0\t0\t1\t3\t0\tyes\t3\t40\t0.175\t1000\t1050\tALU\tAluYa5\t+\t1\t281\t0.988\t6\t0\t0\t0\t.\t.\t."
         );
         assert_eq!(
             lines[6],
-            "MEI_2\tchr1\t5000\t.\t5000\t.\t.\tprobe_edge;low_ratio\t.\t3\t3\t0\t0\t3\t0\t0\t0\t0\t0\tno\t1\t100\t0.030\t5000\t5000\t.\t.\t.\t.\t.\t.\t0\t0\t0\t0"
+            "MEI_2\tchr1\t5000\t.\t5000\t.\t.\tprobe_edge;low_ratio\t.\t3\t3\t0\t0\t3\t0\t0\t0\t0\t0\tno\t1\t100\t0.030\t5000\t5000\t.\t.\t.\t.\t.\t.\t0\t0\t0\t0\t.\t.\t."
         );
         assert_eq!(lines.len(), 7);
         for line in &lines[4..] {

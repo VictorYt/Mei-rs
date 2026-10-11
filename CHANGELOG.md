@@ -41,6 +41,14 @@ project follows [Semantic Versioning](https://semver.org/).
   `short_typed_clips`, and `short` for each soft-clip in JSON.
 - `untyped` also passes with one typed clip, a poly(A/T) tail and at least
   `--min-typed-clips` MEI mates. (#32)
+- Local assembly of the junctions (#33), with `--reference`, for typed
+  candidates with junction soft-clips: the reads clipped at each junction and
+  the unmapped reads placed near the candidate are assembled from the
+  reference flank (de Bruijn graph, k = 21; long homopolymers measured on
+  the reads); the contigs give the exact junctions, the TSD and the length of
+  the poly(A) tail. The assembled junctions and TSD replace the estimates
+  from the clips. New columns `assembled`, `tsd` and `polya_length`, and
+  `assembly` with the contigs in JSON.
 
 ### Changed
 
