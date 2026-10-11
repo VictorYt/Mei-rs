@@ -1,2 +1,4 @@
-#contig	left_junction	right_junction	tsd_start	tsd_end	tsd	element	length	polya	strand	genotype
-chr1	10012	10001	10001	10012	CGCGGTCCCCCG	AluY	281	30	+	0/1
+#contig	left_junction	right_junction	tsd_start	tsd_end	tsd	element	family	length	polya	strand	genotype
+chr1	6010	6001	6001	6010	CCCCGGCAGA	SVA_F	SVA	600	30	+	0/1
+chr1	10012	10001	10001	10012	CGCGGTCCCCCG	AluY	ALU	281	30	+	0/1
+chr1	15015	15001	15001	15015	CAACCACCATATACC	L1HS_3end	LINE1	500	30	-	0/1

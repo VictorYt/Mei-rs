@@ -427,7 +427,7 @@ mod tests {
         for (region, expected) in [
             (region("chr1", 9_550, 10_450), 703),
             (region("chr1", 2_700, 3_500), 620),
-            (region("chr2", 3_700, 4_600), 700),
+            (region("chr2", 3_700, 4_600), 718),
             (region("chr2", 6_999, 7_281), 153),
         ] {
             let from_bam = records(&bam, &region);

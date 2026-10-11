@@ -1,6 +1,6 @@
 [package]
 name = "mei-rs"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.91"
 description = "Fast, memory-efficient detection of mobile element insertions (Alu, LINE-1, SVA) in targeted capture and exome sequencing data"
@@ -19,7 +19,7 @@ anyhow = "1"
 clap = { version = "4", features = ["derive", "wrap_help"] }
 coitrees = "0.4"
 flate2 = "1"
-noodles = { version = "0.117", features = ["bam", "cram", "sam", "fasta", "core", "csi", "bgzf"] }
+noodles = { version = "0.117", features = ["bam", "cram", "sam", "fasta", "core", "csi", "bgzf", "tabix", "vcf"] }
 noodles-util = { version = "0.86", features = ["alignment"] }
 rayon = "1"
 serde = { version = "1", features = ["derive"] }

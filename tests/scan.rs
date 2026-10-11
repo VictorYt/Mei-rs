@@ -52,6 +52,10 @@ fn normalize(output: &str) -> String {
                 "##mei-rs {version}".to_owned()
             } else if line.starts_with("##command: ") {
                 "##command: {command}".to_owned()
+            } else if line.starts_with("##source=mei-rs ") {
+                "##source=mei-rs {version}".to_owned()
+            } else if line.starts_with("##mei-rsCommand=") {
+                "##mei-rsCommand={command}".to_owned()
             } else if trimmed.starts_with("\"mei_rs\": ") {
                 line.replace(env!("CARGO_PKG_VERSION"), "{version}")
             } else if trimmed.starts_with("\"command\": ") {
@@ -75,30 +79,213 @@ const POSITIVE: [&str; 4] = [
 ];
 
 #[test]
-fn positive_sample_has_one_pass_candidate_at_the_insertion() {
+fn positive_sample_has_one_pass_candidate_per_insertion() {
     let tsv = scan(&POSITIVE);
     let rows = rows(&tsv);
-    assert_eq!(rows.len(), 1, "{tsv}");
-    let row = &rows[0];
-    // Truth: tests/data/truth.tsv (insertion between the TSD copies of
-    // chr1:10001-10012).
+    // Truth: tests/data/truth.tsv (SVA, Alu and LINE-1 insertions, each
+    // between the copies of its TSD), in position order.
     let truth = fs::read_to_string(Path::new(ROOT).join("tests/data/truth.tsv")).unwrap();
-    let truth: Vec<&str> = truth.lines().nth(1).unwrap().split('\t').collect();
-    let (left, right): (u64, u64) = (truth[1].parse().unwrap(), truth[2].parse().unwrap());
-    let position: u64 = column(&tsv, row, "position").parse().unwrap();
-    assert!(
-        (right - 5..=left + 5).contains(&position),
-        "position {position} not within 5 bp of {right}-{left}"
+    let truth: Vec<Vec<&str>> = truth
+        .lines()
+        .skip(1)
+        .map(|l| l.split('\t').collect())
+        .collect();
+    assert_eq!(rows.len(), truth.len(), "{tsv}");
+    for (row, truth) in rows.iter().zip(&truth) {
+        let (left, right): (u64, u64) = (truth[1].parse().unwrap(), truth[2].parse().unwrap());
+        let position: u64 = column(&tsv, row, "position").parse().unwrap();
+        assert!(
+            (right - 5..=left + 5).contains(&position),
+            "position {position} not within 5 bp of {right}-{left}"
+        );
+        assert_eq!(column(&tsv, row, "filter"), "PASS");
+        assert_eq!(column(&tsv, row, "confidence"), "high");
+        assert_eq!(column(&tsv, row, "contig"), truth[0]);
+        assert_eq!(column(&tsv, row, "left_junction"), truth[1]);
+        assert_eq!(column(&tsv, row, "right_junction"), (right - 1).to_string());
+        assert_eq!(column(&tsv, row, "tsd_length"), truth[5].len().to_string());
+        assert_eq!(column(&tsv, row, "strand"), truth[10]);
+        assert_eq!(column(&tsv, row, "both_sides"), "yes");
+        // Typed: family, subfamily and orientation of the element.
+        assert_eq!(column(&tsv, row, "family"), truth[7]);
+        assert_eq!(column(&tsv, row, "subfamily"), truth[6]);
+        assert_eq!(column(&tsv, row, "element_strand"), truth[10]);
+        assert!(column(&tsv, row, "typed_clips").parse::<u32>().unwrap() >= 2);
+    }
+}
+
+#[test]
+fn assembly_resolves_the_tsd_and_the_tail() {
+    let tsv = scan(&[&POSITIVE[..], &["--reference", "tests/data/reference.fa"]].concat());
+    let assembled = rows(&tsv);
+    let truth = fs::read_to_string(Path::new(ROOT).join("tests/data/truth.tsv")).unwrap();
+    assert_eq!(assembled.len(), 3, "{tsv}");
+    for (row, truth) in assembled.iter().zip(truth.lines().skip(1)) {
+        let truth: Vec<&str> = truth.split('\t').collect();
+        assert_eq!(column(&tsv, row, "assembled"), "both");
+        let (mut tsd, mut polya) = (truth[5].to_owned(), truth[9].to_owned());
+        let mut left: u64 = truth[1].parse().unwrap();
+        if truth[6] == "L1HS_3end" {
+            // The poly(T) of the minus-strand LINE-1 starts with `TT`, the
+            // reference after its TSD too (`TTC`): the contig matches the
+            // reference over them, and the same alternative haplotype reads
+            // as a TSD 2 bp longer and a tail 2 bp shorter.
+            tsd.push_str("TT");
+            polya = "28".to_owned();
+            left += 2;
+        }
+        assert_eq!(column(&tsv, row, "tsd"), tsd);
+        assert_eq!(column(&tsv, row, "tsd_length"), tsd.len().to_string());
+        assert_eq!(column(&tsv, row, "polya_length"), polya);
+        assert_eq!(column(&tsv, row, "left_junction"), left.to_string());
+        assert_eq!(column(&tsv, row, "confidence"), "high");
+    }
+    // Without the reference, nothing is assembled.
+    let tsv = scan(&POSITIVE);
+    for row in &rows(&tsv) {
+        assert_eq!(column(&tsv, row, "assembled"), ".");
+    }
+}
+
+#[test]
+fn genotypes() {
+    // The simulated insertions of `positive` are heterozygous.
+    for reference in [false, true] {
+        let mut args = POSITIVE.to_vec();
+        if reference {
+            args.extend(["--reference", "tests/data/reference.fa"]);
+        }
+        let tsv = scan(&args);
+        let rows = rows(&tsv);
+        assert_eq!(rows.len(), 3, "{tsv}");
+        for row in &rows {
+            assert_eq!(column(&tsv, row, "genotype"), "0/1", "{tsv}");
+            assert_eq!(column(&tsv, row, "gq"), "99");
+        }
+    }
+    // The Alu of `homozygous` is on both haplotypes.
+    for (bam, reference) in [
+        ("tests/data/homozygous.bam", None),
+        (
+            "tests/data/homozygous.cram",
+            Some("tests/data/reference.fa"),
+        ),
+    ] {
+        let mut args = vec!["--bam", bam, "--bed", "tests/data/targets.bed"];
+        if let Some(reference) = reference {
+            args.extend(["--reference", reference]);
+        }
+        let tsv = scan(&args);
+        let rows = rows(&tsv);
+        assert_eq!(rows.len(), 1, "{tsv}");
+        assert_eq!(column(&tsv, &rows[0], "genotype"), "1/1");
+        assert_eq!(column(&tsv, &rows[0], "ref_reads"), "0");
+    }
+}
+
+/// Parse a VCF with noodles: header and records.
+fn parse_vcf(
+    reader: impl std::io::BufRead,
+) -> (noodles::vcf::Header, Vec<noodles::vcf::variant::RecordBuf>) {
+    let mut reader = noodles::vcf::io::Reader::new(reader);
+    let header = reader.read_header().unwrap();
+    let records = reader
+        .record_bufs(&header)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    (header, records)
+}
+
+/// `INFO` value of a record, as text.
+fn info(record: &noodles::vcf::variant::RecordBuf, key: &str) -> Option<String> {
+    use noodles::vcf::variant::record_buf::info::field::Value;
+    match record.info().get(key)?? {
+        Value::String(s) => Some(s.clone()),
+        Value::Integer(n) => Some(n.to_string()),
+        Value::Flag => Some(String::new()),
+        other => Some(format!("{other:?}")),
+    }
+}
+
+#[test]
+fn vcf_output() {
+    use noodles::vcf::variant::record::samples::keys::key;
+    let vcf = scan(
+        &[
+            &POSITIVE[..],
+            &["--reference", "tests/data/reference.fa", "--format", "vcf"],
+        ]
+        .concat(),
     );
-    assert_eq!(column(&tsv, row, "filter"), "PASS");
-    assert_eq!(column(&tsv, row, "confidence"), "high");
-    assert_eq!(column(&tsv, row, "contig"), truth[0]);
-    assert_eq!(column(&tsv, row, "left_junction"), truth[1]);
-    assert_eq!(column(&tsv, row, "right_junction"), (right - 1).to_string());
-    assert_eq!(column(&tsv, row, "tsd_length"), truth[5].len().to_string());
-    assert_eq!(column(&tsv, row, "strand"), truth[9]);
-    assert_eq!(column(&tsv, row, "both_sides"), "yes");
-    assert!(column(&tsv, row, "polya_clips").parse::<u32>().unwrap() > 0);
+    let (header, records) = parse_vcf(vcf.as_bytes());
+    // Every INFO, FORMAT and FILTER key used is declared in the header.
+    assert!(header.infos().contains_key("MEINFO"));
+    assert!(header.formats().contains_key(key::GENOTYPE));
+    assert!(header.filters().contains_key("no_junction"));
+    assert_eq!(header.contigs().len(), 2);
+    let truth = fs::read_to_string(Path::new(ROOT).join("tests/data/truth.tsv")).unwrap();
+    assert_eq!(records.len(), 3, "{vcf}");
+    for (record, truth) in records.iter().zip(truth.lines().skip(1)) {
+        let truth: Vec<&str> = truth.split('\t').collect();
+        assert_eq!(record.reference_sequence_name(), "chr1");
+        let alt = format!("<INS:ME:{}>", truth[7]);
+        assert_eq!(record.alternate_bases().as_ref(), [alt]);
+        assert!(record.filters().is_pass());
+        assert_eq!(info(record, "SVTYPE").as_deref(), Some("INS"));
+        assert_eq!(info(record, "ASSEMBLED").as_deref(), Some("both"));
+        assert_eq!(info(record, "CONFIDENCE").as_deref(), Some("high"));
+        assert!(info(record, "MEINFO").unwrap().contains(truth[6]));
+        // The base before the insertion, from the reference.
+        assert_ne!(record.reference_bases(), "N");
+        let sample = record.samples().values().next().unwrap();
+        let gt = format!("{:?}", sample.get(key::GENOTYPE).unwrap());
+        assert!(gt.contains("Genotype"), "{gt}");
+    }
+    // Without the reference, REF is N.
+    let vcf = scan(&[&POSITIVE[..], &["--format", "vcf"]].concat());
+    let (_, records) = parse_vcf(vcf.as_bytes());
+    assert!(records.iter().all(|r| r.reference_bases() == "N"));
+    assert!(records.iter().all(|r| info(r, "IMPRECISE").is_some()));
+}
+
+#[test]
+fn bgzipped_and_indexed_vcf() {
+    let dir = std::env::temp_dir().join(format!("mei-rs-vcf-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("positive.vcf.gz");
+    scan(
+        &[
+            &POSITIVE[..],
+            &["--format", "vcf", "-o", path.to_str().unwrap()],
+        ]
+        .concat(),
+    );
+    let tbi = dir.join("positive.vcf.gz.tbi");
+    assert!(tbi.exists());
+    // Query the Alu through the index.
+    let mut reader = noodles::vcf::io::indexed_reader::Builder::default()
+        .build_from_path(&path)
+        .unwrap();
+    let header = reader.read_header().unwrap();
+    let region = "chr1:10000-10100".parse().unwrap();
+    let records: Vec<_> = reader
+        .query(&header, &region)
+        .unwrap()
+        .records()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(records.len(), 1);
+    {
+        use noodles::vcf::variant::record::Ids as _;
+        assert_eq!(records[0].ids().iter().collect::<Vec<_>>(), ["MEI_2"]);
+    }
+    // The whole file reads back as a VCF.
+    let file = fs::File::open(&path).unwrap();
+    let (_, records) = parse_vcf(std::io::BufReader::new(noodles::bgzf::io::Reader::new(
+        file,
+    )));
+    assert_eq!(records.len(), 3);
+    fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -122,7 +309,7 @@ fn negative_sample_has_no_pass_candidate() {
     let rows = rows(&tsv);
     assert_eq!(rows.len(), 1);
     // No poly(A/T) tail in the artefact either.
-    assert_eq!(column(&tsv, &rows[0], "filter"), "no_tail;probe_edge");
+    assert_eq!(column(&tsv, &rows[0], "filter"), "untyped;probe_edge");
     assert_eq!(column(&tsv, &rows[0], "position"), "3000");
 }
 
@@ -139,13 +326,14 @@ fn insertion_at_probe_edges_stays_pass() {
         "--keep-filtered",
     ]);
     let rows = rows(&tsv);
-    assert_eq!(rows.len(), 2, "{tsv}");
+    // The artefact, the three insertions and the chimeric junction.
+    assert_eq!(rows.len(), 5, "{tsv}");
     let artefact = rows.iter().find(|r| column(&tsv, r, "position") == "3000");
     assert_eq!(
         column(&tsv, artefact.unwrap(), "filter"),
-        "no_tail;probe_edge"
+        "untyped;probe_edge"
     );
-    let insertion = rows.iter().find(|r| column(&tsv, r, "position") != "3000");
+    let insertion = rows.iter().find(|r| column(&tsv, r, "position") == "10012");
     let insertion = insertion.unwrap();
     assert_eq!(column(&tsv, insertion, "filter"), "PASS");
     assert_eq!(column(&tsv, insertion, "confidence"), "high");
@@ -162,14 +350,84 @@ fn insertion_at_probe_edges_stays_pass() {
     ]);
     assert_eq!(
         exact.lines().filter(|l| !l.starts_with('#')).count(),
-        1,
+        3,
         "{exact}"
     );
 }
 
 #[test]
+fn random_mates_are_not_mei_mates() {
+    // The chimeric junction of `positive` (tests/data/README.md): typed Alu
+    // clips, but random unmapped mates, none of them a mobile element.
+    let tsv = scan(&[&POSITIVE[..], &["--keep-filtered"]].concat());
+    let found = rows(&tsv);
+    let chimera = found
+        .iter()
+        .find(|r| column(&tsv, r, "contig") == "chr2")
+        .unwrap();
+    assert_eq!(column(&tsv, chimera, "filter"), "non_mei_mates");
+    assert_eq!(column(&tsv, chimera, "family"), "ALU");
+    assert_eq!(column(&tsv, chimera, "checked_mates"), "6");
+    assert_eq!(column(&tsv, chimera, "mei_mates"), "0");
+
+    // Most mates of the Alu map to its chr2 copy with MAPQ 0: without the
+    // reference only the unmapped ones among the 40 sampled are checked;
+    // with it, all 40 are, and all are MEI mates.
+    for (reference, checked, mei) in [(false, 4, 4), (true, 40, 40)] {
+        let mut args = POSITIVE.to_vec();
+        if reference {
+            args.extend(["--reference", "tests/data/reference.fa"]);
+        }
+        let tsv = scan(&args);
+        let found = rows(&tsv);
+        let alu = found
+            .iter()
+            .find(|r| column(&tsv, r, "family") == "ALU")
+            .unwrap();
+        assert_eq!(column(&tsv, alu, "checked_mates"), checked.to_string());
+        assert_eq!(column(&tsv, alu, "mei_mates"), mei.to_string());
+    }
+}
+
+#[test]
+fn reference_tract_length_variant() {
+    // A heterozygous expansion of a reference poly(A) tract
+    // (tests/data/README.md): without the reference, its clips look like an
+    // insertion with a poly(A) tail and a 12 bp TSD.
+    let tract = ["--bed", "tests/data/targets_tract.bed", "--keep-filtered"];
+    let tsv = scan(&[&["--bam", "tests/data/positive.bam"][..], &tract].concat());
+    let found = rows(&tsv);
+    assert_eq!(found.len(), 1, "{tsv}");
+    assert_eq!(column(&tsv, &found[0], "filter"), "PASS");
+    assert_eq!(column(&tsv, &found[0], "confidence"), "high");
+    assert_eq!(column(&tsv, &found[0], "tsd_length"), "12");
+
+    // With the reference, the clips are the reference with a longer tract.
+    for bam in ["tests/data/positive.bam", "tests/data/positive.cram"] {
+        let tsv = scan(
+            &[
+                &["--bam", bam, "--reference", "tests/data/reference.fa"][..],
+                &tract,
+            ]
+            .concat(),
+        );
+        let found = rows(&tsv);
+        assert_eq!(found.len(), 1, "{tsv}");
+        assert_eq!(column(&tsv, &found[0], "filter"), "tandem_repeat", "{bam}");
+    }
+
+    // The simulated insertions stay PASS.
+    let tsv = scan(&[&POSITIVE[..], &["--reference", "tests/data/reference.fa"]].concat());
+    let found = rows(&tsv);
+    assert_eq!(found.len(), 3, "{tsv}");
+    for row in &found {
+        assert_eq!(column(&tsv, row, "confidence"), "high");
+    }
+}
+
+#[test]
 fn bam_and_cram_give_the_same_output() {
-    for format in ["tsv", "bed", "json"] {
+    for format in ["tsv", "bed", "json", "vcf"] {
         let bam = scan(
             &[
                 &POSITIVE[..],
@@ -201,7 +459,12 @@ fn same_output_with_any_thread_count() {
 #[test]
 fn expected_outputs() {
     let update = std::env::var_os("UPDATE_EXPECTED").is_some();
-    for (format, extension) in [("tsv", "tsv"), ("bed", "bed"), ("json", "json")] {
+    for (format, extension) in [
+        ("tsv", "tsv"),
+        ("bed", "bed"),
+        ("json", "json"),
+        ("vcf", "vcf"),
+    ] {
         let output = normalize(&scan(
             &[&POSITIVE[..], &["--keep-filtered", "--format", format]].concat(),
         )) + "\n";
@@ -235,8 +498,8 @@ fn output_file() {
     );
     assert_eq!(stdout, "");
     let bed = fs::read_to_string(&path).unwrap();
-    assert_eq!(bed.lines().count(), 1);
-    assert!(bed.starts_with("chr1\t10000\t10012\tMEI_1\t"), "{bed}");
+    assert_eq!(bed.lines().count(), 3);
+    assert!(bed.starts_with("chr1\t6000\t6010\tMEI_1\t"), "{bed}");
     fs::remove_dir_all(&dir).unwrap();
 }
 

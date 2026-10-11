@@ -5,14 +5,15 @@ insertions (Alu, LINE-1, SVA) in targeted capture and exome sequencing data.
 
 Mei-rs reads only the capture targets of an indexed BAM or CRAM file, collects
 the reads that betray an insertion (soft-clipped reads, discordant pairs,
-unmapped mates), groups them into candidate insertion sites, and removes the
-artefacts specific to capture data, such as soft-clips that stop at the probe
-edges.
+unmapped mates), groups them into candidate insertion sites, types the
+inserted element against Alu, LINE-1 and SVA consensus sequences, and removes
+the artefacts specific to capture data, such as soft-clips that stop at the
+probe edges.
 
-> **Status: v0.1, candidate discovery.** `mei-rs scan` finds candidate
-> insertion sites, their junctions, target site duplication (TSD) and strand.
-> Element typing (Alu / LINE-1 / SVA), local assembly, genotyping and VCF
-> output come in the next releases (see [Limitations](#limitations)).
+> **Status: v0.2 in progress.** `mei-rs scan` finds candidate insertion
+> sites, their junctions, target site duplication (TSD), strand and element
+> (family, subfamily). Local assembly, genotyping and VCF output come in the
+> next releases (see [Limitations](#limitations)).
 
 ## Installation
 
@@ -33,11 +34,16 @@ in pure Rust.
 mei-rs scan \
   --bam sample.bam \
   --bed targets.bed \
+  --reference genome.fa \
   --output sample.candidates.tsv \
   --threads 8
 
 # CRAM: the reference is required
 mei-rs scan --bam sample.cram --reference genome.fa --bed targets.bed
+
+# VCF, bgzipped and indexed: sample.mei.vcf.gz and sample.mei.vcf.gz.tbi
+mei-rs scan --bam sample.bam --bed targets.bed --reference genome.fa \
+  --format vcf --output sample.mei.vcf.gz
 ```
 
 The candidates are written to standard output unless `--output` is given; the
@@ -50,7 +56,8 @@ error.
 |---|---|
 | `--bam` | BAM or CRAM, coordinate-sorted and indexed (`.bam.bai`, `.bam.csi`, `.bai`, `.cram.crai` or `.crai`). The sample name is the `SM` of the read groups, or else the file name. |
 | `--bed` | capture targets: at least 3 columns (contig, 0-based start, end), tabs or spaces, plain or gzipped. `#`, `track` and `browser` lines are skipped. The contig names must match the alignment (`chr1` vs `1` is reported). |
-| `--reference` | reference genome indexed with `samtools faidx` (`.fai`); required for CRAM. When given, its contigs must match the lengths of the alignment header. |
+| `--reference` | reference genome indexed with `samtools faidx` (`.fai`); required for CRAM, and recommended for BAM: without it, the `tandem_repeat` filter is off, mapped mates are not checked against the MEI consensus sequences and the junctions are not assembled (TSD estimated from the clips). When given, its contigs must match the lengths of the alignment header. |
+| `--consensus` | MEI consensus sequences (FASTA, headers `>name#SINE/Alu`, `>name#LINE/L1`, `>name#Retroposon/SVA`). Default: the Alu, young LINE-1 and SVA consensus sequences of Dfam (CC0) built into mei-rs, see [data/consensus](data/consensus/README.md). |
 
 Inconsistent inputs fail early with a message that says how to fix them.
 Targets on contigs absent from the alignment, or beyond their contig, are
@@ -68,6 +75,7 @@ skipped with a warning.
 | `--include-duplicates` | off | keep reads flagged as duplicates (files without duplicate marking) |
 | **Signal extraction** | | |
 | `--min-clip-len` | 20 | minimum length of a soft-clip |
+| `--min-short-clip-len` | 15 | minimum length of a shorter soft-clip, kept only with a poly(A/T) tail or typed to an MEI consensus, and counted at the junctions only when a mate is an MEI mate (short reads often see a short piece of the junction); at or above `--min-clip-len`, short clips are not used |
 | `--min-clip-quality` | 20 | minimum median base quality of a soft-clip |
 | `--polya-min-len` | 10 | minimum length of a poly(A/T) tail at the junction end of a soft-clip |
 | `--polya-min-frac` | 0.8 | minimum fraction of A (or T) in a tail, to tolerate sequencing errors |
@@ -75,13 +83,16 @@ skipped with a warning.
 | `--window` | 100 | maximum distance between two consecutive signals of a candidate |
 | `--min-support` | 3 | minimum number of distinct supporting reads of a candidate |
 | `--min-clips` | 2 | minimum number of soft-clips at the junctions (`no_junction` below); each junction needs as many to give a TSD |
-| `--allow-no-tail` | off | do not require a soft-clip with a poly(A/T) tail (`no_tail`) |
+| `--min-typed-clips` | 2 | minimum number of junction soft-clips typed to an MEI consensus (`untyped` below, unless one typed clip has a poly(A/T) tail and the candidate has as many MEI mates; 0 turns the filter off) |
+| `--min-mei-mate-fraction` | 0.3 | minimum fraction of MEI mates among the mates checked against the consensus sequences (`non_mei_mates` below; 0 turns the filter off) |
+| `--require-tail` | off | also require a soft-clip with a poly(A/T) tail (`no_tail`) |
 | `--min-signal-ratio` | 0.05 | minimum number of supporting reads per read of local depth |
+| `--min-qual` | 0 | minimum quality score (`low_qual` below; 0 turns the filter off) |
 | `--probe-edge-tolerance` | 2 | distance in bp to a probe start or end within which a soft-clip stops at the probe edge |
-| `--keep-filtered` | off | also write the candidates flagged `no_junction`, `no_tail`, `probe_edge` or `low_ratio` |
+| `--keep-filtered` | off | also write the candidates flagged `no_junction`, `no_tail`, `untyped`, `non_mei_mates`, `tandem_repeat`, `probe_edge`, `low_ratio` or `low_qual` |
 | **Output** | | |
 | `-o`, `--output` | stdout | output file |
-| `--format` | `tsv` | `tsv`, `bed` or `json` (with every signal of every candidate) |
+| `--format` | `tsv` | `tsv`, `bed`, `json` (with every signal of every candidate) or `vcf` (VCF 4.2; bgzipped and indexed, `.tbi`, when `--output` ends with `.gz`) |
 | **Global** | | |
 | `-t`, `--threads` | all cores | worker threads |
 | `-v`, `-q` | | more (`-v`, `-vv`) or fewer (`-q`) logs; `RUST_LOG` takes precedence |
@@ -92,22 +103,66 @@ skipped with a warning.
    primary, mapped, not duplicates and above `--min-mapq` can anchor a signal.
    - **Soft-clips** of at least `--min-clip-len` bases: the junction gives the
      breakpoint to the base, and a poly(A) or poly(T) tail at the junction
-     gives the strand of the element.
+     gives the strand of the element. Shorter clips, down to
+     `--min-short-clip-len`, are kept only with a poly(A/T) tail or when
+     typed to an MEI consensus (step 3), and count at the junctions only
+     when a mate is an MEI mate (step 4): with 2x75 bp reads, a read often
+     holds a short piece of the junction, but alone a short clip is often a
+     piece of a nearby repeat.
    - **Mate signals**: the mate is unmapped, maps with a low MAPQ, maps to
      another contig, or maps unusually far away on the same contig (beyond the
      median insert size + 6 × 1.4826 × MAD of the sample).
 2. **Clustering**: signals at most `--window` bases apart form a candidate.
    Its position is the most supported junction; the junctions of the two
    flanks give the TSD.
-3. **Filters**: `no_junction` when fewer than `--min-clips` soft-clips mark
-   the junctions (mate signals alone); `no_tail` without any poly(A/T) tail;
+3. **Typing**: each junction soft-clip, without the pure run of its tail, is
+   seeded against a k-mer index of the consensus sequences (both strands) and
+   aligned locally (Smith-Waterman) to the best ones; a clip is typed when at
+   least 70% of it aligns with 90% identity or more. The candidate takes the
+   family and subfamily with the highest summed score, the strand of the
+   element and the part of the consensus covered. Then up to 40 mates per
+   typed candidate are checked the same way: unmapped mates by their read (placed
+   at the anchor, it is read with it), mapped ones (low MAPQ, another contig,
+   large insert) by the reference at their position, with `--reference`.
+4. **Filters**: `no_junction` when fewer than `--min-clips` soft-clips mark
+   the junctions (mate signals alone); `untyped` when fewer than
+   `--min-typed-clips` of them are typed, unless one typed clip has a
+   poly(A/T) tail and the candidate has as many MEI mates (short clips count
+   in both only when a mate is an MEI mate); `non_mei_mates` when mates were
+   checked and fewer than `--min-mei-mate-fraction` of them are mobile
+   elements; `no_tail` (with `--require-tail`)
+   without any poly(A/T) tail;
+   `tandem_repeat` (with `--reference`) when the soft-clips are the reference
+   with a longer homopolymer or tandem repeat, such as the poly(A) tract of
+   an Alu of the reference, rather than an insertion;
    `probe_edge` when every soft-clip stops within `--probe-edge-tolerance`
-   of a probe start or end, without any poly(A/T) tail or TSD (digestion or
-   ligation artefact of the capture); `low_ratio` when the
-   supporting reads are too few for the local depth.
-4. **Confidence** of the `PASS` candidates: `high` with a poly(A/T) tail and a
-   TSD (complete evidence of a retrotransposition), `medium` with a tail and
-   mate signals, `low` with soft-clips only.
+   of a probe start or end, without any poly(A/T) tail, typed clip or TSD
+   (digestion or ligation artefact of the capture); `low_ratio` when the
+   supporting reads are too few for the local depth; `low_qual` when the
+   quality score is below `--min-qual` (off by default). The quality score
+   is the phred-scaled probability that the candidate is not an insertion,
+   from its evidence (tail, MEI mates, typing identity, distinct fragments,
+   reads for the depth, both sides, TSD), with likelihood ratios measured on
+   the HGSVC3 exomes.
+5. **Assembly** (with `--reference`), for typed candidates with junction
+   soft-clips: the reads clipped at each junction, and the unmapped reads
+   placed near the candidate, are assembled from the reference flank into
+   the element (de Bruijn graph, k = 21; a homopolymer longer than k, such
+   as a long poly(A) tail, is measured on the reads that hold it whole).
+   Where the contig leaves the reference is the exact junction; with both
+   junctions, the reference between them is the TSD (none when the flanks
+   do not overlap), and the run of A (or T) next to a junction is the
+   poly(A) tail. The assembled junctions and TSD replace the estimates from
+   the clips; when a junction is not assembled, the estimate stays.
+6. **Genotype** of the written candidates: at each junction, reads clipped
+   there (alternative allele) against reads aligned over the whole site
+   (reference allele), each with at least `--min-short-clip-len` bases on
+   both sides of the junction; the most likely of `0/0`, `0/1` and `1/1`
+   (30% of alternative reads expected for `0/1`: they are under-counted),
+   with its quality.
+7. **Confidence** of the `PASS` candidates: `high` with a poly(A/T) tail and a
+   TSD (complete evidence of a retrotransposition), `medium` with a tail,
+   `low` without a tail (typed clips only).
 
 ### Output
 
@@ -131,17 +186,23 @@ clusters of unmapped mates or of mates on another contig without any soft-clip
 junction, while a few dozen insertions are expected in the targets.
 
 Since #22, a `PASS` candidate needs soft-clips at its junctions
-(`no_junction`) and at least one soft-clip with a poly(A/T) tail (`no_tail`),
-the only evidence that the inserted sequence is a retrotransposon until
-element typing; each `PASS` candidate gets a confidence level. On the same
-exome: **358 `PASS`** (6 `high`, 350 `medium`, 2 `low`); the 6 `high` ones all
-have signals from both sides and a 6-25 bp TSD. The `medium` level (tail and
-mate signals, no TSD) still needs the mates to be checked against MEI
-sequences (#31): favour `high` candidates.
+(`no_junction`), and since #30, at least two of them typed to an Alu, LINE-1
+or SVA consensus (`untyped`): the poly(A/T) tail, often missed by short reads,
+only sets the confidence level. With `--reference`, the `tandem_repeat` filter
+(#42) rejects the longer poly(A) tracts of reference Alus, whose clips have a
+tail and junctions that overlap like a TSD. On the same exome: v0.1.1 wrote
+317 `PASS` (2 `high`, 315 `medium`), this version **40** (1 `high`, 4
+`medium`, 35 `low`). `high` and `medium` candidates (typed, with a tail) are
+the most reliable; `low` ones (typed clips without a tail) still include
+artefacts until the mates are checked against MEI sequences (#31).
 
 Other limitations:
 
-- No element typing (Alu / LINE-1 / SVA), local assembly, genotype or VCF yet.
+- No local assembly, genotype or VCF yet.
+- Typing uses the junction soft-clips only: a candidate whose clips are
+  shorter than 15 bases (without their tail) stays untyped. Close subfamilies
+  (e.g. AluY and AluYa5) are often not told apart, and the middle of LINE-1
+  (most of ORF2) is not in the default Dfam set.
 - Candidates closer than `--window` are merged into one.
 - The TSD length comes from the soft-clip junctions only, and the length of a
   poly(A/T) tail is approximate (it can extend over a few bases after it).
@@ -156,10 +217,14 @@ Other limitations:
   was 507 s and 6.5 GB before #24). On macOS, the allocator keeps the freed
   reference sequences in memory (3.8 GB, 1.4 GB with `MallocLargeCache=0`).
 
-### Next steps (v0.1.1)
+### Next steps (v0.2.0)
 
-- Precision and recall against truth sets (HGSVC trios, GIAB HG002) and
-  comparison with Scramble, MELT and xTea (#26).
+- Mates checked against the MEI consensus sequences (#31), so that the `low`
+  level gets specific.
+- Short soft-clips of 2x75 bp reads (#32), local assembly of the junctions
+  and TSD (#33), scoring and genotype (#34), VCF output (#35).
+- Precision and recall against truth sets (HGSVC, GIAB HG002) and comparison
+  with Scramble, MELT and xTea (#26).
 
 Calls are research results: confirm them with an orthogonal method before any
 clinical use.

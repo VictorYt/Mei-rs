@@ -53,6 +53,10 @@ pub enum SignalKind {
         tail: Option<PolyTail>,
         /// The read has supplementary alignments (`SA` tag).
         supplementary: bool,
+        /// Shorter than the minimum length of a soft-clip (see
+        /// [`ClipOptions::is_short`]): evidence only with a poly(A/T) tail or
+        /// MEI sequence, and with MEI mates.
+        short: bool,
     },
     /// The mate is unmapped.
     MateUnmapped,
@@ -60,17 +64,30 @@ pub enum SignalKind {
     MateLowMapq {
         /// Mapping quality of the mate.
         mapq: u8,
+        /// Where the mate maps.
+        mate: Option<Locus>,
     },
     /// The mate maps to another contig.
     MateElsewhere {
-        /// Contig of the mate (index in the header).
-        contig: usize,
+        /// Where the mate maps.
+        mate: Locus,
     },
     /// The mate maps to the same contig, unusually far away.
     LargeInsert {
         /// Absolute template length.
         length: u64,
+        /// Where the mate maps.
+        mate: Option<Locus>,
     },
+}
+
+/// Alignment start of a mapped mate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Locus {
+    /// Contig (index in the header).
+    pub contig: usize,
+    /// 0-based alignment start.
+    pub start: u64,
 }
 
 impl SignalKind {
@@ -83,6 +100,16 @@ impl SignalKind {
             Self::MateLowMapq { .. } => "mate_low_mapq",
             Self::MateElsewhere { .. } => "mate_elsewhere",
             Self::LargeInsert { .. } => "large_insert",
+        }
+    }
+
+    /// Where the mate maps, for a mapped mate.
+    #[must_use]
+    pub fn mate_locus(&self) -> Option<Locus> {
+        match self {
+            Self::MateLowMapq { mate, .. } | Self::LargeInsert { mate, .. } => *mate,
+            Self::MateElsewhere { mate } => Some(*mate),
+            Self::SoftClip { .. } | Self::MateUnmapped => None,
         }
     }
 
@@ -126,6 +153,11 @@ pub struct Signal {
 pub struct ClipOptions {
     /// Minimum length of a soft-clip.
     pub min_length: u32,
+    /// Minimum length of a short soft-clip (below `min_length`): extracted
+    /// too, and kept by the caller only with a poly(A/T) tail or MEI
+    /// sequence (see [`ClipOptions::is_short`]). At or above `min_length`, no
+    /// short clip is extracted.
+    pub min_short_length: u32,
     /// Minimum median base quality of a soft-clip.
     pub min_quality: u8,
     /// Minimum length of a poly(A/T) tail.
@@ -138,10 +170,26 @@ impl Default for ClipOptions {
     fn default() -> Self {
         Self {
             min_length: 20,
+            min_short_length: 15,
             min_quality: 20,
             polya_min_length: 10,
             polya_min_fraction: 0.8,
         }
+    }
+}
+
+impl ClipOptions {
+    /// Shortest soft-clip extracted.
+    #[must_use]
+    pub fn min_extracted_length(&self) -> u32 {
+        self.min_length.min(self.min_short_length)
+    }
+
+    /// Whether a soft-clip of this length is short: extracted, but evidence
+    /// only with a poly(A/T) tail or MEI sequence.
+    #[must_use]
+    pub fn is_short(&self, length: usize) -> bool {
+        length < self.min_length as usize
     }
 }
 
@@ -217,16 +265,25 @@ pub fn read_signals(
             out.signals.push(mate(SignalKind::MateUnmapped));
         } else {
             let mate_contig = record.mate_reference_sequence_id(header).transpose()?;
+            let mate_start = record.mate_alignment_start().transpose()?;
+            let locus = mate_contig.zip(mate_start).map(|(contig, start)| Locus {
+                contig,
+                start: start.get() as u64 - 1,
+            });
             let mate_mapq = mate_mapq(record)?;
             if let Some(mapq) = mate_mapq.filter(|&q| q < min_mapq && !proper) {
-                out.signals.push(mate(SignalKind::MateLowMapq { mapq }));
-            } else if let Some(other) = mate_contig.filter(|&c| c != contig) {
                 out.signals
-                    .push(mate(SignalKind::MateElsewhere { contig: other }));
+                    .push(mate(SignalKind::MateLowMapq { mapq, mate: locus }));
+            } else if let Some(locus) = locus.filter(|l| l.contig != contig) {
+                out.signals
+                    .push(mate(SignalKind::MateElsewhere { mate: locus }));
             } else {
                 let length = u64::from(record.template_length()?.unsigned_abs());
                 if !proper {
-                    out.large_insert = Some(mate(SignalKind::LargeInsert { length }));
+                    out.large_insert = Some(mate(SignalKind::LargeInsert {
+                        length,
+                        mate: locus,
+                    }));
                 } else if anchor.first_segment && length > 0 {
                     out.insert_size = Some(length);
                 }
@@ -249,7 +306,7 @@ fn clip_signals(
         .map(|op| op.map(|op| (op.kind(), op.len())))
         .collect::<io::Result<Vec<_>>>()?;
     let (left, right) = clip_lengths(&ops);
-    let min = options.min_length as usize;
+    let min = options.min_extracted_length() as usize;
     if left < min && right < min {
         return Ok(());
     }
@@ -292,6 +349,7 @@ fn clip_signals(
                 median_quality,
                 tail,
                 supplementary,
+                short: options.is_short(length),
             },
             ..anchor.clone()
         });
@@ -300,7 +358,7 @@ fn clip_signals(
 }
 
 /// Soft-clipped lengths at the start and end of a CIGAR (hard clips skipped).
-fn clip_lengths(ops: &[(Kind, usize)]) -> (usize, usize) {
+pub(crate) fn clip_lengths(ops: &[(Kind, usize)]) -> (usize, usize) {
     let soft = |op: Option<&(Kind, usize)>| match op {
         Some(&(Kind::SoftClip, len)) => len,
         _ => 0,
@@ -321,7 +379,11 @@ fn clip_lengths(ops: &[(Kind, usize)]) -> (usize, usize) {
 /// soft-clip). The tail extends while the fraction of A (or T) stays at least
 /// `polya_min_fraction` and ends on a matching base, so isolated sequencing
 /// errors are tolerated.
-fn poly_tail(clip: &[u8], junction_at_end: bool, options: &ClipOptions) -> Option<PolyTail> {
+pub(crate) fn poly_tail(
+    clip: &[u8],
+    junction_at_end: bool,
+    options: &ClipOptions,
+) -> Option<PolyTail> {
     let mut best: Option<PolyTail> = None;
     for base in *b"AT" {
         let bases: Box<dyn Iterator<Item = &u8>> = if junction_at_end {
@@ -533,13 +595,26 @@ mod tests {
     #[test]
     fn short_and_low_quality_clips() {
         let seq = "C".repeat(100);
-        let short = read(
-            Flags::empty(),
-            &[(Kind::SoftClip, 19), (Kind::Match, 81)],
-            &seq,
-        )
-        .build();
-        assert_eq!(signals(&short).signals, []);
+        let clipped = |length| {
+            read(
+                Flags::empty(),
+                &[(Kind::SoftClip, length), (Kind::Match, 100 - length)],
+                &seq,
+            )
+            .build()
+        };
+        // Short clips are extracted down to `min_short_length`; the caller
+        // decides whether they count.
+        assert_eq!(signals(&clipped(15)).signals.len(), 1);
+        assert_eq!(signals(&clipped(14)).signals, []);
+        let options = ClipOptions::default();
+        assert!(options.is_short(19) && !options.is_short(20));
+        let long_only = ClipOptions {
+            min_short_length: 20,
+            ..options
+        };
+        let out = read_signals(&clipped(19), &header(), &long_only, 20).unwrap();
+        assert_eq!(out.signals, []);
 
         let mut qualities = vec![30; 100];
         qualities[..20].fill(10);
@@ -642,7 +717,17 @@ mod tests {
             .build();
         assert_eq!(
             mate_kinds(&low),
-            [(1100, Side::Right, SignalKind::MateLowMapq { mapq: 0 })]
+            [(
+                1100,
+                Side::Right,
+                SignalKind::MateLowMapq {
+                    mapq: 0,
+                    mate: Some(Locus {
+                        contig: 1,
+                        start: 499
+                    })
+                }
+            )]
         );
         let elsewhere = pair(Flags::empty())
             .set_mate_reference_sequence_id(1)
@@ -651,7 +736,16 @@ mod tests {
             .build();
         assert_eq!(
             mate_kinds(&elsewhere),
-            [(1100, Side::Right, SignalKind::MateElsewhere { contig: 1 })]
+            [(
+                1100,
+                Side::Right,
+                SignalKind::MateElsewhere {
+                    mate: Locus {
+                        contig: 1,
+                        start: 499
+                    }
+                }
+            )]
         );
         // A proper pair with a low-MAPQ mate (a repeat next to the read) is
         // not a signal.
@@ -678,7 +772,17 @@ mod tests {
         let large = out.large_insert.unwrap();
         assert_eq!(
             (large.position, large.side, large.kind),
-            (1000, Side::Left, SignalKind::LargeInsert { length: 59_100 })
+            (
+                1000,
+                Side::Left,
+                SignalKind::LargeInsert {
+                    length: 59_100,
+                    mate: Some(Locus {
+                        contig: 0,
+                        start: 59_999
+                    })
+                }
+            )
         );
         assert_eq!(out.insert_size, None);
 

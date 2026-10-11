@@ -2,19 +2,25 @@
 
 Writes, into the directory given as the only argument:
 - reference.fa: two random contigs; chr2 holds a reference copy of the Alu;
-- targets.bed: three capture targets;
+- targets.bed: five capture targets;
 - targets_tiled.bed: the same, with the insertion target split into two
   overlapping probes whose edges fall on the insertion junctions;
-- positive.sam: heterozygous Alu insertion with a TSD and a poly(A) tail on
-  chr1, a probe-edge artefact and a few marked PCR duplicates;
-- negative.sam: same targets, without the insertion;
-- truth.tsv: the simulated insertion.
+- targets_tract.bed: one target around a reference poly(A) tract on chr2;
+- positive.sam: heterozygous Alu, LINE-1 and SVA insertions with a TSD and a
+  poly(A) tail on chr1, a probe-edge artefact, a few marked PCR duplicates,
+  a heterozygous expansion of the chr2 poly(A) tract, and a chimeric
+  junction with Alu clips and random unmapped mates on chr2;
+- negative.sam: same targets, without the insertions;
+- homozygous.sam: the Alu insertion on both haplotypes, in its target only;
+- truth.tsv: the simulated insertions.
 
-Reads are paired-end 2x100 bp and are "aligned" from the simulation truth:
-anchored parts are matches, parts inside the insertion are soft-clipped, reads
-entirely inside the Alu map to the chr2 copy with MAPQ 0, and the other reads
-inside the insertion are unmapped. Only `random.random()` is used, so the
-output does not depend on the Python version.
+The elements are Dfam consensus sequences (data/consensus/mei_consensus.fa,
+CC0), without their poly(A) tail. Reads are paired-end 2x100 bp and are
+"aligned" from the simulation truth: anchored parts are matches, parts inside
+an insertion are soft-clipped, reads entirely inside the Alu map to the chr2
+copy with MAPQ 0, and the other reads inside an insertion are unmapped. Only
+`random.random()` is used, so the output does not depend on the Python
+version.
 """
 
 import math
@@ -28,31 +34,72 @@ MIN_ANCHOR = 20
 DEPTH_PER_HAPLOTYPE = 50
 ERROR_RATE = 0.002
 
-# Approximate AluY consensus, for test purposes only: real consensus sequences
-# (Dfam) are used for typing.
-ALU = (
-    "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAGGTC"
-    "AGGAGATCGAGACCATCCCGGCTAAAACGGTGAAACCCCGTCTCTACTAAAAATACAAAAAATTAGCCGG"
-    "GCGTGGTGGCGGGCGCCTGTAGTCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATGGCGTGAACCCGGGA"
-    "GGCGGAGCTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTC"
-)
+CONSENSUS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "data", "consensus", "mei_consensus.fa")
+
+
+def consensus(name):
+    """A Dfam consensus sequence, without its poly(A) tail."""
+    sequences, current = {}, None
+    with open(CONSENSUS) as fasta:
+        for line in fasta:
+            line = line.strip()
+            if line.startswith(">"):
+                current = line[1:].split("#")[0]
+                sequences[current] = []
+            else:
+                sequences[current].append(line)
+    return "".join(sequences[name]).rstrip("A")
+
+
+ALU = consensus("AluY")
 POLYA = "A" * 30
-INSERTION = ALU + POLYA
 
 CONTIGS = [("chr1", 20000), ("chr2", 10000)]
-# Insertion on chr1, after the 0-based position INS_POS (plus strand). The
-# target site chr1[INS_POS:INS_POS + TSD_LEN] is duplicated:
-# alt = chr1[:INS_POS + TSD_LEN] + INSERTION + chr1[INS_POS:].
-INS_POS = 10000
-TSD_LEN = 12
+
+
+class Insertion:
+    """An insertion after the 0-based position `pos` of chr1: the target site
+    chr1[pos:pos + tsd_len] is duplicated, and the element (with its tail)
+    is inserted in the given orientation:
+    alt = chr1[:pos + tsd_len] + sequence + chr1[pos:], where `sequence` is
+    the element + tail, reverse-complemented for the minus strand."""
+
+    def __init__(self, name, element, pos, tsd_len, strand, target, copy=None):
+        self.name = name
+        self.element = element
+        self.pos = pos
+        self.tsd_len = tsd_len
+        self.strand = strand
+        forward = element + POLYA
+        self.sequence = forward if strand == "+" else forward.translate(str.maketrans("ACGT", "TGCA"))[::-1]
+        self.target = target
+        # Reference copy of the element (contig, position), where reads
+        # entirely inside it map with MAPQ 0.
+        self.copy = copy
+
+
 # Reference Alu copy on chr2, outside every target.
 ALU_COPY_POS = 7000
+INSERTIONS = [
+    Insertion("AluY", ALU, 10000, 12, "+", "target_insertion", ("chr2", ALU_COPY_POS)),
+    # 5'-truncated LINE-1: the last 500 bp of the L1HS 3' end.
+    Insertion("L1HS_3end", consensus("L1HS_3end")[-500:], 15000, 15, "-", "target_line1"),
+    # The 3' end of an SVA_F.
+    Insertion("SVA_F", consensus("SVA_F")[-600:], 6000, 10, "+", "target_sva"),
+]
+# The Alu insertion, used by the tiled targets below.
+INS_POS = INSERTIONS[0].pos
+TSD_LEN = INSERTIONS[0].tsd_len
+# Chimeric junction of `positive` (random clips and mates), in target_negative.
+CHIMERA_JUNCTION = 4150
 # Probe whose start produces artefactual soft-clips.
 PROBE_EDGE = ("chr1", 3000)
 TARGETS = [
     ("chr1", 9850, 10150, "target_insertion"),
     ("chr1", 3000, 3200, "target_probe_edge"),
     ("chr2", 4000, 4300, "target_negative"),
+    ("chr1", 14850, 15150, "target_line1"),
+    ("chr1", 5850, 6150, "target_sva"),
 ]
 # Same targets, the insertion one tiled with two overlapping probes: the first
 # ends at the left junction, the second starts at the right one. Every
@@ -62,6 +109,15 @@ TILED_TARGETS = [
     ("chr1", 9850, INS_POS + TSD_LEN, "target_insertion_left"),
     ("chr1", INS_POS, 10150, "target_insertion_right"),
 ] + TARGETS[1:]
+
+# Reference poly(A) tract at the end of an Alu fragment on chr2 (outside the
+# targets above), expanded by TRACT_EXPANSION bases on one haplotype of
+# `positive`: alt = chr2[:TRACT_POS + TRACT_LEN] + A(expansion) + chr2[TRACT_POS + TRACT_LEN:].
+TRACT_POS = 2000
+TRACT_LEN = 12
+TRACT_EXPANSION = 14
+TRACT_FLANK = ALU[-40:]
+TRACT_TARGET = ("chr2", 1850, 2150, "target_tract")
 
 COMPLEMENT = str.maketrans("ACGT", "TGCA")
 
@@ -126,25 +182,30 @@ class Mapping:
 class Haplotype:
     """A haplotype sequence of one contig, and how to map it back."""
 
-    def __init__(self, contig, sequence, insertion_at=None):
+    def __init__(self, contig, reference, insertion=None):
         self.contig = contig
-        self.sequence = sequence
-        # alt index where the insertion starts (None for a reference haplotype)
-        self.insertion_at = insertion_at
+        self.insertion = insertion
+        if insertion is None:
+            self.sequence = reference
+        else:
+            ins = insertion
+            self.sequence = reference[: ins.pos + ins.tsd_len] + ins.sequence + reference[ins.pos :]
 
     def to_alt(self, ref_pos):
         """Haplotype index of a reference position (second TSD copy side)."""
-        if self.insertion_at is None or ref_pos < INS_POS + TSD_LEN:
+        ins = self.insertion
+        if ins is None or ref_pos < ins.pos + ins.tsd_len:
             return ref_pos
-        return ref_pos + TSD_LEN + len(INSERTION)
+        return ref_pos + ins.tsd_len + len(ins.sequence)
 
     def align(self, start, end):
         """Map the haplotype interval [start, end) to the reference."""
-        if self.insertion_at is None:
+        ins = self.insertion
+        if ins is None:
             return Mapping(self.contig, start, f"{end - start}M", 60)
-        ins_start = self.insertion_at
-        ins_end = ins_start + len(INSERTION)
-        shift = len(INSERTION) + TSD_LEN
+        ins_start = ins.pos + ins.tsd_len
+        ins_end = ins_start + len(ins.sequence)
+        shift = len(ins.sequence) + ins.tsd_len
         if end <= ins_start:
             return Mapping(self.contig, start, f"{end - start}M", 60)
         if start >= ins_end:
@@ -154,11 +215,45 @@ class Haplotype:
         if left >= MIN_ANCHOR:
             return Mapping(self.contig, start, f"{left}M{end - start - left}S", 60)
         if right >= MIN_ANCHOR:
-            return Mapping(self.contig, INS_POS, f"{end - start - right}S{right}M", 60)
-        if start >= ins_start and end <= ins_start + len(ALU):
+            return Mapping(self.contig, ins.pos, f"{end - start - right}S{right}M", 60)
+        if ins.copy and start >= ins_start and end <= ins_start + len(ins.element):
             # Multi-mapping read: placed on the reference copy, MAPQ 0.
-            offset = start - ins_start
-            return Mapping("chr2", ALU_COPY_POS + offset, f"{end - start}M", 0)
+            contig, pos = ins.copy
+            return Mapping(contig, pos + start - ins_start, f"{end - start}M", 0)
+        return Mapping()
+
+
+class TractHaplotype:
+    """A haplotype of chr2 with the poly(A) tract expanded, aligned like a
+    read aligner does: a read crossing the expansion is anchored on its longer
+    side. Anchored upstream, it matches through the reference tract and the
+    extra bases and the downstream flank are clipped (clip after the tract);
+    anchored downstream, it matches back through the reference tract and the
+    upstream flank and the extra bases are clipped (clip before the tract)."""
+
+    def __init__(self, contig, reference):
+        self.contig = contig
+        self.end = TRACT_POS + TRACT_LEN
+        self.sequence = reference[: self.end] + "A" * TRACT_EXPANSION + reference[self.end :]
+
+    def to_alt(self, ref_pos):
+        return ref_pos if ref_pos < self.end else ref_pos + TRACT_EXPANSION
+
+    def align(self, start, end):
+        shift = TRACT_EXPANSION
+        if end <= self.end:
+            return Mapping(self.contig, start, f"{end - start}M", 60)
+        if start >= TRACT_POS + shift:
+            # Starts in the tract: its A run matches the reference tract.
+            return Mapping(self.contig, start - shift, f"{end - start}M", 60)
+        upstream = self.end - start
+        # Matches from the start of the tract once the extra bases are clipped.
+        downstream = end - (TRACT_POS + shift)
+        if upstream >= downstream and upstream >= MIN_ANCHOR:
+            return Mapping(self.contig, start, f"{upstream}M{end - start - upstream}S", 60)
+        if downstream >= MIN_ANCHOR:
+            clip = end - start - downstream
+            return Mapping(self.contig, TRACT_POS, f"{clip}S{downstream}M", 60)
         return Mapping()
 
 
@@ -189,7 +284,7 @@ class Writer:
     def close(self):
         self.out.close()
 
-    def pair(self, left, right, duplicate=False):
+    def pair(self, left, right, duplicate=False, name=None):
         """Write a fragment. `left` and `right` are (mapping, sequence) on the
         forward strand of the haplotype; `right` is sequenced in reverse."""
         (lmap, lseq), (rmap, rseq) = left, right
@@ -197,7 +292,7 @@ class Writer:
             return
         rmap.reverse = True
         self.count += 1
-        name = f"{self.sample}_{self.count:05d}"
+        name = name or f"{self.sample}_{self.count:05d}"
         forward_first = self.rng.random() < 0.5
         reads = [(lmap, lseq), (rmap, rseq)]
         quals = [qualities(self.rng, len(lseq)), qualities(self.rng, len(rseq))]
@@ -294,11 +389,35 @@ def probe_edge_artefact(rng, reference, writer, count=10):
         writer.pair(left, right)
 
 
+def chimeras(rng, reference, writer, count=6):
+    """A chimeric junction in `target_negative` (chr2:4150): reads soft-clipped
+    with the first 25 bases of the Alu (typed), and fragments whose mate is
+    unmapped and random (chimeric or adapter sequence). Its mates are checked
+    (it is typed and has junction clips) and none is a mobile element."""
+    seq = reference["chr2"]
+    junction = CHIMERA_JUNCTION
+    for i in range(3):
+        start = junction - (READ_LEN - 25)
+        anchored = seq[start:junction]
+        left = (Mapping("chr2", start, f"{READ_LEN - 25}M25S", 60), anchored + ALU[:25])
+        rstart = start + 150 + rng.below(50)
+        right = (Mapping("chr2", rstart, f"{READ_LEN}M", 60), sequencing_errors(rng, seq[rstart : rstart + READ_LEN]))
+        writer.pair(left, right, name=f"{writer.sample}_chimera_clip_{i + 1}")
+    for i in range(count):
+        start = junction - READ_LEN - rng.below(60)
+        left = (Mapping("chr2", start, f"{READ_LEN}M", 60), sequencing_errors(rng, seq[start : start + READ_LEN]))
+        right = (Mapping(), rng.sequence(READ_LEN))
+        writer.pair(left, right, name=f"{writer.sample}_chimera_{i + 1}")
+
+
 def main(out_dir):
     rng = Rng(SEED)
     reference = {name: rng.sequence(length) for name, length in CONTIGS}
     chr2 = reference["chr2"]
-    reference["chr2"] = chr2[:ALU_COPY_POS] + ALU + chr2[ALU_COPY_POS + len(ALU) :]
+    chr2 = chr2[:ALU_COPY_POS] + ALU + chr2[ALU_COPY_POS + len(ALU) :]
+    tract = TRACT_FLANK + "A" * TRACT_LEN
+    start = TRACT_POS - len(TRACT_FLANK)
+    reference["chr2"] = chr2[:start] + tract + chr2[start + len(tract) :]
 
     with open(os.path.join(out_dir, "reference.fa"), "w") as fa:
         for name, _ in CONTIGS:
@@ -307,35 +426,64 @@ def main(out_dir):
             for i in range(0, len(seq), 60):
                 fa.write(seq[i : i + 60] + "\n")
 
-    for file_name, targets in (("targets.bed", TARGETS), ("targets_tiled.bed", TILED_TARGETS)):
+    for file_name, targets in (
+        ("targets.bed", TARGETS),
+        ("targets_tiled.bed", TILED_TARGETS),
+        ("targets_tract.bed", [TRACT_TARGET]),
+    ):
         with open(os.path.join(out_dir, file_name), "w") as bed:
             for contig, start, end, name in targets:
                 bed.write(f"{contig}\t{start}\t{end}\t{name}\n")
 
     chr1 = reference["chr1"]
-    alt = chr1[: INS_POS + TSD_LEN] + INSERTION + chr1[INS_POS:]
-    tsd = chr1[INS_POS : INS_POS + TSD_LEN]
+    families = {"AluY": "ALU", "L1HS_3end": "LINE1", "SVA_F": "SVA"}
     with open(os.path.join(out_dir, "truth.tsv"), "w") as truth:
-        truth.write("#contig\tleft_junction\tright_junction\ttsd_start\ttsd_end\ttsd\telement\tlength\tpolya\tstrand\tgenotype\n")
         truth.write(
-            f"chr1\t{INS_POS + TSD_LEN}\t{INS_POS + 1}\t{INS_POS + 1}\t{INS_POS + TSD_LEN}\t{tsd}"
-            f"\tAluY\t{len(ALU)}\t{len(POLYA)}\t+\t0/1\n"
+            "#contig\tleft_junction\tright_junction\ttsd_start\ttsd_end\ttsd\telement\tfamily"
+            "\tlength\tpolya\tstrand\tgenotype\n"
         )
+        for ins in sorted(INSERTIONS, key=lambda i: i.pos):
+            tsd = chr1[ins.pos : ins.pos + ins.tsd_len]
+            truth.write(
+                f"chr1\t{ins.pos + ins.tsd_len}\t{ins.pos + 1}\t{ins.pos + 1}\t{ins.pos + ins.tsd_len}\t{tsd}"
+                f"\t{ins.name}\t{families[ins.name]}\t{len(ins.element)}\t{len(POLYA)}\t{ins.strand}\t0/1\n"
+            )
 
     for sample, with_insertion in (("positive", True), ("negative", False)):
         writer = Writer(os.path.join(out_dir, f"{sample}.sam"), sample, rng)
         for target in TARGETS:
             contig = target[0]
             ref_hap = Haplotype(contig, reference[contig])
-            if with_insertion and target[3] == "target_insertion":
-                alt_hap = Haplotype(contig, alt, insertion_at=INS_POS + TSD_LEN)
+            insertion = next((i for i in INSERTIONS if i.target == target[3]), None)
+            if with_insertion and insertion:
+                alt_hap = Haplotype(contig, reference[contig], insertion)
                 fragments(rng, ref_hap, target, writer)
-                fragments(rng, alt_hap, target, writer, duplicates=3)
+                duplicates = 3 if insertion is INSERTIONS[0] else 0
+                fragments(rng, alt_hap, target, writer, duplicates=duplicates)
             else:
                 fragments(rng, ref_hap, target, writer)
                 fragments(rng, ref_hap, target, writer)
         probe_edge_artefact(rng, reference, writer)
+        if with_insertion:
+            # Own random generator: the reads above do not change.
+            main_rng, writer.rng = writer.rng, Rng(SEED + 1)
+            contig = TRACT_TARGET[0]
+            fragments(writer.rng, Haplotype(contig, reference[contig]), TRACT_TARGET, writer)
+            fragments(writer.rng, TractHaplotype(contig, reference[contig]), TRACT_TARGET, writer)
+            writer.rng = Rng(SEED + 2)
+            chimeras(writer.rng, reference, writer)
+            writer.rng = main_rng
         writer.close()
+
+    # Homozygous Alu insertion (on both haplotypes) in target_insertion, with
+    # its own random generator: the samples above do not change.
+    rng = Rng(SEED + 3)
+    writer = Writer(os.path.join(out_dir, "homozygous.sam"), "homozygous", rng)
+    contig = TARGETS[0][0]
+    alt_hap = Haplotype(contig, reference[contig], INSERTIONS[0])
+    fragments(rng, alt_hap, TARGETS[0], writer)
+    fragments(rng, alt_hap, TARGETS[0], writer)
+    writer.close()
 
 
 if __name__ == "__main__":

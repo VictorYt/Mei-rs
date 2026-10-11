@@ -1,0 +1,47 @@
+##fileformat=VCFv4.2
+##source=mei-rs {version}
+##mei-rsCommand={command}
+##contig=<ID=chr1,length=20000>
+##contig=<ID=chr2,length=10000>
+##ALT=<ID=INS:ME:ALU,Description="Insertion of an Alu element">
+##ALT=<ID=INS:ME:LINE1,Description="Insertion of a LINE-1 element">
+##ALT=<ID=INS:ME:SVA,Description="Insertion of an SVA element">
+##ALT=<ID=INS:ME,Description="Insertion of a mobile element of unknown family">
+##FILTER=<ID=PASS,Description="All filters passed">
+##FILTER=<ID=no_junction,Description="Fewer soft-clips at the junctions than --min-clips (short ones count only with an MEI mate)">
+##FILTER=<ID=no_tail,Description="No soft-clip with a poly(A/T) tail (with --require-tail)">
+##FILTER=<ID=untyped,Description="Fewer junction soft-clips typed to an MEI consensus than --min-typed-clips">
+##FILTER=<ID=non_mei_mates,Description="Fewer MEI mates than --min-mei-mate-fraction of the checked mates">
+##FILTER=<ID=tandem_repeat,Description="Soft-clips explained by a longer reference homopolymer or tandem repeat">
+##FILTER=<ID=probe_edge,Description="Soft-clips at a probe edge without a tail, typed clip or TSD (capture artefact)">
+##FILTER=<ID=low_ratio,Description="Supporting reads per read of local depth below --min-signal-ratio">
+##FILTER=<ID=low_qual,Description="Quality score below --min-qual">
+##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Type of structural variant">
+##INFO=<ID=SVLEN,Number=1,Type=Integer,Description="Length of the element consensus covered by the reads (MEINFO end - start + 1): a lower bound of the inserted length">
+##INFO=<ID=MEINFO,Number=4,Type=String,Description="Mobile element info of the form NAME,START,END,POLARITY: subfamily, part of its consensus covered by the reads (1-based), strand">
+##INFO=<ID=IMPRECISE,Number=0,Type=Flag,Description="No junction assembled: junctions estimated from the soft-clips">
+##INFO=<ID=LEFT_JUNCTION,Number=1,Type=Integer,Description="End of the upstream flank (1-based: the insertion is right after this base)">
+##INFO=<ID=RIGHT_JUNCTION,Number=1,Type=Integer,Description="Start of the downstream flank, minus one (1-based: the downstream flank starts after this base)">
+##INFO=<ID=TSD,Number=1,Type=String,Description="Target site duplication, from the assembled junctions">
+##INFO=<ID=TSD_LEN,Number=1,Type=Integer,Description="Length of the target site duplication (assembled, or estimated from the soft-clips)">
+##INFO=<ID=POLYA_LEN,Number=1,Type=Integer,Description="Length of the poly(A) (or poly(T)) tail, from an assembled junction">
+##INFO=<ID=ASSEMBLED,Number=1,Type=String,Description="Junctions assembled: both, left, right or none">
+##INFO=<ID=CONFIDENCE,Number=1,Type=String,Description="Confidence of a PASS candidate: high (tail and TSD), medium (tail), low (no tail)">
+##INFO=<ID=SUPPORT,Number=1,Type=Integer,Description="Distinct supporting reads">
+##INFO=<ID=JUNCTION_CLIPS,Number=2,Type=Integer,Description="Soft-clips at the left and right junctions">
+##INFO=<ID=TAIL_CLIPS,Number=2,Type=Integer,Description="Soft-clips with a poly(A) and with a poly(T) tail">
+##INFO=<ID=TYPED_CLIPS,Number=1,Type=Integer,Description="Junction soft-clips typed to the element family">
+##INFO=<ID=MATES,Number=2,Type=Integer,Description="Reads with an unmapped mate, and with a discordant mate (low MAPQ, another contig, large insert)">
+##INFO=<ID=MEI_MATES,Number=2,Type=Integer,Description="Mates checked against the consensus sequences, and of these mates of the element family">
+##INFO=<ID=DISTINCT_STARTS,Number=1,Type=Integer,Description="Distinct fragment start positions of the supporting reads">
+##INFO=<ID=SIGNAL_RATIO,Number=1,Type=Float,Description="Supporting reads per read of local depth">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##FORMAT=<ID=GQ,Number=1,Type=Integer,Description="Genotype quality: phred-scaled probability that the genotype is wrong">
+##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Reads of the reference allele (aligned over the whole site) and of the insertion (clipped at a junction)">
+##FORMAT=<ID=DP,Number=1,Type=Integer,Description="Reads counted for the genotype">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	positive
+chr1	3000	MEI_1	N	<INS:ME>	0	untyped;probe_edge	SVTYPE=INS;IMPRECISE;RIGHT_JUNCTION=3000;SUPPORT=10;JUNCTION_CLIPS=0,10;TAIL_CLIPS=0,0;TYPED_CLIPS=0;MATES=0,0;MEI_MATES=0,0;DISTINCT_STARTS=1;SIGNAL_RATIO=0.063	GT:GQ:AD:DP	0/0:23:96,10:106
+chr1	6010	MEI_2	N	<INS:ME:SVA>	20	PASS	SVTYPE=INS;SVLEN=820;MEINFO=SVA_F,556,1375,+;IMPRECISE;LEFT_JUNCTION=6010;RIGHT_JUNCTION=6000;TSD_LEN=10;CONFIDENCE=high;SUPPORT=150;JUNCTION_CLIPS=41,20;TAIL_CLIPS=20,0;TYPED_CLIPS=52;MATES=130,0;MEI_MATES=40,39;DISTINCT_STARTS=112;SIGNAL_RATIO=1.163	GT:GQ:AD:DP	0/1:99:32,61:93
+chr1	10012	MEI_3	N	<INS:ME:ALU>	20	PASS	SVTYPE=INS;SVLEN=288;MEINFO=AluY,1,288,+;IMPRECISE;LEFT_JUNCTION=10012;RIGHT_JUNCTION=10000;TSD_LEN=12;CONFIDENCE=high;SUPPORT=161;JUNCTION_CLIPS=53,22;TAIL_CLIPS=22,0;TYPED_CLIPS=67;MATES=14,123;MEI_MATES=4,4;DISTINCT_STARTS=118;SIGNAL_RATIO=1.088	GT:GQ:AD:DP	0/1:99:26,75:101
+chr1	15015	MEI_4	N	<INS:ME:LINE1>	20	PASS	SVTYPE=INS;SVLEN=513;MEINFO=L1HS_3end,390,902,-;IMPRECISE;LEFT_JUNCTION=15015;RIGHT_JUNCTION=15000;TSD_LEN=15;CONFIDENCE=high;SUPPORT=141;JUNCTION_CLIPS=48,26;TAIL_CLIPS=0,48;TYPED_CLIPS=56;MATES=120,0;MEI_MATES=40,39;DISTINCT_STARTS=108;SIGNAL_RATIO=1.037	GT:GQ:AD:DP	0/1:99:28,74:102
+chr2	4150	MEI_5	N	<INS:ME:ALU>	1	non_mei_mates	SVTYPE=INS;SVLEN=25;MEINFO=AluY,1,25,+;IMPRECISE;LEFT_JUNCTION=4150;SUPPORT=9;JUNCTION_CLIPS=3,0;TAIL_CLIPS=0,0;TYPED_CLIPS=3;MATES=6,0;MEI_MATES=6,0;DISTINCT_STARTS=7;SIGNAL_RATIO=0.096	GT:GQ:AD:DP	0/0:45:55,3:58
