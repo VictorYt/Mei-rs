@@ -111,6 +111,39 @@ fn positive_sample_has_one_pass_candidate_per_insertion() {
 }
 
 #[test]
+fn assembly_resolves_the_tsd_and_the_tail() {
+    let tsv = scan(&[&POSITIVE[..], &["--reference", "tests/data/reference.fa"]].concat());
+    let assembled = rows(&tsv);
+    let truth = fs::read_to_string(Path::new(ROOT).join("tests/data/truth.tsv")).unwrap();
+    assert_eq!(assembled.len(), 3, "{tsv}");
+    for (row, truth) in assembled.iter().zip(truth.lines().skip(1)) {
+        let truth: Vec<&str> = truth.split('\t').collect();
+        assert_eq!(column(&tsv, row, "assembled"), "both");
+        let (mut tsd, mut polya) = (truth[5].to_owned(), truth[9].to_owned());
+        let mut left: u64 = truth[1].parse().unwrap();
+        if truth[6] == "L1HS_3end" {
+            // The poly(T) of the minus-strand LINE-1 starts with `TT`, the
+            // reference after its TSD too (`TTC`): the contig matches the
+            // reference over them, and the same alternative haplotype reads
+            // as a TSD 2 bp longer and a tail 2 bp shorter.
+            tsd.push_str("TT");
+            polya = "28".to_owned();
+            left += 2;
+        }
+        assert_eq!(column(&tsv, row, "tsd"), tsd);
+        assert_eq!(column(&tsv, row, "tsd_length"), tsd.len().to_string());
+        assert_eq!(column(&tsv, row, "polya_length"), polya);
+        assert_eq!(column(&tsv, row, "left_junction"), left.to_string());
+        assert_eq!(column(&tsv, row, "confidence"), "high");
+    }
+    // Without the reference, nothing is assembled.
+    let tsv = scan(&POSITIVE);
+    for row in &rows(&tsv) {
+        assert_eq!(column(&tsv, row, "assembled"), ".");
+    }
+}
+
+#[test]
 fn negative_sample_has_no_pass_candidate() {
     let tsv = scan(&[
         "--bam",

@@ -52,7 +52,7 @@ error.
 |---|---|
 | `--bam` | BAM or CRAM, coordinate-sorted and indexed (`.bam.bai`, `.bam.csi`, `.bai`, `.cram.crai` or `.crai`). The sample name is the `SM` of the read groups, or else the file name. |
 | `--bed` | capture targets: at least 3 columns (contig, 0-based start, end), tabs or spaces, plain or gzipped. `#`, `track` and `browser` lines are skipped. The contig names must match the alignment (`chr1` vs `1` is reported). |
-| `--reference` | reference genome indexed with `samtools faidx` (`.fai`); required for CRAM, and recommended for BAM: without it, the `tandem_repeat` filter is off and mapped mates are not checked against the MEI consensus sequences. When given, its contigs must match the lengths of the alignment header. |
+| `--reference` | reference genome indexed with `samtools faidx` (`.fai`); required for CRAM, and recommended for BAM: without it, the `tandem_repeat` filter is off, mapped mates are not checked against the MEI consensus sequences and the junctions are not assembled (TSD estimated from the clips). When given, its contigs must match the lengths of the alignment header. |
 | `--consensus` | MEI consensus sequences (FASTA, headers `>name#SINE/Alu`, `>name#LINE/L1`, `>name#Retroposon/SVA`). Default: the Alu, young LINE-1 and SVA consensus sequences of Dfam (CC0) built into mei-rs, see [data/consensus](data/consensus/README.md). |
 
 Inconsistent inputs fail early with a message that says how to fix them.
@@ -134,7 +134,17 @@ skipped with a warning.
    of a probe start or end, without any poly(A/T) tail, typed clip or TSD
    (digestion or ligation artefact of the capture); `low_ratio` when the
    supporting reads are too few for the local depth.
-5. **Confidence** of the `PASS` candidates: `high` with a poly(A/T) tail and a
+5. **Assembly** (with `--reference`), for typed candidates with junction
+   soft-clips: the reads clipped at each junction, and the unmapped reads
+   placed near the candidate, are assembled from the reference flank into
+   the element (de Bruijn graph, k = 21; a homopolymer longer than k, such
+   as a long poly(A) tail, is measured on the reads that hold it whole).
+   Where the contig leaves the reference is the exact junction; with both
+   junctions, the reference between them is the TSD (none when the flanks
+   do not overlap), and the run of A (or T) next to a junction is the
+   poly(A) tail. The assembled junctions and TSD replace the estimates from
+   the clips; when a junction is not assembled, the estimate stays.
+6. **Confidence** of the `PASS` candidates: `high` with a poly(A/T) tail and a
    TSD (complete evidence of a retrotransposition), `medium` with a tail,
    `low` without a tail (typed clips only).
 

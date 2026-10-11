@@ -358,7 +358,7 @@ fn clip_signals(
 }
 
 /// Soft-clipped lengths at the start and end of a CIGAR (hard clips skipped).
-fn clip_lengths(ops: &[(Kind, usize)]) -> (usize, usize) {
+pub(crate) fn clip_lengths(ops: &[(Kind, usize)]) -> (usize, usize) {
     let soft = |op: Option<&(Kind, usize)>| match op {
         Some(&(Kind::SoftClip, len)) => len,
         _ => 0,
@@ -379,7 +379,11 @@ fn clip_lengths(ops: &[(Kind, usize)]) -> (usize, usize) {
 /// soft-clip). The tail extends while the fraction of A (or T) stays at least
 /// `polya_min_fraction` and ends on a matching base, so isolated sequencing
 /// errors are tolerated.
-fn poly_tail(clip: &[u8], junction_at_end: bool, options: &ClipOptions) -> Option<PolyTail> {
+pub(crate) fn poly_tail(
+    clip: &[u8],
+    junction_at_end: bool,
+    options: &ClipOptions,
+) -> Option<PolyTail> {
     let mut best: Option<PolyTail> = None;
     for base in *b"AT" {
         let bases: Box<dyn Iterator<Item = &u8>> = if junction_at_end {

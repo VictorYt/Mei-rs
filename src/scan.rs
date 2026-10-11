@@ -10,13 +10,17 @@ use noodles::fasta;
 use rayon::prelude::*;
 use tracing::{info, warn};
 
+use crate::assembly::{self, Assembly};
 use crate::cli::ScanArgs;
 use crate::cluster::{Candidate, Confidence, Filter, cluster, filters, tracts};
 use crate::inputs::Inputs;
+use crate::reader::extract::ExtractOptions;
 use crate::reader::extract::{Extraction, extract};
+use crate::reader::junctions::JunctionRequest;
 use crate::reader::signals::{ClipOptions, Signal, SignalKind};
 use crate::reader::{self, alignment::AlignmentFile, depth::local_depths, mates::MateRequest};
 use crate::regions::targets::Contig;
+use crate::regions::targets::ScanRegion;
 use crate::typer::{
     self,
     consensus::{ConsensusSet, Family},
@@ -80,6 +84,13 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         &consensus,
         args.reference.as_deref(),
     )?;
+    assemble_candidates(
+        &mut candidates,
+        &inputs.alignment,
+        &header_contigs,
+        args.reference.as_deref(),
+        &extract_options,
+    )?;
     let filter_options = args.filter_options();
     for (candidate, depth) in candidates.iter_mut().zip(depths) {
         candidate.depth = Some(depth);
@@ -90,37 +101,7 @@ pub fn run(args: &ScanArgs) -> Result<()> {
             &filter_options,
         );
     }
-    let pass = candidates.iter().filter(|c| c.is_pass()).count();
-    let level = |confidence| {
-        candidates
-            .iter()
-            .filter(|c| c.confidence() == Some(confidence))
-            .count()
-    };
-    info!(
-        "{clusters} clusters, {} with enough support: {pass} PASS ({} high, {} medium, {} low confidence), {} filtered{}",
-        candidates.len(),
-        level(Confidence::High),
-        level(Confidence::Medium),
-        level(Confidence::Low),
-        candidates.len() - pass,
-        if args.keep_filtered { " (kept)" } else { "" }
-    );
-    for filter in [
-        Filter::NoJunction,
-        Filter::NoTail,
-        Filter::Untyped,
-        Filter::NonMeiMates,
-        Filter::TandemRepeat,
-        Filter::ProbeEdge,
-        Filter::LowRatio,
-    ] {
-        let n = candidates
-            .iter()
-            .filter(|c| c.filters.contains(&filter))
-            .count();
-        info!("  {}: {n}", filter.name());
-    }
+    log_candidates(&candidates, clusters, args.keep_filtered);
     if !args.keep_filtered {
         candidates.retain(Candidate::is_pass);
     }
@@ -149,6 +130,41 @@ fn keep_short_clips(signals: &mut Vec<Signal>, consensus: &ConsensusSet) -> (usi
     signals.retain(|_| keep.next().unwrap_or(true));
     let kept = signals.iter().filter(|s| short(s)).count();
     (total, kept)
+}
+
+/// Log the PASS candidates by confidence and the filtered ones by filter.
+fn log_candidates(candidates: &[Candidate], clusters: usize, keep_filtered: bool) {
+    let pass = candidates.iter().filter(|c| c.is_pass()).count();
+    let level = |confidence| {
+        candidates
+            .iter()
+            .filter(|c| c.confidence() == Some(confidence))
+            .count()
+    };
+    info!(
+        "{clusters} clusters, {} with enough support: {pass} PASS ({} high, {} medium, {} low confidence), {} filtered{}",
+        candidates.len(),
+        level(Confidence::High),
+        level(Confidence::Medium),
+        level(Confidence::Low),
+        candidates.len() - pass,
+        if keep_filtered { " (kept)" } else { "" }
+    );
+    for filter in [
+        Filter::NoJunction,
+        Filter::NoTail,
+        Filter::Untyped,
+        Filter::NonMeiMates,
+        Filter::TandemRepeat,
+        Filter::ProbeEdge,
+        Filter::LowRatio,
+    ] {
+        let n = candidates
+            .iter()
+            .filter(|c| c.filters.contains(&filter))
+            .count();
+        info!("  {}: {n}", filter.name());
+    }
 }
 
 /// Type the candidates with junction soft-clips ([`typer`]), in parallel.
@@ -230,31 +246,16 @@ fn flag_tandem_repeats(
     let mut reader = fasta::io::indexed_reader::Builder::default()
         .build_from_path(reference)
         .with_context(|| format!("cannot open the reference {}", reference.display()))?;
-    let mut sequence = Vec::new();
     for candidate in candidates
         .iter_mut()
         .filter(|c| c.left_junction.is_some() || c.right_junction.is_some())
     {
         let contig = &contigs[candidate.contig];
-        // 0-based half-open, read as a 1-based inclusive region.
         let (start, end) = tracts::window(candidate, contig.length);
-        let (Some(first), Some(last)) = (
-            usize::try_from(start + 1)
-                .ok()
-                .and_then(|p| Position::try_from(p).ok()),
-            usize::try_from(end)
-                .ok()
-                .and_then(|p| Position::try_from(p).ok()),
-        ) else {
+        let Some(sequence) = reference_window(&mut reader, reference, &contig.name, start, end)?
+        else {
             continue;
         };
-        let region = Region::new(contig.name.as_str(), first..=last);
-        let record = reader
-            .query(&region)
-            .with_context(|| format!("cannot read {region} from {}", reference.display()))?;
-        sequence.clear();
-        sequence.extend_from_slice(record.sequence().as_ref());
-        sequence.make_ascii_uppercase();
         tracts::apply(
             candidate,
             &tracts::ReferenceWindow {
@@ -264,6 +265,121 @@ fn flag_tandem_repeats(
         );
     }
     Ok(())
+}
+
+/// Bases added on each side of a candidate to the window read again for its
+/// assembly: unmapped mates are placed at their anchor, up to a read length
+/// before the signals.
+const ASSEMBLY_MARGIN: u64 = 300;
+
+/// Assemble the junctions of the candidates that can pass (typed, with
+/// junction soft-clips: those whose mates are checked), in parallel
+/// ([`assembly`]); it needs the reference.
+fn assemble_candidates(
+    candidates: &mut [Candidate],
+    alignment: &AlignmentFile,
+    contigs: &[Contig],
+    reference: Option<&Path>,
+    options: &ExtractOptions,
+) -> Result<()> {
+    let Some(reference) = reference else {
+        warn!("no --reference: the junctions are not assembled (TSD estimated from the clips)");
+        return Ok(());
+    };
+    let mut reader = fasta::io::indexed_reader::Builder::default()
+        .build_from_path(reference)
+        .with_context(|| format!("cannot open the reference {}", reference.display()))?;
+    // Candidates are sorted by contig and start, as the batches need.
+    let mut selected: Vec<(usize, u64, Vec<u8>)> = Vec::new();
+    let mut requests: Vec<JunctionRequest> = Vec::new();
+    for (i, c) in candidates
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| mates::checked(c))
+    {
+        let contig = &contigs[c.contig];
+        let (start, end) = tracts::window(c, contig.length);
+        let Some(sequence) = reference_window(&mut reader, reference, &contig.name, start, end)?
+        else {
+            continue;
+        };
+        let junctions = [c.left_junction, c.right_junction];
+        let first = junctions.iter().flatten().fold(c.start, |a, &j| a.min(j));
+        let last = junctions.iter().flatten().fold(c.end, |a, &j| a.max(j));
+        requests.push(JunctionRequest {
+            window: ScanRegion {
+                contig: contig.name.clone(),
+                start: first.saturating_sub(ASSEMBLY_MARGIN),
+                end: (last + ASSEMBLY_MARGIN).min(contig.length),
+            },
+            left: c.left_junction,
+            right: c.right_junction,
+        });
+        selected.push((i, start, sequence));
+    }
+    let reads = reader::junctions::fetch_junction_reads(alignment, &requests, &options.filter)?;
+    let assemblies: Vec<Assembly> = selected
+        .par_iter()
+        .zip(reads.par_iter())
+        .map(|((i, start, sequence), reads)| {
+            let c = &candidates[*i];
+            assembly::assemble(
+                reads,
+                &tracts::ReferenceWindow {
+                    start: *start,
+                    sequence,
+                },
+                c.left_junction,
+                c.right_junction,
+                &options.clip,
+            )
+        })
+        .collect();
+    let mut counts = [0usize; 3];
+    for ((i, _, _), assembly) in selected.iter().zip(assemblies) {
+        counts[usize::from(assembly.left.is_some()) + usize::from(assembly.right.is_some())] += 1;
+        candidates[*i].set_assembly(assembly);
+    }
+    info!(
+        "junctions assembled for {} candidates: both {}, one {}, none {}",
+        selected.len(),
+        counts[2],
+        counts[1],
+        counts[0]
+    );
+    Ok(())
+}
+
+/// Reference bases of a 0-based half-open interval, upper case; `None` if
+/// the interval is empty.
+fn reference_window(
+    reader: &mut fasta::io::IndexedReader<fasta::io::BufReader<std::fs::File>>,
+    path: &Path,
+    contig: &str,
+    start: u64,
+    end: u64,
+) -> Result<Option<Vec<u8>>> {
+    // Read as a 1-based inclusive region.
+    let (Some(first), Some(last)) = (
+        usize::try_from(start + 1)
+            .ok()
+            .and_then(|p| Position::try_from(p).ok()),
+        usize::try_from(end)
+            .ok()
+            .and_then(|p| Position::try_from(p).ok()),
+    ) else {
+        return Ok(None);
+    };
+    if first > last {
+        return Ok(None);
+    }
+    let region = Region::new(contig, first..=last);
+    let record = reader
+        .query(&region)
+        .with_context(|| format!("cannot read {region} from {}", path.display()))?;
+    let mut sequence = record.sequence().as_ref().to_vec();
+    sequence.make_ascii_uppercase();
+    Ok(Some(sequence))
 }
 
 /// Write the report to the output file, or to standard output.

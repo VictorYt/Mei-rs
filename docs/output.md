@@ -25,9 +25,9 @@ convention), then one `#` line names the columns:
 | `id` | Candidate identifier (`MEI_1`, `MEI_2`, ... in output order). |
 | `contig` | Contig. |
 | `position` | Estimated insertion point: the most supported soft-clip junction, or, without soft-clips, the midpoint between the reads of the two flanks. |
-| `left_junction` | End of the upstream flank: most supported junction of the reads clipped on their right end (`.` if none). |
-| `right_junction` | Start of the downstream flank: most supported junction of the reads clipped on their left end (`.` if none). |
-| `tsd_length` | `left_junction - right_junction` when each junction has at least `--min-clips` soft-clips and the flanks overlap by 1 to 50 bp: the length of the target site duplication (`.` otherwise). |
+| `left_junction` | End of the upstream flank: the assembled junction (`assembled` is `both` or `left`), or else the most supported junction of the reads clipped on their right end (`.` if none). |
+| `right_junction` | Start of the downstream flank: the assembled junction (`assembled` is `both` or `right`), or else the most supported junction of the reads clipped on their left end (`.` if none). |
+| `tsd_length` | Length of the target site duplication: with both junctions assembled, the length of `tsd` (`.` when the assembled flanks do not overlap by 1 to 50 bp); otherwise estimated from the clips, `left_junction - right_junction` when each junction has at least `--min-clips` soft-clips and the flanks overlap by 1 to 50 bp (`.` otherwise). |
 | `strand` | Strand of the inserted element: `+` when poly(A) tails outnumber poly(T) tails in the soft-clips, `-` for the reverse, `.` on ties. |
 | `filter` | `PASS`, or the failed filters separated by `;`: `no_junction` (fewer than `--min-clips` soft-clips at the junctions, short ones counting only when the candidate has an MEI mate: mate signals alone do not resolve the insertion to the base), `no_tail` (no soft-clip with a poly(A/T) tail; only with `--require-tail`), `untyped` (fewer than `--min-typed-clips` junction soft-clips typed to an MEI consensus, short ones counting only when the candidate has an MEI mate, and not one typed clip with a poly(A/T) tail and at least as many MEI mates: nothing shows that the inserted sequence is a mobile element), `non_mei_mates` (mates were checked against the consensus sequences and fewer than `--min-mei-mate-fraction` of them are mobile elements: the mate signals are mostly noise), `tandem_repeat` (with `--reference` only: the soft-clips are a length variant of a reference homopolymer or tandem repeat, such as a longer poly(A) tract of an Alu of the reference: at least 2 junction soft-clips, and half of the informative ones, end in the reference where a longer tract would put them, or the tailed soft-clips hold only their tail and the reference has a homopolymer of at least 10 bp of the tail base at their junction), `probe_edge` (every soft-clip stops within `--probe-edge-tolerance` of a probe start or end, none has a poly(A/T) tail, none is typed and there is no TSD: capture artefact), `low_ratio` (`signal_ratio` below `--min-signal-ratio`). |
 | `confidence` | For `PASS` candidates (typed, unless `--min-typed-clips 0`): `high` (a poly(A/T) tail and a TSD: complete evidence of a retrotransposition), `medium` (a poly(A/T) tail, without a TSD), `low` (no poly(A/T) tail: often the tailed junction is not covered by clips long enough); `.` for filtered candidates. |
@@ -55,6 +55,9 @@ convention), then one `#` line names the columns:
 | `short_typed_clips` | Of these, short soft-clips. |
 | `checked_mates` | Mate signals whose mate sequence was checked against the consensus sequences: unmapped mates (their read), and, with `--reference`, mapped mates (the reference at the mate position). At most 40 per candidate, evenly sampled; only for typed candidates with enough junction soft-clips (not `no_junction`), the others cannot pass. |
 | `mei_mates` | Of these, mates typed to `family` (to any family if the candidate is untyped). |
+| `assembled` | Junctions assembled (with `--reference`, for typed candidates with junction soft-clips): `both`, `left`, `right` or `none`; `.` when not assembled. |
+| `tsd` | With both junctions assembled, the TSD: the reference bases between the junctions (`.` otherwise, or when the flanks do not overlap). When the inserted bases next to a junction match the reference beyond it (microhomology), they are counted in the TSD, as aligners and PALMER do. |
+| `polya_length` | Length of the poly(A) (or poly(T)) tail at an assembled junction: the run of A (T) from the junction, when the contig holds its end (`.` otherwise). |
 
 Missing values are written `.`.
 
@@ -74,8 +77,11 @@ Missing values are written `.`.
 An object with `mei_rs` (version), `command`, `sample`, `positions` (the
 coordinate convention) and `candidates`. Each candidate has the TSV columns
 (`filter` as a list, `both_sides` as a boolean, missing values, such as
-the `confidence` of a filtered candidate, as `null`) and
-a `signals` list. Each signal has:
+the `confidence` of a filtered candidate, as `null`), except `assembled`,
+`tsd` and `polya_length`, which are in `assembly` (for assembled candidates
+only, with `tail_base`, and `left` and `right`, each with its 1-based
+`junction`, its `contig` in reference orientation and the `inserted` bases
+of the contig), and a `signals` list. Each signal has:
 
 | Field | Description |
 |---|---|

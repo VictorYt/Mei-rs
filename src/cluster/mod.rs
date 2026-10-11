@@ -128,10 +128,10 @@ pub struct Candidate {
     /// junction, or else estimated from the mate signals.
     pub breakpoint: u64,
     /// End of the upstream flank: most supported junction of the clips on
-    /// the right end of reads, if any.
+    /// the right end of reads, if any; the assembled one once assembled.
     pub left_junction: Option<u64>,
     /// Start of the downstream flank: most supported junction of the clips
-    /// on the left end of reads, if any.
+    /// on the left end of reads, if any; the assembled one once assembled.
     pub right_junction: Option<u64>,
     /// Soft-clips supporting the left junction (within
     /// [`JUNCTION_TOLERANCE`]).
@@ -142,7 +142,8 @@ pub struct Candidate {
     /// Of the soft-clips supporting either junction, short ones (see
     /// [`crate::reader::signals::ClipOptions::is_short`]).
     pub short_junction_clips: usize,
-    /// Length of the target site duplication suggested by the junctions.
+    /// Length of the target site duplication: assembled, or suggested by
+    /// the junctions.
     tsd: Option<u64>,
     /// Signals of the cluster, sorted.
     pub signals: Vec<Signal>,
@@ -175,6 +176,8 @@ pub struct Candidate {
     /// Of these, mates typed to the family of the candidate (to any family
     /// if it is untyped).
     pub mei_mates: usize,
+    /// Local assembly of the junctions, once done (see [`crate::assembly`]).
+    pub assembly: Option<crate::assembly::Assembly>,
     /// Filters the candidate fails; empty if it passes.
     pub filters: Vec<Filter>,
 }
@@ -262,6 +265,7 @@ impl Candidate {
             mate_checks: Vec::new(),
             checked_mates: 0,
             mei_mates: 0,
+            assembly: None,
             filters: Vec::new(),
             signals,
         };
@@ -298,12 +302,29 @@ impl Candidate {
             .map(|depth| self.support as f64 / depth.max(1) as f64)
     }
 
-    /// Length of the target site duplication suggested by the junctions: the
-    /// overlap of the two flanks, when each junction has at least
-    /// `min_clips` soft-clips and they overlap by 1 to 50 bp.
+    /// Length of the target site duplication: with both junctions assembled,
+    /// the assembled one (see [`Self::set_assembly`]); otherwise suggested by
+    /// the junctions, the overlap of the two flanks, when each junction has
+    /// at least `min_clips` soft-clips and they overlap by 1 to 50 bp.
     #[must_use]
     pub fn tsd_length(&self) -> Option<u64> {
         self.tsd
+    }
+
+    /// Keep the assembly of the junctions: the assembled junctions replace
+    /// the estimated ones, and with both, the assembled TSD replaces the
+    /// estimate (an assembly that finds no TSD removes it).
+    pub fn set_assembly(&mut self, assembly: crate::assembly::Assembly) {
+        if let Some(left) = &assembly.left {
+            self.left_junction = Some(left.junction);
+        }
+        if let Some(right) = &assembly.right {
+            self.right_junction = Some(right.junction);
+        }
+        if assembly.both() {
+            self.tsd = assembly.tsd.as_ref().map(|t| t.len() as u64);
+        }
+        self.assembly = Some(assembly);
     }
 
     /// Whether the candidate failed `--min-support` (it is never written).
