@@ -52,6 +52,10 @@ fn normalize(output: &str) -> String {
                 "##mei-rs {version}".to_owned()
             } else if line.starts_with("##command: ") {
                 "##command: {command}".to_owned()
+            } else if line.starts_with("##source=mei-rs ") {
+                "##source=mei-rs {version}".to_owned()
+            } else if line.starts_with("##mei-rsCommand=") {
+                "##mei-rsCommand={command}".to_owned()
             } else if trimmed.starts_with("\"mei_rs\": ") {
                 line.replace(env!("CARGO_PKG_VERSION"), "{version}")
             } else if trimmed.starts_with("\"command\": ") {
@@ -177,6 +181,111 @@ fn genotypes() {
         assert_eq!(column(&tsv, &rows[0], "genotype"), "1/1");
         assert_eq!(column(&tsv, &rows[0], "ref_reads"), "0");
     }
+}
+
+/// Parse a VCF with noodles: header and records.
+fn parse_vcf(
+    reader: impl std::io::BufRead,
+) -> (noodles::vcf::Header, Vec<noodles::vcf::variant::RecordBuf>) {
+    let mut reader = noodles::vcf::io::Reader::new(reader);
+    let header = reader.read_header().unwrap();
+    let records = reader
+        .record_bufs(&header)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    (header, records)
+}
+
+/// `INFO` value of a record, as text.
+fn info(record: &noodles::vcf::variant::RecordBuf, key: &str) -> Option<String> {
+    use noodles::vcf::variant::record_buf::info::field::Value;
+    match record.info().get(key)?? {
+        Value::String(s) => Some(s.clone()),
+        Value::Integer(n) => Some(n.to_string()),
+        Value::Flag => Some(String::new()),
+        other => Some(format!("{other:?}")),
+    }
+}
+
+#[test]
+fn vcf_output() {
+    use noodles::vcf::variant::record::samples::keys::key;
+    let vcf = scan(
+        &[
+            &POSITIVE[..],
+            &["--reference", "tests/data/reference.fa", "--format", "vcf"],
+        ]
+        .concat(),
+    );
+    let (header, records) = parse_vcf(vcf.as_bytes());
+    // Every INFO, FORMAT and FILTER key used is declared in the header.
+    assert!(header.infos().contains_key("MEINFO"));
+    assert!(header.formats().contains_key(key::GENOTYPE));
+    assert!(header.filters().contains_key("no_junction"));
+    assert_eq!(header.contigs().len(), 2);
+    let truth = fs::read_to_string(Path::new(ROOT).join("tests/data/truth.tsv")).unwrap();
+    assert_eq!(records.len(), 3, "{vcf}");
+    for (record, truth) in records.iter().zip(truth.lines().skip(1)) {
+        let truth: Vec<&str> = truth.split('\t').collect();
+        assert_eq!(record.reference_sequence_name(), "chr1");
+        let alt = format!("<INS:ME:{}>", truth[7]);
+        assert_eq!(record.alternate_bases().as_ref(), [alt]);
+        assert!(record.filters().is_pass());
+        assert_eq!(info(record, "SVTYPE").as_deref(), Some("INS"));
+        assert_eq!(info(record, "ASSEMBLED").as_deref(), Some("both"));
+        assert_eq!(info(record, "CONFIDENCE").as_deref(), Some("high"));
+        assert!(info(record, "MEINFO").unwrap().contains(truth[6]));
+        // The base before the insertion, from the reference.
+        assert_ne!(record.reference_bases(), "N");
+        let sample = record.samples().values().next().unwrap();
+        let gt = format!("{:?}", sample.get(key::GENOTYPE).unwrap());
+        assert!(gt.contains("Genotype"), "{gt}");
+    }
+    // Without the reference, REF is N.
+    let vcf = scan(&[&POSITIVE[..], &["--format", "vcf"]].concat());
+    let (_, records) = parse_vcf(vcf.as_bytes());
+    assert!(records.iter().all(|r| r.reference_bases() == "N"));
+    assert!(records.iter().all(|r| info(r, "IMPRECISE").is_some()));
+}
+
+#[test]
+fn bgzipped_and_indexed_vcf() {
+    let dir = std::env::temp_dir().join(format!("mei-rs-vcf-{}", std::process::id()));
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("positive.vcf.gz");
+    scan(
+        &[
+            &POSITIVE[..],
+            &["--format", "vcf", "-o", path.to_str().unwrap()],
+        ]
+        .concat(),
+    );
+    let tbi = dir.join("positive.vcf.gz.tbi");
+    assert!(tbi.exists());
+    // Query the Alu through the index.
+    let mut reader = noodles::vcf::io::indexed_reader::Builder::default()
+        .build_from_path(&path)
+        .unwrap();
+    let header = reader.read_header().unwrap();
+    let region = "chr1:10000-10100".parse().unwrap();
+    let records: Vec<_> = reader
+        .query(&header, &region)
+        .unwrap()
+        .records()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(records.len(), 1);
+    {
+        use noodles::vcf::variant::record::Ids as _;
+        assert_eq!(records[0].ids().iter().collect::<Vec<_>>(), ["MEI_2"]);
+    }
+    // The whole file reads back as a VCF.
+    let file = fs::File::open(&path).unwrap();
+    let (_, records) = parse_vcf(std::io::BufReader::new(noodles::bgzf::io::Reader::new(
+        file,
+    )));
+    assert_eq!(records.len(), 3);
+    fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]
@@ -318,7 +427,7 @@ fn reference_tract_length_variant() {
 
 #[test]
 fn bam_and_cram_give_the_same_output() {
-    for format in ["tsv", "bed", "json"] {
+    for format in ["tsv", "bed", "json", "vcf"] {
         let bam = scan(
             &[
                 &POSITIVE[..],
@@ -350,7 +459,12 @@ fn same_output_with_any_thread_count() {
 #[test]
 fn expected_outputs() {
     let update = std::env::var_os("UPDATE_EXPECTED").is_some();
-    for (format, extension) in [("tsv", "tsv"), ("bed", "bed"), ("json", "json")] {
+    for (format, extension) in [
+        ("tsv", "tsv"),
+        ("bed", "bed"),
+        ("json", "json"),
+        ("vcf", "vcf"),
+    ] {
         let output = normalize(&scan(
             &[&POSITIVE[..], &["--keep-filtered", "--format", format]].concat(),
         )) + "\n";

@@ -61,11 +61,11 @@ fn version() {
 fn invalid_option_fails_with_usage_error() {
     mei_rs()
         .args([
-            "scan", "--bam", "s.bam", "--bed", "t.bed", "--format", "vcf",
+            "scan", "--bam", "s.bam", "--bed", "t.bed", "--format", "bcf",
         ])
         .assert()
         .code(2)
-        .stderr(predicate::str::contains("invalid value 'vcf'"));
+        .stderr(predicate::str::contains("invalid value 'bcf'"));
 }
 
 fn data(name: &str) -> String {

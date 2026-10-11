@@ -280,6 +280,9 @@ pub enum OutputFormat {
     Bed,
     /// JSON, with the detailed signals of every candidate
     Json,
+    /// VCF 4.2, bgzipped and indexed (`.tbi`) when the output file ends with
+    /// `.gz`
+    Vcf,
 }
 
 #[cfg(test)]
@@ -435,7 +438,7 @@ mod tests {
     #[test]
     fn invalid_values_are_rejected() {
         assert_eq!(
-            scan(&["--format", "vcf"]).unwrap_err().kind(),
+            scan(&["--format", "bcf"]).unwrap_err().kind(),
             ErrorKind::InvalidValue
         );
         assert_eq!(

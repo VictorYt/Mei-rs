@@ -1,7 +1,10 @@
-//! Export of the candidates as TSV, BED or JSON.
+//! Export of the candidates as TSV, BED, JSON or VCF ([`vcf`]).
 //!
-//! Positions in TSV and JSON are 1-based: a position `p` means the insertion
-//! lies right after base `p`. The BED output is 0-based half-open.
+//! Positions in TSV, JSON and VCF are 1-based: a position `p` means the
+//! insertion lies right after base `p`. The BED output is 0-based
+//! half-open.
+
+pub mod vcf;
 
 use std::io::{self, Write};
 
@@ -23,6 +26,13 @@ pub struct Report<'a> {
     pub command: &'a str,
     /// Contig names, by header index.
     pub contigs: &'a [String],
+    /// Contig lengths, by header index.
+    pub contig_lengths: &'a [u64],
+    /// Name of the reference file, if any.
+    pub reference: Option<&'a str>,
+    /// Reference base at the position of each candidate (VCF `REF`), with
+    /// the reference.
+    pub reference_bases: Option<&'a [u8]>,
     /// Candidates, sorted by contig and position.
     pub candidates: &'a [Candidate],
 }
@@ -37,6 +47,7 @@ pub fn write(report: &Report<'_>, format: OutputFormat, out: &mut dyn Write) -> 
         OutputFormat::Tsv => write_tsv(report, out),
         OutputFormat::Bed => write_bed(report, out),
         OutputFormat::Json => write_json(report, out),
+        OutputFormat::Vcf => vcf::write_vcf(report, out),
     }
 }
 
@@ -546,6 +557,9 @@ mod tests {
             sample: "s1",
             command: "mei-rs scan",
             contigs: &contigs,
+            contig_lengths: &[100_000],
+            reference: None,
+            reference_bases: None,
             candidates: &candidates,
         };
         let mut out = Vec::new();
