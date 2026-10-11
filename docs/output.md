@@ -102,3 +102,41 @@ of the contig), and a `signals` list. Each signal has:
 | `mate_contig` | `mate_elsewhere` only: contig of the mate. |
 | `insert_length` | `large_insert` only: absolute template length. |
 | `mei_mate` | Mate signals checked against the consensus sequences only: whether the mate is a mobile element of the candidate family. |
+
+## VCF (`--format vcf`)
+
+VCF 4.2, one record per candidate, sorted like the contigs of the alignment
+header (declared in `##contig` lines). With `--output` ending with `.gz`, the
+file is bgzipped and indexed with tabix (`.tbi`; `.csi` for contigs longer
+than 2^29 bp).
+
+| Column | Content |
+|---|---|
+| `CHROM`, `POS` | Contig and `position` (1-based: the insertion is right after this base). |
+| `ID` | `id` (`MEI_1`...). |
+| `REF` | Reference base at `POS` (`N` without `--reference`). |
+| `ALT` | Symbolic allele: `<INS:ME:ALU>`, `<INS:ME:LINE1>`, `<INS:ME:SVA>`, or `<INS:ME>` for an untyped candidate. |
+| `QUAL` | `qual`. |
+| `FILTER` | `PASS`, or the filters separated by `;` (as `filter`). |
+| `INFO` | See below. |
+| `FORMAT`, sample | `GT:GQ:AD:DP`: `genotype` (`./.` without), `gq`, reads of the reference allele (`ref_reads`, once per site) and of the insertion (`alt_reads`), and their sum. The sample is named after the read groups (`SM`) or the file. |
+
+`INFO` fields (each declared in the header):
+
+| Field | Content |
+|---|---|
+| `SVTYPE` | `INS`. |
+| `SVLEN` | `element_end - element_start + 1`: the part of the consensus covered by the reads, a lower bound of the inserted length (typed candidates). |
+| `MEINFO` | `subfamily,element_start,element_end,element_strand` (typed candidates). |
+| `IMPRECISE` | No junction assembled: the junctions are estimated from the soft-clips. |
+| `LEFT_JUNCTION`, `RIGHT_JUNCTION` | `left_junction`, `right_junction`. |
+| `TSD`, `TSD_LEN` | `tsd` (assembled), `tsd_length` (assembled or estimated). |
+| `POLYA_LEN` | `polya_length`. |
+| `ASSEMBLED` | `assembled`. |
+| `CONFIDENCE` | `confidence`, for `PASS` records. |
+| `SUPPORT`, `DISTINCT_STARTS`, `SIGNAL_RATIO` | `support`, `distinct_starts`, `signal_ratio`. |
+| `JUNCTION_CLIPS` | `left_junction_clips,right_junction_clips`. |
+| `TAIL_CLIPS` | `polya_clips,polyt_clips`. |
+| `TYPED_CLIPS` | `typed_clips`. |
+| `MATES` | `unmapped_mates,discordant_mates`. |
+| `MEI_MATES` | `checked_mates,mei_mates`. |

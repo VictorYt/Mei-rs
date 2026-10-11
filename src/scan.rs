@@ -6,12 +6,12 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use noodles::core::{Position, Region};
-use noodles::fasta;
+use noodles::{bgzf, csi, fasta, tabix, vcf};
 use rayon::prelude::*;
 use tracing::{info, warn};
 
 use crate::assembly::{self, Assembly};
-use crate::cli::ScanArgs;
+use crate::cli::{OutputFormat, ScanArgs};
 use crate::cluster::{Candidate, Confidence, Filter, cluster, filters, tracts};
 use crate::genotype::{self, AlleleCounts};
 use crate::inputs::Inputs;
@@ -115,10 +115,25 @@ pub fn run(args: &ScanArgs) -> Result<()> {
     )?;
 
     let command = command_line();
+    let contig_lengths: Vec<u64> = header_contigs.iter().map(|c| c.length).collect();
+    let reference_bases = match (&args.reference, args.format) {
+        (Some(reference), OutputFormat::Vcf) => {
+            Some(reference_bases(&candidates, &header_contigs, reference)?)
+        }
+        _ => None,
+    };
+    let reference_name = args
+        .reference
+        .as_deref()
+        .and_then(Path::file_name)
+        .map(|n| n.to_string_lossy().into_owned());
     let report = Report {
         sample: &inputs.sample,
         command: &command,
         contigs: &contigs,
+        contig_lengths: &contig_lengths,
+        reference: reference_name.as_deref(),
+        reference_bases: reference_bases.as_deref(),
         candidates: &candidates,
     };
     write_output(&report, args)
@@ -437,21 +452,82 @@ fn write_output(report: &Report<'_>, args: &ScanArgs) -> Result<()> {
     let open = |path: &Path| {
         File::create(path).with_context(|| format!("cannot create {}", path.display()))
     };
+    let compressed = args.format == OutputFormat::Vcf
+        && args
+            .output
+            .as_deref()
+            .is_some_and(|p| p.extension().is_some_and(|e| e == "gz"));
     let mut out: Box<dyn Write> = match &args.output {
+        Some(path) if compressed => Box::new(bgzf::io::Writer::new(open(path)?)),
         Some(path) => Box::new(BufWriter::new(open(path)?)),
         None => Box::new(BufWriter::new(io::stdout().lock())),
     };
     writer::write(report, args.format, &mut out)
         .and_then(|()| out.flush())
         .context("cannot write the candidates")?;
+    // The BGZF writer writes its end-of-file block when dropped.
+    drop(out);
     if let Some(path) = &args.output {
         info!(
             "{} candidates written to {}",
             report.candidates.len(),
             path.display()
         );
+        if compressed {
+            index_vcf(path)?;
+        }
     }
     Ok(())
+}
+
+/// Index a bgzipped VCF: tabix (`.tbi`), or CSI (`.csi`) for contigs longer
+/// than 2^29 bp.
+fn index_vcf(path: &Path) -> Result<()> {
+    let index = vcf::fs::index(path).with_context(|| format!("cannot index {}", path.display()))?;
+    let with = |extension: &str| {
+        let mut name = path.as_os_str().to_owned();
+        name.push(extension);
+        std::path::PathBuf::from(name)
+    };
+    let written = match index {
+        vcf::Index::Tabix(index) => {
+            let dst = with(".tbi");
+            tabix::fs::write(&dst, &index).map(|()| dst)
+        }
+        vcf::Index::Csi(index) => {
+            let dst = with(".csi");
+            csi::fs::write(&dst, &index).map(|()| dst)
+        }
+    }
+    .with_context(|| format!("cannot write the index of {}", path.display()))?;
+    info!("index written to {}", written.display());
+    Ok(())
+}
+
+/// Reference base at the position of each candidate (the base right before
+/// the insertion, VCF `REF`).
+fn reference_bases(
+    candidates: &[Candidate],
+    contigs: &[Contig],
+    reference: &Path,
+) -> Result<Vec<u8>> {
+    let mut reader = fasta::io::indexed_reader::Builder::default()
+        .build_from_path(reference)
+        .with_context(|| format!("cannot open the reference {}", reference.display()))?;
+    candidates
+        .iter()
+        .map(|c| {
+            let position = c.breakpoint.max(1);
+            let base = reference_window(
+                &mut reader,
+                reference,
+                &contigs[c.contig].name,
+                position - 1,
+                position,
+            )?;
+            Ok(base.and_then(|b| b.first().copied()).unwrap_or(b'N'))
+        })
+        .collect()
 }
 
 /// The command line, with the program name only (not its path).

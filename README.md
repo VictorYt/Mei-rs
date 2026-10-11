@@ -40,6 +40,10 @@ mei-rs scan \
 
 # CRAM: the reference is required
 mei-rs scan --bam sample.cram --reference genome.fa --bed targets.bed
+
+# VCF, bgzipped and indexed: sample.mei.vcf.gz and sample.mei.vcf.gz.tbi
+mei-rs scan --bam sample.bam --bed targets.bed --reference genome.fa \
+  --format vcf --output sample.mei.vcf.gz
 ```
 
 The candidates are written to standard output unless `--output` is given; the
@@ -88,7 +92,7 @@ skipped with a warning.
 | `--keep-filtered` | off | also write the candidates flagged `no_junction`, `no_tail`, `untyped`, `non_mei_mates`, `tandem_repeat`, `probe_edge`, `low_ratio` or `low_qual` |
 | **Output** | | |
 | `-o`, `--output` | stdout | output file |
-| `--format` | `tsv` | `tsv`, `bed` or `json` (with every signal of every candidate) |
+| `--format` | `tsv` | `tsv`, `bed`, `json` (with every signal of every candidate) or `vcf` (VCF 4.2; bgzipped and indexed, `.tbi`, when `--output` ends with `.gz`) |
 | **Global** | | |
 | `-t`, `--threads` | all cores | worker threads |
 | `-v`, `-q` | | more (`-v`, `-vv`) or fewer (`-q`) logs; `RUST_LOG` takes precedence |

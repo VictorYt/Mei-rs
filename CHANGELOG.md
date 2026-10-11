@@ -56,6 +56,11 @@ project follows [Semantic Versioning](https://semver.org/).
   and `ref_reads`.
 - Fixture `homozygous` (BAM and CRAM): the Alu insertion on both haplotypes.
   (#34)
+- VCF output (#35): `--format vcf`, VCF 4.2 with symbolic alleles
+  (`<INS:ME:ALU>`, `<INS:ME:LINE1>`, `<INS:ME:SVA>`, `<INS:ME>`), `MEINFO`,
+  `SVLEN`, `TSD`, `POLYA_LEN`, confidence and support counts in `INFO`,
+  `GT:GQ:AD:DP`, the quality score as `QUAL` and the filters as `FILTER`;
+  bgzipped and indexed (`.tbi`) when `--output` ends with `.gz`.
 - Quality score (#34): column `qual`, the phred-scaled probability that a
   candidate is not an insertion, from its evidence (naive Bayes with
   likelihood ratios measured on the HGSVC3 exomes); `low_qual` filter below
