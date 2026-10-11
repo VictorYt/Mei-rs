@@ -11,9 +11,10 @@ the artefacts specific to capture data, such as soft-clips that stop at the
 probe edges.
 
 > **Status: v0.2 in progress.** `mei-rs scan` finds candidate insertion
-> sites, their junctions, target site duplication (TSD), strand and element
-> (family, subfamily). Local assembly, genotyping and VCF output come in the
-> next releases (see [Limitations](#limitations)).
+> sites, types the element (family, subfamily, strand), assembles the
+> junctions (TSD, poly(A) tail), genotypes and scores the candidates, and
+> writes TSV, BED, JSON or VCF. Precision and recall on real exomes are in
+> [Accuracy and limitations](#accuracy-and-limitations).
 
 ## Installation
 
@@ -177,54 +178,42 @@ MEI_1  chr1    10012     10012          10000           12          +       PASS
 Every column of the TSV, BED and JSON formats is described in
 [docs/output.md](docs/output.md).
 
-## Limitations
+## Accuracy and limitations
 
-v0.1.0 found candidate sites but was not specific on real data. On the
-NA12878 exome of the 1000 Genomes Project (GRCh38, 172 million reads,
-1000 Genomes exome targets), it wrote 56,956 `PASS` candidates, mostly
-clusters of unmapped mates or of mates on another contig without any soft-clip
-junction, while a few dozen insertions are expected in the targets.
+Measured against the HGSVC3 MEI calls (long-read assemblies) on seven 1000
+Genomes exomes and on HG002 (held out), with the method and commands in
+[docs/validation](docs/validation/README.md) (#26):
 
-Since #22, a `PASS` candidate needs soft-clips at its junctions
-(`no_junction`), and since #30, at least two of them typed to an Alu, LINE-1
-or SVA consensus (`untyped`): the poly(A/T) tail, often missed by short reads,
-only sets the confidence level. With `--reference`, the `tandem_repeat` filter
-(#42) rejects the longer poly(A) tracts of reference Alus, whose clips have a
-tail and junctions that overlap like a TSD. On the same exome: v0.1.1 wrote
-317 `PASS` (2 `high`, 315 `medium`), this version **40** (1 `high`, 4
-`medium`, 35 `low`). `high` and `medium` candidates (typed, with a tail) are
-the most reliable; `low` ones (typed clips without a tail) still include
-artefacts until the mates are checked against MEI sequences (#31).
+| | Precision | Recall (`PASS`) |
+|---|---|---|
+| Seven 1000 Genomes exomes, 371 MEIs | 0.669 | 0.245 |
+| Same, `--min-qual 5` | 0.897 | 0.210 |
+| HG002 (GRCh37), 49 MEIs | 0.364 | 0.245 |
+| Scramble 1.0.2, seven exomes | 0.687 | 0.154 |
+
+Recall counts every MEI within 300 bp of a target: 18 of the 36 MEIs inside
+the targets are called `PASS`, against 26 of the 240 at 101-300 bp from them.
+`high` and `medium` candidates (with a tail) are the most reliable (43 true of
+48); most false positives are `low` (no tail): use `--min-qual` (0 by default)
+to trade recall for precision.
 
 Other limitations:
 
-- No local assembly, genotype or VCF yet.
-- Typing uses the junction soft-clips only: a candidate whose clips are
-  shorter than 15 bases (without their tail) stays untyped. Close subfamilies
-  (e.g. AluY and AluYa5) are often not told apart, and the middle of LINE-1
-  (most of ORF2) is not in the default Dfam set.
+- Typing uses the junction soft-clips (15 bases or more without their tail),
+  not the assembled contigs. Close subfamilies (e.g. AluY and AluYa5) are
+  often not told apart, and the middle of LINE-1 (most of ORF2) is not in the
+  default Dfam set: a 5'-truncated LINE-1 whose 5' junction falls there stays
+  `untyped`.
+- Assembly needs `--reference`, and few exome candidates have both junctions
+  assembled; otherwise the TSD comes from the soft-clip junctions.
+- The genotype under-counts insertion reads (clips of 15 good bases): it
+  assumes 30% of them at a heterozygous site; 76 of 91 true calls are right.
 - Candidates closer than `--window` are merged into one.
-- The TSD length comes from the soft-clip junctions only, and the length of a
-  poly(A/T) tail is approximate (it can extend over a few bases after it).
-- On older data, most soft-clips fall below `--min-clip-quality`: 2.9 million
-  set aside against 105,000 kept on NA12878. They are not lost junctions:
-  93% have no base at the threshold (read ends masked by the base caller,
-  soft-clipped because they mismatch the reference), and trimming the
-  low-quality read end, as BWA `-q` does, would rescue 0.05% of them (chr1).
-  The log reports both counts (#25).
+- On older data, most soft-clips fall below `--min-clip-quality` (read ends
+  masked by the base caller); the log reports how many are set aside (#25).
 - CRAM is slower than BAM: decoding its blocks costs more than reading BAM
-  (NA12878 on 12 cores, same output: BAM 66 s and 1.2 GB, CRAM 124 s; CRAM
-  was 507 s and 6.5 GB before #24). On macOS, the allocator keeps the freed
-  reference sequences in memory (3.8 GB, 1.4 GB with `MallocLargeCache=0`).
-
-### Next steps (v0.2.0)
-
-- Mates checked against the MEI consensus sequences (#31), so that the `low`
-  level gets specific.
-- Short soft-clips of 2x75 bp reads (#32), local assembly of the junctions
-  and TSD (#33), scoring and genotype (#34), VCF output (#35).
-- Precision and recall against truth sets (HGSVC, GIAB HG002) and comparison
-  with Scramble, MELT and xTea (#26).
+  (NA12878 on 12 cores, same output: BAM 66 s and 1.2 GB, CRAM 124 s). On
+  macOS, the allocator keeps the freed reference sequences in memory.
 
 Calls are research results: confirm them with an orthogonal method before any
 clinical use.

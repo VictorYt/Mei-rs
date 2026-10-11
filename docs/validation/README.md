@@ -1,0 +1,204 @@
+# Validation against truth sets
+
+Precision and recall of `mei-rs scan` on real exomes, measured against mobile
+element insertions called from long-read assemblies, and comparison with
+Scramble on the same exomes (issue #26).
+
+## Truth set
+
+HGSVC3 MEI calls against GRCh38 (Logsdon et al., *Complex genetic variation in
+nearly complete human genomes*, Nature 2025): 12,642 non-reference insertions
+(Alu 10,270, L1 1,604, SVA 764, other 4) called with L1ME-AID and PALMER on
+phased assemblies of 65 samples, with a genotype per haplotype.
+
+```bash
+B=https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/HGSVC3/release/Mobile_Elements/1.0
+curl -O $B/MEI_Callset_GRCh38.ALL.20241211.csv.gz   # md5 0131ecb529c9225dab677aced8d72b0a
+```
+
+Exomes:
+
+* seven 1000 Genomes exomes with HGSVC3 genotypes: HG00512, HG00513, HG00731,
+  HG00733, NA19238, NA19239, NA19240 (GRCh38 alignments of the 1000 Genomes
+  GRCh38 exome collection, 76 to 101 bp reads; 371 truth MEIs in the padded
+  targets);
+* HG002 (`NA24385` in the truth set): GIAB exome aligned to GRCh37 (hs37d5);
+  the truth positions are lifted to GRCh37 with the UCSC `hg38ToHg19` chain
+  (12,620 of 12,642 lifted; 49 truth MEIs in the padded targets). HG002 was
+  not used to fit anything (the quality score of #34 was fitted on the seven
+  1000 Genomes exomes), so it is a held-out sample.
+
+Capture targets: the 1000 Genomes exome pull-down targets
+(`20130108.exome.targets.bed`, GRCh37) for HG002, and the same targets lifted
+to GRCh38 with CrossMap and the UCSC `hg19ToHg38` chain for the 1000 Genomes
+exomes, keeping the targets mapped in one piece (99.4%).
+
+## Method
+
+```bash
+mei-rs scan --bam SAMPLE.exome.bam --bed exome_targets.hg38.bed \
+  --reference GRCh38_full_analysis_set_plus_decoy_hla.fa --keep-filtered -o SAMPLE.tsv
+python3 docs/validation/evaluate.py \
+  --truth MEI_Callset_GRCh38.ALL.20241211.csv.gz --bed exome_targets.hg38.bed \
+  --min-qual 0,2,5,10,15 \
+  HG00512=HG00512.tsv HG00513=HG00513.tsv ...
+
+# HG002 (GRCh37): lift the truth set with a UCSC chain file
+curl -O https://hgdownload.soe.ucsc.edu/goldenPath/hg38/liftOver/hg38ToHg19.over.chain.gz
+python3 docs/validation/evaluate.py \
+  --truth MEI_Callset_GRCh38.ALL.20241211.csv.gz --bed exome_targets.GRCh37.bed \
+  --chain hg38ToHg19.over.chain.gz NA24385=HG002.tsv
+```
+
+`evaluate.py` (Python standard library only; `--help` for the options):
+
+* keeps the truth MEIs whose insertion point lies in a target padded by
+  `--padding` (300 bp, as `scan`), after the liftover with `--chain`; a truth
+  MEI belongs to a sample when one haplotype carries it; contig names are
+  compared without a leading `chr`;
+* reads the calls from a `mei-rs scan` TSV (`--keep-filtered`, for the recall
+  of filtered candidates) or from a VCF of `mei-rs` or of another caller
+  (`FILTER` `PASS` or `.` passes); calls outside the padded targets are left
+  out (other callers scan the whole alignment file);
+* matches a call to a truth MEI of the same sample when its position, left
+  junction or right junction is within `--tolerance` (20 bp) of the truth
+  position (both 1-based, insertion right after the position);
+* precision: PASS calls matching a truth MEI of the sample, over PASS calls
+  matching it or no MEI of any HGSVC3 sample (calls near an MEI of another
+  sample, or of a sample with a missing haplotype, are counted apart);
+* recall: truth MEIs of the sample matched by a PASS call (`recall_pass`) or
+  by any candidate, filtered or not (`recall_any`), also by distance to the
+  unpadded target and by family;
+* genotype concordance of the true PASS calls, and precision and recall of the
+  PASS calls above each `--min-qual` threshold;
+* `--fp-out` and `--fn-out` list the PASS false positives and the missed MEIs.
+
+## Results
+
+v0.2.0 (`develop` after #35), default options with `--reference`.
+
+| Sample | Truth MEIs | PASS | True PASS | Precision | Recall (PASS) | Recall (any) |
+|---|---|---|---|---|---|---|
+| HG00512 | 49 | 24 | 15 | 0.652 | 0.306 | 0.429 |
+| HG00513 | 45 | 24 | 16 | 0.667 | 0.356 | 0.467 |
+| HG00731 | 45 | 10 | 6 | 0.600 | 0.133 | 0.244 |
+| HG00733 | 45 | 15 | 9 | 0.643 | 0.200 | 0.311 |
+| NA19238 | 59 | 27 | 21 | 0.778 | 0.356 | 0.678 |
+| NA19239 | 60 | 20 | 12 | 0.632 | 0.200 | 0.300 |
+| NA19240 | 68 | 19 | 12 | 0.632 | 0.176 | 0.412 |
+| **All seven** | **371** | **139** | **91** | **0.669** | **0.245** | **0.412** |
+| HG002 (held out) | 49 | 33 | 12 | 0.364 | 0.245 | 0.408 |
+
+(Precision is true PASS over true and false PASS; 3 PASS calls of the seven
+exomes are near an MEI of another sample or of a missing haplotype.)
+
+By confidence (seven exomes): `high` 12 true of 13, `medium` 31 of 35, `low`
+48 of 91. HG002: `high` 1 of 2, `medium` 3 of 6, `low` 8 of 25.
+
+Recall by distance of the truth MEI to the unpadded target (seven exomes):
+
+| Distance | Any candidate | PASS |
+|---|---|---|
+| inside the target | 32 / 36 | 18 / 36 |
+| 1-100 bp | 71 / 95 | 47 / 95 |
+| 101-300 bp | 50 / 240 | 26 / 240 |
+
+Recall (PASS) by family: Alu 82 / 325, L1 6 / 32, SVA 3 / 14.
+
+Genotypes of the true PASS calls: 76 of 91 right (heterozygous called `0/1`
+53 of 67, homozygous called `1/1` 23 of 24); HG002 8 of 12.
+
+### Quality threshold
+
+`--min-qual` is 0 (off) by default. PASS calls with `qual` at or above a
+threshold:
+
+| `--min-qual` | Seven exomes: true / false | Precision | Recall | HG002: true / false | Precision | Recall |
+|---|---|---|---|---|---|---|
+| 0 (default) | 91 / 45 | 0.669 | 0.245 | 12 / 21 | 0.364 | 0.245 |
+| 2 | 90 / 17 | 0.841 | 0.243 | 12 / 11 | 0.522 | 0.245 |
+| 5 | 78 / 9 | 0.897 | 0.210 | 9 / 7 | 0.562 | 0.184 |
+| 10 | 48 / 4 | 0.923 | 0.129 | 6 / 6 | 0.500 | 0.122 |
+| 15 | 19 / 0 | 1.000 | 0.051 | 1 / 1 | 0.500 | 0.020 |
+
+The score was fitted on the seven exomes, so their rows are in sample; HG002
+is not. On both, a threshold of 2 removes more than half of the false
+positives for at most one true call.
+
+### Remaining errors
+
+* False positives are mostly `low` (no poly(A/T) tail): 42 of the 45 of the
+  seven exomes, 17 of the 21 of HG002 (14 of these 17 are called `1/1`).
+* Recall is limited by coverage in the padding: 18 of 36 truth MEIs inside
+  the targets are called PASS, 26 of 240 at 101-300 bp from them.
+* LINE-1: the Dfam LINE-1 models are split into a 5' end (`L1HS_5end`,
+  2.1 kb) and a 3' end (`L1*_3end`, 0.9 kb), without the middle of ORF2. A
+  5'-truncated LINE-1 whose 5' junction falls in ORF2 has clips that match no
+  model and stays `untyped` (chr22:43928710 in six samples, chr11:112213886 in
+  two, found by Scramble).
+
+## Comparison with Scramble
+
+[Scramble](https://github.com/GeneDx/scramble) 1.0.2 (GeneDx, commit
+`14806b4`), the MEI caller designed for exomes, on the same BAM files:
+`cluster_identifier` then `SCRAMble.R --eval-meis --ref`, default options,
+PASS records of its VCF.
+
+| | PASS | True | False | Precision | Recall (PASS) | HG002: true / false | HG002 recall |
+|---|---|---|---|---|---|---|---|
+| Scramble | 84 | 57 | 26 | 0.687 | 0.154 | 6 / 5 | 0.122 |
+| `mei-rs` (default) | 139 | 91 | 45 | 0.669 | 0.245 | 12 / 21 | 0.245 |
+| `mei-rs --min-qual 5` | 87 | 78 | 9 | 0.897 | 0.210 | 9 / 7 | 0.184 |
+
+Of the 371 truth MEIs of the seven exomes, 99 are called PASS by either tool:
+49 by both, 42 by `mei-rs` only, 8 by Scramble only (all LINE-1, the two
+untyped sites above). Recall by family: Scramble Alu 45 / 325, L1 10 / 32,
+SVA 2 / 14. Scramble does not genotype.
+
+Run time and memory, both tools one after the other in the same Linux arm64
+container (Docker on an Apple M5 Pro, 18 cores; alignment files on an
+external USB SSD). `mei-rs` writes the VCF (PASS only); its wall time uses all
+cores, Scramble is single-threaded (`cluster_identifier`, then R):
+
+| Sample | `mei-rs` wall | CPU | Max RSS | Scramble wall | CPU | Max RSS |
+|---|---|---|---|---|---|---|
+| HG00512 | 38 s | 314 s | 0.6 GB | 139 s | 137 s | 3.6 GB |
+| HG00513 | 44 s | 396 s | 0.7 GB | 129 s | 127 s | 3.5 GB |
+| HG00731 | 159 s | 1,283 s | 1.7 GB | 849 s | 843 s | 4.1 GB |
+| HG00733 | 60 s | 520 s | 1.2 GB | 59 s | 58 s | 3.5 GB |
+| NA19238 | 87 s | 743 s | 1.0 GB | 136 s | 132 s | 3.6 GB |
+| NA19239 | 30 s | 279 s | 0.5 GB | 55 s | 53 s | 3.5 GB |
+| NA19240 | 52 s | 449 s | 0.8 GB | 74 s | 72 s | 3.5 GB |
+| HG002 | 93 s | 655 s | 1.5 GB | 118 s | 115 s | 3.5 GB |
+
+`mei-rs` is 1 to 5 times faster in wall time on 18 cores, but uses 1.5 to 9
+times more CPU time; Scramble's memory is mostly the reference genome loaded
+by R. Scramble's time grows with its clusters (HG00731: 261,677 clusters,
+most of its time in R).
+
+Scramble has no Linux arm64 package: it was built from source (Ubuntu 22.04,
+htslib 1.13, R 4.1, Biostrings 2.62) without `rBLAST`, which only deletion
+calling needs; `cluster_identifier` gives the same clusters as the bioconda
+amd64 build on a test region.
+
+Not compared yet: MELT (download requires a licence registration) and xTea
+(packaged for amd64 only, with scikit-learn 0.18; under emulation its run time
+would not be comparable).
+
+## History
+
+Same seven exomes, PASS calls:
+
+| Version | PASS | True | Precision | Recall (PASS) | `high` true / all |
+|---|---|---|---|---|---|
+| after #24 (v0.1.1 baseline) | 2,392 | 60 | 0.025 | 0.162 | 5 / 84 |
+| #42 `tandem_repeat` (v0.1.1) | 2,002 | 58 | 0.029 | 0.156 | 5 / 24 |
+| #30 typing | 216 | 72 | 0.338 | 0.194 | 5 / 6 |
+| #31 MEI mates | 110 | 70 | 0.654 | 0.189 | 5 / 6 |
+| #32 short clips | 140 | 91 | 0.664 | 0.245 | 9 / 10 |
+| #33 assembly, #34 score, #35 VCF (v0.2.0) | 139 | 91 | 0.669 | 0.245 | 12 / 13 |
+
+Before typing, most false positives were poly(A) length variants of reference
+Alus (`high`) and background unmapped mates of the deep samples (`medium`):
+#42 and #31 address them. The last row leaves out one PASS call outside the
+padded targets, counted before the evaluation restricted the calls to them.
