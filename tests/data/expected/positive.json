@@ -39,6 +39,8 @@
       "element_end": null,
       "identity": null,
       "typed_clips": 0,
+      "checked_mates": 0,
+      "mei_mates": 0,
       "signals": [
         {
           "kind": "soft_clip",
@@ -216,6 +218,8 @@
       "element_end": 1375,
       "identity": 0.998,
       "typed_clips": 50,
+      "checked_mates": 40,
+      "mei_mates": 39,
       "signals": [
         {
           "kind": "mate_unmapped",
@@ -226,7 +230,8 @@
           "strand": "+",
           "read_start": 5765,
           "read_end": 5864,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -270,7 +275,8 @@
           "strand": "+",
           "read_start": 5789,
           "read_end": 5888,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -303,7 +309,8 @@
           "strand": "+",
           "read_start": 5800,
           "read_end": 5899,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -336,7 +343,8 @@
           "strand": "+",
           "read_start": 5805,
           "read_end": 5904,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -369,7 +377,8 @@
           "strand": "+",
           "read_start": 5816,
           "read_end": 5915,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -413,7 +422,8 @@
           "strand": "+",
           "read_start": 5838,
           "read_end": 5937,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -446,7 +456,8 @@
           "strand": "+",
           "read_start": 5841,
           "read_end": 5940,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -479,7 +490,8 @@
           "strand": "+",
           "read_start": 5856,
           "read_end": 5955,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -512,7 +524,8 @@
           "strand": "+",
           "read_start": 5863,
           "read_end": 5962,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -556,7 +569,8 @@
           "strand": "+",
           "read_start": 5873,
           "read_end": 5972,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -589,7 +603,8 @@
           "strand": "+",
           "read_start": 5895,
           "read_end": 5994,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -637,7 +652,8 @@
           "strand": "-",
           "read_start": 6001,
           "read_end": 6059,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -700,7 +716,8 @@
           "strand": "-",
           "read_start": 6001,
           "read_end": 6098,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -774,7 +791,8 @@
           "strand": "-",
           "read_start": 6001,
           "read_end": 6094,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -852,7 +870,8 @@
           "strand": "-",
           "read_start": 6001,
           "read_end": 6033,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -930,7 +949,8 @@
           "strand": "-",
           "read_start": 6001,
           "read_end": 6029,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -1008,7 +1028,8 @@
           "strand": "-",
           "read_start": 6001,
           "read_end": 6049,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -1097,7 +1118,8 @@
           "strand": "-",
           "read_start": 6001,
           "read_end": 6072,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -1160,7 +1182,8 @@
           "strand": "-",
           "read_start": 6001,
           "read_end": 6077,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -1208,7 +1231,8 @@
           "strand": "+",
           "read_start": 5902,
           "read_end": 6001,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -1241,7 +1265,8 @@
           "strand": "+",
           "read_start": 5910,
           "read_end": 6009,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -1383,7 +1408,8 @@
           "strand": "+",
           "read_start": 5966,
           "read_end": 6010,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -1472,7 +1498,8 @@
           "strand": "+",
           "read_start": 5967,
           "read_end": 6010,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -1533,7 +1560,8 @@
           "strand": "+",
           "read_start": 5916,
           "read_end": 6010,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -1608,7 +1636,8 @@
           "strand": "+",
           "read_start": 5980,
           "read_end": 6010,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -1736,7 +1765,8 @@
           "strand": "+",
           "read_start": 5947,
           "read_end": 6010,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -1797,7 +1827,8 @@
           "strand": "+",
           "read_start": 5919,
           "read_end": 6010,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -1900,7 +1931,8 @@
           "strand": "+",
           "read_start": 5941,
           "read_end": 6010,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -1989,7 +2021,8 @@
           "strand": "+",
           "read_start": 5957,
           "read_end": 6010,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -2117,7 +2150,8 @@
           "strand": "-",
           "read_start": 6012,
           "read_end": 6111,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -2150,7 +2184,8 @@
           "strand": "-",
           "read_start": 6013,
           "read_end": 6112,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -2183,7 +2218,8 @@
           "strand": "-",
           "read_start": 6027,
           "read_end": 6126,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -2216,7 +2252,8 @@
           "strand": "-",
           "read_start": 6031,
           "read_end": 6130,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -2260,7 +2297,8 @@
           "strand": "-",
           "read_start": 6041,
           "read_end": 6140,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -2293,7 +2331,8 @@
           "strand": "-",
           "read_start": 6051,
           "read_end": 6150,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -2326,7 +2365,8 @@
           "strand": "-",
           "read_start": 6058,
           "read_end": 6157,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -2359,7 +2399,8 @@
           "strand": "-",
           "read_start": 6065,
           "read_end": 6164,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -2403,7 +2444,8 @@
           "strand": "-",
           "read_start": 6075,
           "read_end": 6174,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": false
         },
         {
           "kind": "mate_unmapped",
@@ -2436,7 +2478,8 @@
           "strand": "-",
           "read_start": 6087,
           "read_end": 6186,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -2469,7 +2512,8 @@
           "strand": "-",
           "read_start": 6097,
           "read_end": 6196,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -2529,6 +2573,8 @@
       "element_end": 288,
       "identity": 0.998,
       "typed_clips": 61,
+      "checked_mates": 4,
+      "mei_mates": 4,
       "signals": [
         {
           "kind": "mate_unmapped",
@@ -2539,7 +2585,8 @@
           "strand": "+",
           "read_start": 9757,
           "read_end": 9856,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -2583,7 +2630,8 @@
           "strand": "+",
           "read_start": 9800,
           "read_end": 9899,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_low_mapq",
@@ -4247,7 +4295,8 @@
           "strand": "+",
           "read_start": 9964,
           "read_end": 10012,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -5107,7 +5156,8 @@
           "strand": "-",
           "read_start": 10089,
           "read_end": 10188,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_low_mapq",
@@ -5169,6 +5219,8 @@
       "element_end": 902,
       "identity": 0.999,
       "typed_clips": 54,
+      "checked_mates": 40,
+      "mei_mates": 39,
       "signals": [
         {
           "kind": "mate_unmapped",
@@ -5179,7 +5231,8 @@
           "strand": "+",
           "read_start": 14786,
           "read_end": 14885,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -5212,7 +5265,8 @@
           "strand": "+",
           "read_start": 14805,
           "read_end": 14904,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": false
         },
         {
           "kind": "mate_unmapped",
@@ -5245,7 +5299,8 @@
           "strand": "+",
           "read_start": 14813,
           "read_end": 14912,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -5278,7 +5333,8 @@
           "strand": "+",
           "read_start": 14825,
           "read_end": 14924,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -5311,7 +5367,8 @@
           "strand": "+",
           "read_start": 14834,
           "read_end": 14933,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -5344,7 +5401,8 @@
           "strand": "+",
           "read_start": 14848,
           "read_end": 14947,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -5377,7 +5435,8 @@
           "strand": "+",
           "read_start": 14857,
           "read_end": 14956,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -5410,7 +5469,8 @@
           "strand": "+",
           "read_start": 14859,
           "read_end": 14958,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -5443,7 +5503,8 @@
           "strand": "+",
           "read_start": 14875,
           "read_end": 14974,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -5476,7 +5537,8 @@
           "strand": "+",
           "read_start": 14886,
           "read_end": 14985,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -5509,7 +5571,8 @@
           "strand": "+",
           "read_start": 14894,
           "read_end": 14993,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -5570,7 +5633,8 @@
           "strand": "-",
           "read_start": 15001,
           "read_end": 15020,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -5659,7 +5723,8 @@
           "strand": "-",
           "read_start": 15001,
           "read_end": 15027,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -5720,7 +5785,8 @@
           "strand": "-",
           "read_start": 15001,
           "read_end": 15022,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -5781,7 +5847,8 @@
           "strand": "-",
           "read_start": 15001,
           "read_end": 15061,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -5856,7 +5923,8 @@
           "strand": "-",
           "read_start": 15001,
           "read_end": 15076,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -5917,7 +5985,8 @@
           "strand": "-",
           "read_start": 15001,
           "read_end": 15084,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -5992,7 +6061,8 @@
           "strand": "-",
           "read_start": 15001,
           "read_end": 15066,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -6053,7 +6123,8 @@
           "strand": "-",
           "read_start": 15001,
           "read_end": 15094,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -6114,7 +6185,8 @@
           "strand": "-",
           "read_start": 15001,
           "read_end": 15066,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -6175,7 +6247,8 @@
           "strand": "-",
           "read_start": 15001,
           "read_end": 15054,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -6208,7 +6281,8 @@
           "strand": "-",
           "read_start": 15009,
           "read_end": 15108,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -6271,7 +6345,8 @@
           "strand": "+",
           "read_start": 14996,
           "read_end": 15015,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -6379,7 +6454,8 @@
           "strand": "+",
           "read_start": 14987,
           "read_end": 15015,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -6472,7 +6548,8 @@
           "strand": "+",
           "read_start": 14951,
           "read_end": 15015,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -6580,7 +6657,8 @@
           "strand": "+",
           "read_start": 14963,
           "read_end": 15015,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -6658,7 +6736,8 @@
           "strand": "+",
           "read_start": 14986,
           "read_end": 15015,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -6751,7 +6830,8 @@
           "strand": "+",
           "read_start": 14925,
           "read_end": 15015,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -6874,7 +6954,8 @@
           "strand": "+",
           "read_start": 14937,
           "read_end": 15015,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -6982,7 +7063,8 @@
           "strand": "+",
           "read_start": 14945,
           "read_end": 15015,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -7075,7 +7157,8 @@
           "strand": "+",
           "read_start": 14951,
           "read_end": 15015,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -7153,7 +7236,8 @@
           "strand": "+",
           "read_start": 14916,
           "read_end": 15015,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "soft_clip",
@@ -7246,7 +7330,8 @@
           "strand": "+",
           "read_start": 14919,
           "read_end": 15015,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -7279,7 +7364,8 @@
           "strand": "-",
           "read_start": 15031,
           "read_end": 15130,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -7312,7 +7398,8 @@
           "strand": "-",
           "read_start": 15038,
           "read_end": 15137,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -7345,7 +7432,8 @@
           "strand": "-",
           "read_start": 15047,
           "read_end": 15146,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -7378,7 +7466,8 @@
           "strand": "-",
           "read_start": 15062,
           "read_end": 15161,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -7411,7 +7500,8 @@
           "strand": "-",
           "read_start": 15077,
           "read_end": 15176,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -7444,7 +7534,8 @@
           "strand": "-",
           "read_start": 15086,
           "read_end": 15185,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -7477,7 +7568,8 @@
           "strand": "-",
           "read_start": 15090,
           "read_end": 15189,
-          "mapq": 60
+          "mapq": 60,
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -7500,6 +7592,159 @@
           "read_start": 15100,
           "read_end": 15199,
           "mapq": 60
+        }
+      ]
+    },
+    {
+      "id": "MEI_5",
+      "contig": "chr2",
+      "position": 4150,
+      "left_junction": 4150,
+      "right_junction": null,
+      "tsd_length": null,
+      "strand": ".",
+      "filter": [
+        "non_mei_mates"
+      ],
+      "confidence": null,
+      "support": 9,
+      "left_clips": 0,
+      "right_clips": 3,
+      "left_junction_clips": 3,
+      "right_junction_clips": 0,
+      "unmapped_mates": 6,
+      "discordant_mates": 0,
+      "polya_clips": 0,
+      "polyt_clips": 0,
+      "both_sides": false,
+      "distinct_starts": 7,
+      "depth": 94,
+      "signal_ratio": 0.096,
+      "start": 4107,
+      "end": 4150,
+      "family": "ALU",
+      "subfamily": "AluY",
+      "element_strand": "+",
+      "element_start": 1,
+      "element_end": 25,
+      "identity": 1.0,
+      "typed_clips": 3,
+      "checked_mates": 6,
+      "mei_mates": 0,
+      "signals": [
+        {
+          "kind": "mate_unmapped",
+          "position": 4107,
+          "side": "right",
+          "read": "positive_chimera_6",
+          "segment": 1,
+          "strand": "+",
+          "read_start": 4008,
+          "read_end": 4107,
+          "mapq": 60,
+          "mei_mate": false
+        },
+        {
+          "kind": "mate_unmapped",
+          "position": 4117,
+          "side": "right",
+          "read": "positive_chimera_4",
+          "segment": 2,
+          "strand": "+",
+          "read_start": 4018,
+          "read_end": 4117,
+          "mapq": 60,
+          "mei_mate": false
+        },
+        {
+          "kind": "mate_unmapped",
+          "position": 4122,
+          "side": "right",
+          "read": "positive_chimera_1",
+          "segment": 1,
+          "strand": "+",
+          "read_start": 4023,
+          "read_end": 4122,
+          "mapq": 60,
+          "mei_mate": false
+        },
+        {
+          "kind": "mate_unmapped",
+          "position": 4126,
+          "side": "right",
+          "read": "positive_chimera_5",
+          "segment": 1,
+          "strand": "+",
+          "read_start": 4027,
+          "read_end": 4126,
+          "mapq": 60,
+          "mei_mate": false
+        },
+        {
+          "kind": "mate_unmapped",
+          "position": 4140,
+          "side": "right",
+          "read": "positive_chimera_3",
+          "segment": 2,
+          "strand": "+",
+          "read_start": 4041,
+          "read_end": 4140,
+          "mapq": 60,
+          "mei_mate": false
+        },
+        {
+          "kind": "mate_unmapped",
+          "position": 4145,
+          "side": "right",
+          "read": "positive_chimera_2",
+          "segment": 1,
+          "strand": "+",
+          "read_start": 4046,
+          "read_end": 4145,
+          "mapq": 60,
+          "mei_mate": false
+        },
+        {
+          "kind": "soft_clip",
+          "position": 4150,
+          "side": "right",
+          "read": "positive_chimera_clip_1",
+          "segment": 2,
+          "strand": "+",
+          "read_start": 4076,
+          "read_end": 4150,
+          "mapq": 60,
+          "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTG",
+          "median_quality": 35,
+          "supplementary": false
+        },
+        {
+          "kind": "soft_clip",
+          "position": 4150,
+          "side": "right",
+          "read": "positive_chimera_clip_2",
+          "segment": 2,
+          "strand": "+",
+          "read_start": 4076,
+          "read_end": 4150,
+          "mapq": 60,
+          "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTG",
+          "median_quality": 32,
+          "supplementary": false
+        },
+        {
+          "kind": "soft_clip",
+          "position": 4150,
+          "side": "right",
+          "read": "positive_chimera_clip_3",
+          "segment": 1,
+          "strand": "+",
+          "read_start": 4076,
+          "read_end": 4150,
+          "mapq": 60,
+          "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTG",
+          "median_quality": 34,
+          "supplementary": false
         }
       ]
     }

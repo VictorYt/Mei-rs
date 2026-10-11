@@ -8,7 +8,8 @@ Writes, into the directory given as the only argument:
 - targets_tract.bed: one target around a reference poly(A) tract on chr2;
 - positive.sam: heterozygous Alu, LINE-1 and SVA insertions with a TSD and a
   poly(A) tail on chr1, a probe-edge artefact, a few marked PCR duplicates,
-  and a heterozygous expansion of the chr2 poly(A) tract;
+  a heterozygous expansion of the chr2 poly(A) tract, and a chimeric
+  junction with Alu clips and random unmapped mates on chr2;
 - negative.sam: same targets, without the insertions;
 - truth.tsv: the simulated insertions.
 
@@ -88,6 +89,8 @@ INSERTIONS = [
 # The Alu insertion, used by the tiled targets below.
 INS_POS = INSERTIONS[0].pos
 TSD_LEN = INSERTIONS[0].tsd_len
+# Chimeric junction of `positive` (random clips and mates), in target_negative.
+CHIMERA_JUNCTION = 4150
 # Probe whose start produces artefactual soft-clips.
 PROBE_EDGE = ("chr1", 3000)
 TARGETS = [
@@ -280,7 +283,7 @@ class Writer:
     def close(self):
         self.out.close()
 
-    def pair(self, left, right, duplicate=False):
+    def pair(self, left, right, duplicate=False, name=None):
         """Write a fragment. `left` and `right` are (mapping, sequence) on the
         forward strand of the haplotype; `right` is sequenced in reverse."""
         (lmap, lseq), (rmap, rseq) = left, right
@@ -288,7 +291,7 @@ class Writer:
             return
         rmap.reverse = True
         self.count += 1
-        name = f"{self.sample}_{self.count:05d}"
+        name = name or f"{self.sample}_{self.count:05d}"
         forward_first = self.rng.random() < 0.5
         reads = [(lmap, lseq), (rmap, rseq)]
         quals = [qualities(self.rng, len(lseq)), qualities(self.rng, len(rseq))]
@@ -385,6 +388,27 @@ def probe_edge_artefact(rng, reference, writer, count=10):
         writer.pair(left, right)
 
 
+def chimeras(rng, reference, writer, count=6):
+    """A chimeric junction in `target_negative` (chr2:4150): reads soft-clipped
+    with the first 25 bases of the Alu (typed), and fragments whose mate is
+    unmapped and random (chimeric or adapter sequence). Its mates are checked
+    (it is typed and has junction clips) and none is a mobile element."""
+    seq = reference["chr2"]
+    junction = CHIMERA_JUNCTION
+    for i in range(3):
+        start = junction - (READ_LEN - 25)
+        anchored = seq[start:junction]
+        left = (Mapping("chr2", start, f"{READ_LEN - 25}M25S", 60), anchored + ALU[:25])
+        rstart = start + 150 + rng.below(50)
+        right = (Mapping("chr2", rstart, f"{READ_LEN}M", 60), sequencing_errors(rng, seq[rstart : rstart + READ_LEN]))
+        writer.pair(left, right, name=f"{writer.sample}_chimera_clip_{i + 1}")
+    for i in range(count):
+        start = junction - READ_LEN - rng.below(60)
+        left = (Mapping("chr2", start, f"{READ_LEN}M", 60), sequencing_errors(rng, seq[start : start + READ_LEN]))
+        right = (Mapping(), rng.sequence(READ_LEN))
+        writer.pair(left, right, name=f"{writer.sample}_chimera_{i + 1}")
+
+
 def main(out_dir):
     rng = Rng(SEED)
     reference = {name: rng.sequence(length) for name, length in CONTIGS}
@@ -445,6 +469,8 @@ def main(out_dir):
             contig = TRACT_TARGET[0]
             fragments(writer.rng, Haplotype(contig, reference[contig]), TRACT_TARGET, writer)
             fragments(writer.rng, TractHaplotype(contig, reference[contig]), TRACT_TARGET, writer)
+            writer.rng = Rng(SEED + 2)
+            chimeras(writer.rng, reference, writer)
             writer.rng = main_rng
         writer.close()
 

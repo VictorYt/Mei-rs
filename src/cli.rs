@@ -138,6 +138,12 @@ pub struct ScanArgs {
     )]
     pub min_typed_clips: u64,
 
+    /// Minimum fraction of MEI mates among the mates checked against the
+    /// consensus sequences (fewer: `non_mei_mates`; 0 turns the filter off)
+    #[arg(long, value_name = "FRACTION", default_value_t = 0.3,
+        value_parser = parse_unit, help_heading = "Clustering and filters")]
+    pub min_mei_mate_fraction: f64,
+
     /// Minimum number of supporting reads per read of local depth
     #[arg(long, value_name = "RATIO", default_value_t = 0.05,
         value_parser = parse_ratio, help_heading = "Clustering and filters")]
@@ -155,7 +161,8 @@ pub struct ScanArgs {
     pub probe_edge_tolerance: u64,
 
     /// Also output the candidates flagged `no_junction`, `no_tail`,
-    /// `untyped`, `tandem_repeat`, `probe_edge` or `low_ratio`, with their filter status (low-support
+    /// `untyped`, `non_mei_mates`, `tandem_repeat`, `probe_edge` or
+    /// `low_ratio`, with their filter status (low-support
     /// clusters are never output)
     #[arg(long, help_heading = "Clustering and filters")]
     pub keep_filtered: bool,
@@ -207,6 +214,7 @@ impl ScanArgs {
             min_signal_ratio: self.min_signal_ratio,
             probe_edge_tolerance: self.probe_edge_tolerance,
             min_typed_clips: usize::try_from(self.min_typed_clips).unwrap_or(usize::MAX),
+            min_mei_mate_fraction: self.min_mei_mate_fraction,
         }
     }
 }
@@ -228,6 +236,16 @@ fn parse_fraction(s: &str) -> Result<f64, String> {
         Ok(value)
     } else {
         Err(format!("{value} is not in (0, 1]"))
+    }
+}
+
+/// Parse a fraction in [0, 1].
+fn parse_unit(s: &str) -> Result<f64, String> {
+    let value: f64 = s.parse().map_err(|_| format!("`{s}` is not a number"))?;
+    if (0.0..=1.0).contains(&value) {
+        Ok(value)
+    } else {
+        Err(format!("{value} is not in [0, 1]"))
     }
 }
 

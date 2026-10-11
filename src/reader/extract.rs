@@ -284,7 +284,7 @@ pub fn extract(
         extraction
             .signals
             .extend(result.large_inserts.into_iter().filter(|s| {
-                matches!(s.kind, SignalKind::LargeInsert { length } if length > insert_size.threshold)
+                matches!(s.kind, SignalKind::LargeInsert { length, .. } if length > insert_size.threshold)
             }));
     }
     extraction.signals.sort_unstable();
@@ -381,7 +381,7 @@ mod tests {
     fn positive_sample() {
         let extraction = run("positive.bam", 4);
         // Same counts as samtools (see tests/data/README.md for the truth).
-        assert_eq!(extraction.stats.kept, 3329);
+        assert_eq!(extraction.stats.kept, 3341);
         // The other 2 duplicates are mates placed on chr2, outside the regions.
         assert_eq!(extraction.stats.duplicate, 4);
         assert_eq!(
@@ -397,6 +397,8 @@ mod tests {
                 // LINE-1, minus strand: the poly(T) is on the left junction.
                 (15000, Side::Left, None, 24),
                 (15015, Side::Right, Some(b'T'), 45),
+                // Chimeric junction on chr2, random clips (sorted after chr1).
+                (4150, Side::Right, None, 3),
             ]
         );
         // Every poly(A/T) clip holds at least 20 A (T) from the junction.
@@ -411,7 +413,8 @@ mod tests {
         }
         // Reads inside the LINE-1 and the SVA (no reference copy) are
         // unmapped, those inside the Alu map to its chr2 copy.
-        assert_eq!(extraction.count("mate_unmapped"), 264);
+        // Plus the 6 random mates of the chimeric junction.
+        assert_eq!(extraction.count("mate_unmapped"), 270);
         assert_eq!(extraction.count("mate_low_mapq"), 123);
         assert_eq!(extraction.count("mate_elsewhere"), 0);
         assert_eq!(extraction.count("large_insert"), 0);
@@ -424,6 +427,10 @@ mod tests {
             .iter()
             .filter(|s| s.kind.is_mate_signal())
         {
+            if signal.read.contains("chimera") {
+                assert_eq!(signal.contig, 1);
+                continue;
+            }
             assert_eq!(signal.contig, 0);
             assert!(
                 insertions.iter().any(|&(left, right)| match signal.side {

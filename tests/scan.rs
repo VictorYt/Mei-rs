@@ -148,8 +148,8 @@ fn insertion_at_probe_edges_stays_pass() {
         "--keep-filtered",
     ]);
     let rows = rows(&tsv);
-    // The artefact and the three insertions.
-    assert_eq!(rows.len(), 4, "{tsv}");
+    // The artefact, the three insertions and the chimeric junction.
+    assert_eq!(rows.len(), 5, "{tsv}");
     let artefact = rows.iter().find(|r| column(&tsv, r, "position") == "3000");
     assert_eq!(
         column(&tsv, artefact.unwrap(), "filter"),
@@ -175,6 +175,40 @@ fn insertion_at_probe_edges_stays_pass() {
         3,
         "{exact}"
     );
+}
+
+#[test]
+fn random_mates_are_not_mei_mates() {
+    // The chimeric junction of `positive` (tests/data/README.md): typed Alu
+    // clips, but random unmapped mates, none of them a mobile element.
+    let tsv = scan(&[&POSITIVE[..], &["--keep-filtered"]].concat());
+    let found = rows(&tsv);
+    let chimera = found
+        .iter()
+        .find(|r| column(&tsv, r, "contig") == "chr2")
+        .unwrap();
+    assert_eq!(column(&tsv, chimera, "filter"), "non_mei_mates");
+    assert_eq!(column(&tsv, chimera, "family"), "ALU");
+    assert_eq!(column(&tsv, chimera, "checked_mates"), "6");
+    assert_eq!(column(&tsv, chimera, "mei_mates"), "0");
+
+    // Most mates of the Alu map to its chr2 copy with MAPQ 0: without the
+    // reference only the unmapped ones among the 40 sampled are checked;
+    // with it, all 40 are, and all are MEI mates.
+    for (reference, checked, mei) in [(false, 4, 4), (true, 40, 40)] {
+        let mut args = POSITIVE.to_vec();
+        if reference {
+            args.extend(["--reference", "tests/data/reference.fa"]);
+        }
+        let tsv = scan(&args);
+        let found = rows(&tsv);
+        let alu = found
+            .iter()
+            .find(|r| column(&tsv, r, "family") == "ALU")
+            .unwrap();
+        assert_eq!(column(&tsv, alu, "checked_mates"), checked.to_string());
+        assert_eq!(column(&tsv, alu, "mei_mates"), mei.to_string());
+    }
 }
 
 #[test]

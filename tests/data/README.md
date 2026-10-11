@@ -19,7 +19,7 @@ simulation and regenerate.
 | `targets.bed` | Five capture targets (see below). |
 | `targets_tiled.bed` | The same, with `target_insertion` tiled with two overlapping probes (see below). |
 | `targets_tract.bed` | One target around a reference poly(A) tract on `chr2` (see below). |
-| `positive.bam`, `.bai`, `.cram`, `.crai` | Heterozygous Alu, LINE-1 and SVA insertions, probe-edge artefact, PCR duplicates; expanded reference poly(A) tract. |
+| `positive.bam`, `.bai`, `.cram`, `.crai` | Heterozygous Alu, LINE-1 and SVA insertions, probe-edge artefact, PCR duplicates; expanded reference poly(A) tract; chimeric junction. |
 | `negative.bam`, `.bai`, `.cram`, `.crai` | Same targets without the insertions; same probe-edge artefact. |
 | `truth.tsv` | The simulated insertions, machine-readable. |
 
@@ -32,7 +32,7 @@ CRAM). The CRAM needs `reference.fa`.
 |---|---|---|
 | `target_insertion` | `chr1:9851-10150` | Alu insertion |
 | `target_probe_edge` | `chr1:3001-3200` | Probe-edge artefact |
-| `target_negative` | `chr2:4001-4300` | Nothing |
+| `target_negative` | `chr2:4001-4300` | Chimeric junction (not an insertion) |
 | `target_line1` | `chr1:14851-15150` | LINE-1 insertion |
 | `target_sva` | `chr1:5851-6150` | SVA insertion |
 
@@ -107,3 +107,17 @@ TSD, and those before the tract hold the end of the Alu (typed): without the
 reference this is a `PASS` `high` candidate. With
 `--reference`, the far ends of the clips are the reference flanks of the
 tract: `tandem_repeat`.
+
+## Chimeric junction (`positive`, `target_negative`)
+
+Simulated after the other reads, with their own random generator:
+
+- 3 reads anchored on `chr2` up to 4150 and soft-clipped on their right side
+  with the first 25 bases of the Alu (`75M25S`);
+- 6 fragments anchored just before `chr2:4150` whose mate is unmapped and
+  random (chimeric or adapter sequence).
+
+The junction is typed (Alu clips) and has enough clips for its mates to be
+checked against the MEI consensus sequences, and none is a mobile element:
+`non_mei_mates`, 6 checked mates, 0 MEI mates. A chimeric read with a piece
+of Alu looks like this.

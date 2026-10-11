@@ -22,6 +22,7 @@
 
 pub mod align;
 pub mod consensus;
+pub mod mates;
 
 use std::collections::HashMap;
 

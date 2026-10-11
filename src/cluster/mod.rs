@@ -57,6 +57,10 @@ pub enum Filter {
     /// `--min-typed-clips`: nothing shows that the inserted sequence is a
     /// mobile element.
     Untyped,
+    /// Of the mates checked against the consensus sequences, fewer than
+    /// `--min-mei-mate-fraction` are mobile elements: the mate signals are
+    /// mostly noise.
+    NonMeiMates,
     /// The soft-clips are a length variant of a reference homopolymer or
     /// tandem repeat, not an insertion (see [`tracts`]).
     TandemRepeat,
@@ -76,6 +80,7 @@ impl Filter {
             Self::NoJunction => "no_junction",
             Self::NoTail => "no_tail",
             Self::Untyped => "untyped",
+            Self::NonMeiMates => "non_mei_mates",
             Self::TandemRepeat => "tandem_repeat",
             Self::ProbeEdge => "probe_edge",
             Self::LowRatio => "low_ratio",
@@ -157,6 +162,14 @@ pub struct Candidate {
     pub depth: Option<u64>,
     /// Element typed from the junction soft-clips, once typed.
     pub typing: Option<crate::typer::Typing>,
+    /// Mates sampled to be checked against the consensus sequences (see
+    /// [`crate::typer::mates`]).
+    pub mate_checks: Vec<crate::typer::mates::MateCheck>,
+    /// Mates whose sequence was checked.
+    pub checked_mates: usize,
+    /// Of these, mates typed to the family of the candidate (to any family
+    /// if it is untyped).
+    pub mei_mates: usize,
     /// Filters the candidate fails; empty if it passes.
     pub filters: Vec<Filter>,
 }
@@ -237,6 +250,9 @@ impl Candidate {
             distinct_starts,
             depth: None,
             typing: None,
+            mate_checks: Vec::new(),
+            checked_mates: 0,
+            mei_mates: 0,
             filters: Vec::new(),
             signals,
         };
@@ -439,7 +455,10 @@ pub(crate) mod tests {
             1_050,
             Side::Left,
             "m2",
-            SignalKind::MateLowMapq { mapq: 0 },
+            SignalKind::MateLowMapq {
+                mapq: 0,
+                mate: None,
+            },
         ));
         // A read with both a clip and a mate signal counts once.
         signals.push(mate(1_000, Side::Left, "l0", SignalKind::MateUnmapped));

@@ -88,7 +88,7 @@ mod tests {
         .unwrap();
         // Same as `samtools view -c -F 0xF04 -q 20` on chr1:10000-10001 and
         // chr2:4100-4101.
-        assert_eq!(depths, [155, 121]);
+        assert_eq!(depths, [155, 130]);
     }
 
     #[test]
