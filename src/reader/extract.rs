@@ -384,31 +384,34 @@ mod tests {
         assert_eq!(extraction.stats.kept, 3341);
         // The other 2 duplicates are mates placed on chr2, outside the regions.
         assert_eq!(extraction.stats.duplicate, 4);
+        // Counts include the short clips (15 to 19 bp), kept later only with
+        // a tail or MEI sequence (`scan`).
         assert_eq!(
             clips(&extraction),
             [
                 (3000, Side::Left, None, 10),
                 // SVA, plus strand.
                 (6000, Side::Left, Some(b'A'), 20),
-                (6010, Side::Right, None, 39),
+                (6010, Side::Right, None, 41),
                 // Alu, plus strand.
-                (10000, Side::Left, Some(b'A'), 21),
-                (10012, Side::Right, None, 47),
+                (10000, Side::Left, Some(b'A'), 22),
+                (10012, Side::Right, None, 53),
                 // LINE-1, minus strand: the poly(T) is on the left junction.
-                (15000, Side::Left, None, 24),
-                (15015, Side::Right, Some(b'T'), 45),
+                (15000, Side::Left, None, 26),
+                (15015, Side::Right, Some(b'T'), 48),
                 // Chimeric junction on chr2, random clips (sorted after chr1).
                 (4150, Side::Right, None, 3),
             ]
         );
-        // Every poly(A/T) clip holds at least 20 A (T) from the junction.
+        // Every poly(A/T) clip is all A (T) up to 20 bp from the junction.
         for signal in &extraction.signals {
             if let SignalKind::SoftClip {
+                ref sequence,
                 tail: Some(PolyTail { length, .. }),
                 ..
             } = signal.kind
             {
-                assert!(length >= 20, "{signal:?}");
+                assert!(length as usize >= sequence.len().min(20), "{signal:?}");
             }
         }
         // Reads inside the LINE-1 and the SVA (no reference copy) are

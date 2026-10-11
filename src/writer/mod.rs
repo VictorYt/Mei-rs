@@ -39,7 +39,7 @@ pub fn write(report: &Report<'_>, format: OutputFormat, out: &mut dyn Write) -> 
 }
 
 /// Columns of the TSV output.
-pub const TSV_COLUMNS: [&str; 33] = [
+pub const TSV_COLUMNS: [&str; 35] = [
     "id",
     "contig",
     "position",
@@ -54,6 +54,7 @@ pub const TSV_COLUMNS: [&str; 33] = [
     "right_clips",
     "left_junction_clips",
     "right_junction_clips",
+    "short_junction_clips",
     "unmapped_mates",
     "discordant_mates",
     "polya_clips",
@@ -71,6 +72,7 @@ pub const TSV_COLUMNS: [&str; 33] = [
     "element_end",
     "identity",
     "typed_clips",
+    "short_typed_clips",
     "checked_mates",
     "mei_mates",
 ];
@@ -101,6 +103,7 @@ fn write_tsv(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
             c.right_clips.to_string(),
             c.left_junction_clips.to_string(),
             c.right_junction_clips.to_string(),
+            c.short_junction_clips.to_string(),
             c.unmapped_mates.to_string(),
             c.discordant_mates.to_string(),
             c.polya_clips.to_string(),
@@ -123,6 +126,7 @@ fn write_tsv(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
             typed(&|t| t.element_end.to_string()),
             typed(&|t| format!("{:.3}", ratio(t.identity))),
             typing.map_or(0, |t| t.typed_clips).to_string(),
+            typing.map_or(0, |t| t.short_typed_clips).to_string(),
             c.checked_mates.to_string(),
             c.mei_mates.to_string(),
         ];
@@ -243,6 +247,7 @@ struct JsonCandidate {
     right_clips: usize,
     left_junction_clips: usize,
     right_junction_clips: usize,
+    short_junction_clips: usize,
     unmapped_mates: usize,
     discordant_mates: usize,
     polya_clips: usize,
@@ -260,6 +265,7 @@ struct JsonCandidate {
     element_end: Option<usize>,
     identity: Option<f64>,
     typed_clips: usize,
+    short_typed_clips: usize,
     checked_mates: usize,
     mei_mates: usize,
     signals: Vec<JsonSignal>,
@@ -286,6 +292,7 @@ impl JsonCandidate {
             right_clips: c.right_clips,
             left_junction_clips: c.left_junction_clips,
             right_junction_clips: c.right_junction_clips,
+            short_junction_clips: c.short_junction_clips,
             unmapped_mates: c.unmapped_mates,
             discordant_mates: c.discordant_mates,
             polya_clips: c.polya_clips,
@@ -303,6 +310,7 @@ impl JsonCandidate {
             element_end: c.typing.as_ref().map(|t| t.element_end),
             identity: c.typing.as_ref().map(|t| ratio(t.identity)),
             typed_clips: c.typing.as_ref().map_or(0, |t| t.typed_clips),
+            short_typed_clips: c.typing.as_ref().map_or(0, |t| t.short_typed_clips),
             checked_mates: c.checked_mates,
             mei_mates: c.mei_mates,
             signals: c
@@ -343,6 +351,8 @@ struct JsonSignal {
     #[serde(skip_serializing_if = "Option::is_none")]
     supplementary: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    short: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     mate_mapq: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
     mate_contig: Option<String>,
@@ -371,6 +381,7 @@ impl JsonSignal {
             median_quality: None,
             tail: None,
             supplementary: None,
+            short: None,
             mate_mapq: None,
             mate_contig: None,
             insert_length: None,
@@ -382,11 +393,13 @@ impl JsonSignal {
                 median_quality,
                 tail,
                 supplementary,
+                short,
             } => {
                 json.clipped_sequence = Some(String::from_utf8_lossy(sequence).into_owned());
                 json.median_quality = Some(*median_quality);
                 json.tail = tail.map(|t| format!("{}{}", char::from(t.base), t.length));
                 json.supplementary = Some(*supplementary);
+                json.short = Some(*short);
             }
             SignalKind::MateUnmapped => {}
             SignalKind::MateLowMapq { mapq, .. } => json.mate_mapq = Some(*mapq),
@@ -436,6 +449,7 @@ mod tests {
             element_end: 281,
             identity: 0.98765,
             typed_clips: 6,
+            short_typed_clips: 0,
         });
         candidates[1].depth = Some(100);
         candidates[1].filters = vec![Filter::ProbeEdge, Filter::LowRatio];
@@ -465,11 +479,11 @@ mod tests {
         assert_eq!(lines[4], format!("#{}", TSV_COLUMNS.join("\t")));
         assert_eq!(
             lines[5],
-            "MEI_1\tchr1\t1000\t1012\t1000\t12\t+\tPASS\thigh\t7\t3\t3\t3\t3\t0\t1\t3\t0\tyes\t3\t40\t0.175\t1000\t1050\tALU\tAluYa5\t+\t1\t281\t0.988\t6\t0\t0"
+            "MEI_1\tchr1\t1000\t1012\t1000\t12\t+\tPASS\thigh\t7\t3\t3\t3\t3\t0\t0\t1\t3\t0\tyes\t3\t40\t0.175\t1000\t1050\tALU\tAluYa5\t+\t1\t281\t0.988\t6\t0\t0\t0"
         );
         assert_eq!(
             lines[6],
-            "MEI_2\tchr1\t5000\t.\t5000\t.\t.\tprobe_edge;low_ratio\t.\t3\t3\t0\t0\t3\t0\t0\t0\t0\tno\t1\t100\t0.030\t5000\t5000\t.\t.\t.\t.\t.\t.\t0\t0\t0"
+            "MEI_2\tchr1\t5000\t.\t5000\t.\t.\tprobe_edge;low_ratio\t.\t3\t3\t0\t0\t3\t0\t0\t0\t0\t0\tno\t1\t100\t0.030\t5000\t5000\t.\t.\t.\t.\t.\t.\t0\t0\t0\t0"
         );
         assert_eq!(lines.len(), 7);
         for line in &lines[4..] {

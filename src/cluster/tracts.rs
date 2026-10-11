@@ -280,6 +280,7 @@ mod tests {
             median_quality: 30,
             tail,
             supplementary: false,
+            short: false,
         };
         signal
     }

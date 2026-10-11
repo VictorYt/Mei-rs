@@ -48,14 +48,16 @@ pub const JUNCTION_TOLERANCE: u64 = 2;
 pub enum Filter {
     /// Fewer distinct supporting reads than `--min-support`.
     LowSupport,
-    /// Fewer soft-clips at the junctions than `--min-clips`: mate signals
-    /// alone do not resolve the insertion to the base.
+    /// Fewer soft-clips at the junctions than `--min-clips` (short ones
+    /// count only with an MEI mate): mate signals alone do not resolve the
+    /// insertion to the base.
     NoJunction,
     /// No soft-clip with a poly(A/T) tail (only with `--require-tail`).
     NoTail,
     /// Fewer junction soft-clips typed to an MEI consensus than
-    /// `--min-typed-clips`: nothing shows that the inserted sequence is a
-    /// mobile element.
+    /// `--min-typed-clips` (short ones count only with an MEI mate), and not
+    /// one typed clip with a poly(A/T) tail and at least as many MEI mates:
+    /// nothing shows that the inserted sequence is a mobile element.
     Untyped,
     /// Of the mates checked against the consensus sequences, fewer than
     /// `--min-mei-mate-fraction` are mobile elements: the mate signals are
@@ -137,6 +139,9 @@ pub struct Candidate {
     /// Soft-clips supporting the right junction (within
     /// [`JUNCTION_TOLERANCE`]).
     pub right_junction_clips: usize,
+    /// Of the soft-clips supporting either junction, short ones (see
+    /// [`crate::reader::signals::ClipOptions::is_short`]).
+    pub short_junction_clips: usize,
     /// Length of the target site duplication suggested by the junctions.
     tsd: Option<u64>,
     /// Signals of the cluster, sorted.
@@ -184,15 +189,18 @@ impl Candidate {
         };
         let left_junction = mode(clips(Side::Right).map(|s| s.position));
         let right_junction = mode(clips(Side::Left).map(|s| s.position));
+        // Clips of a junction: all of them, and the short ones.
         let near = |junction: Option<u64>, side: Side| {
-            junction.map_or(0, |j| {
-                clips(side)
-                    .filter(|s| s.position.abs_diff(j) <= JUNCTION_TOLERANCE)
-                    .count()
+            let at = clips(side)
+                .filter(|s| junction.is_some_and(|j| s.position.abs_diff(j) <= JUNCTION_TOLERANCE));
+            at.fold((0, 0), |(all, short), s| {
+                let is_short = matches!(s.kind, SignalKind::SoftClip { short: true, .. });
+                (all + 1, short + usize::from(is_short))
             })
         };
-        let left_junction_clips = near(left_junction, Side::Right);
-        let right_junction_clips = near(right_junction, Side::Left);
+        let (left_junction_clips, left_short) = near(left_junction, Side::Right);
+        let (right_junction_clips, right_short) = near(right_junction, Side::Left);
+        let short_junction_clips = left_short + right_short;
         let tsd = match (left_junction, right_junction) {
             (Some(left), Some(right))
                 if left_junction_clips >= options.min_clips
@@ -237,6 +245,7 @@ impl Candidate {
             right_junction,
             left_junction_clips,
             right_junction_clips,
+            short_junction_clips,
             tsd,
             support,
             left_clips: clips(Side::Left).count(),
@@ -388,6 +397,7 @@ pub(crate) mod tests {
                 median_quality: 30,
                 tail: tail.map(|base| PolyTail { base, length: 20 }),
                 supplementary: false,
+                short: false,
             },
             reverse: side == Side::Left,
             start: if side == Side::Left {

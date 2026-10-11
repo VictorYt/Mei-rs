@@ -14,6 +14,7 @@ use crate::cli::ScanArgs;
 use crate::cluster::{Candidate, Confidence, Filter, cluster, filters, tracts};
 use crate::inputs::Inputs;
 use crate::reader::extract::{Extraction, extract};
+use crate::reader::signals::{ClipOptions, Signal, SignalKind};
 use crate::reader::{self, alignment::AlignmentFile, depth::local_depths, mates::MateRequest};
 use crate::regions::targets::Contig;
 use crate::typer::{
@@ -49,8 +50,9 @@ pub fn run(args: &ScanArgs) -> Result<()> {
     );
 
     let extract_options = args.extract_options();
-    let extraction = extract(&inputs.alignment, targets, &extract_options)?;
-    log_extraction(&extraction);
+    let mut extraction = extract(&inputs.alignment, targets, &extract_options)?;
+    let short_clips = keep_short_clips(&mut extraction.signals, &consensus);
+    log_extraction(&extraction, short_clips, &extract_options.clip);
 
     let header_contigs = inputs.alignment.contigs();
     let contigs: Vec<String> = header_contigs.iter().map(|c| c.name.clone()).collect();
@@ -131,6 +133,22 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         candidates: &candidates,
     };
     write_output(&report, args)
+}
+
+/// Drop the short soft-clips (below `--min-clip-len`) without a poly(A/T)
+/// tail or MEI sequence ([`typer::is_mei_clip`]), in parallel. Returns the
+/// number of short clips and of those kept.
+fn keep_short_clips(signals: &mut Vec<Signal>, consensus: &ConsensusSet) -> (usize, usize) {
+    let short = |s: &Signal| matches!(s.kind, SignalKind::SoftClip { short: true, .. });
+    let keep: Vec<bool> = signals
+        .par_iter()
+        .map(|s| !short(s) || typer::is_mei_clip(consensus, &s.kind))
+        .collect();
+    let total = signals.iter().filter(|s| short(s)).count();
+    let mut keep = keep.into_iter();
+    signals.retain(|_| keep.next().unwrap_or(true));
+    let kept = signals.iter().filter(|s| short(s)).count();
+    (total, kept)
 }
 
 /// Type the candidates with junction soft-clips ([`typer`]), in parallel.
@@ -287,8 +305,8 @@ fn command_line() -> String {
         .join(" ")
 }
 
-/// Log the read counts and the signals found.
-fn log_extraction(extraction: &Extraction) {
+/// Log the read counts, the signals found and the short soft-clips kept.
+fn log_extraction(extraction: &Extraction, (short, kept): (usize, usize), clip: &ClipOptions) {
     let stats = &extraction.stats;
     info!(
         "{} reads: {} kept, {} duplicates, {} below the MAPQ threshold, {} secondary or supplementary, {} QC fail, {} unmapped",
@@ -320,4 +338,11 @@ fn log_extraction(extraction: &Extraction) {
         extraction.count("mate_elsewhere"),
         extraction.count("large_insert")
     );
+    if clip.min_short_length < clip.min_length {
+        info!(
+            "{short} short soft-clips ({} to {} bp): {kept} kept with a poly(A/T) tail or MEI sequence",
+            clip.min_short_length,
+            clip.min_length - 1
+        );
+    }
 }

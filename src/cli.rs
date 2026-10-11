@@ -89,6 +89,15 @@ pub struct ScanArgs {
         value_parser = clap::value_parser!(u32).range(1..), help_heading = "Signal extraction")]
     pub min_clip_len: u32,
 
+    /// Minimum length of a soft-clip shorter than `--min-clip-len`, kept only
+    /// with a poly(A/T) tail or typed to an MEI consensus, and counted at the
+    /// junctions only when a mate is an MEI mate (short reads often see a
+    /// short piece of the junction); at or above `--min-clip-len`, short clips
+    /// are not used
+    #[arg(long, value_name = "BP", default_value_t = 15,
+        value_parser = clap::value_parser!(u32).range(1..), help_heading = "Signal extraction")]
+    pub min_short_clip_len: u32,
+
     /// Minimum median base quality of a soft-clip
     #[arg(
         long,
@@ -129,7 +138,8 @@ pub struct ScanArgs {
     pub require_tail: bool,
 
     /// Minimum number of junction soft-clips typed to an MEI consensus
-    /// (fewer: `untyped`; 0 turns the filter off)
+    /// (fewer: `untyped`, unless one typed clip has a poly(A/T) tail and the
+    /// candidate has as many MEI mates; 0 turns the filter off)
     #[arg(
         long,
         value_name = "READS",
@@ -187,6 +197,7 @@ impl ScanArgs {
             },
             clip: ClipOptions {
                 min_length: self.min_clip_len,
+                min_short_length: self.min_short_clip_len,
                 min_quality: self.min_clip_quality,
                 polya_min_length: self.polya_min_len,
                 polya_min_fraction: self.polya_min_frac,
@@ -213,6 +224,7 @@ impl ScanArgs {
         FilterOptions {
             min_signal_ratio: self.min_signal_ratio,
             probe_edge_tolerance: self.probe_edge_tolerance,
+            min_clips: usize::try_from(self.min_clips).unwrap_or(usize::MAX),
             min_typed_clips: usize::try_from(self.min_typed_clips).unwrap_or(usize::MAX),
             min_mei_mate_fraction: self.min_mei_mate_fraction,
         }

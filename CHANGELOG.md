@@ -33,6 +33,14 @@ project follows [Semantic Versioning](https://semver.org/).
   checked mates are mobile elements. (#31)
 - Fixture: a chimeric junction with Alu clips and random unmapped mates in
   `positive`. (#31)
+- Short soft-clips (#32): clips of `--min-short-clip-len` (15) to
+  `--min-clip-len` (20) bases are kept when they have a poly(A/T) tail or are
+  typed to an MEI consensus, for short reads that see a short piece of the
+  junction. They count for `no_junction` and `untyped` only when the
+  candidate has an MEI mate. New columns `short_junction_clips` and
+  `short_typed_clips`, and `short` for each soft-clip in JSON.
+- `untyped` also passes with one typed clip, a poly(A/T) tail and at least
+  `--min-typed-clips` MEI mates. (#32)
 
 ### Changed
 

@@ -71,6 +71,7 @@ skipped with a warning.
 | `--include-duplicates` | off | keep reads flagged as duplicates (files without duplicate marking) |
 | **Signal extraction** | | |
 | `--min-clip-len` | 20 | minimum length of a soft-clip |
+| `--min-short-clip-len` | 15 | minimum length of a shorter soft-clip, kept only with a poly(A/T) tail or typed to an MEI consensus, and counted at the junctions only when a mate is an MEI mate (short reads often see a short piece of the junction); at or above `--min-clip-len`, short clips are not used |
 | `--min-clip-quality` | 20 | minimum median base quality of a soft-clip |
 | `--polya-min-len` | 10 | minimum length of a poly(A/T) tail at the junction end of a soft-clip |
 | `--polya-min-frac` | 0.8 | minimum fraction of A (or T) in a tail, to tolerate sequencing errors |
@@ -78,7 +79,7 @@ skipped with a warning.
 | `--window` | 100 | maximum distance between two consecutive signals of a candidate |
 | `--min-support` | 3 | minimum number of distinct supporting reads of a candidate |
 | `--min-clips` | 2 | minimum number of soft-clips at the junctions (`no_junction` below); each junction needs as many to give a TSD |
-| `--min-typed-clips` | 2 | minimum number of junction soft-clips typed to an MEI consensus (`untyped` below; 0 turns the filter off) |
+| `--min-typed-clips` | 2 | minimum number of junction soft-clips typed to an MEI consensus (`untyped` below, unless one typed clip has a poly(A/T) tail and the candidate has as many MEI mates; 0 turns the filter off) |
 | `--min-mei-mate-fraction` | 0.3 | minimum fraction of MEI mates among the mates checked against the consensus sequences (`non_mei_mates` below; 0 turns the filter off) |
 | `--require-tail` | off | also require a soft-clip with a poly(A/T) tail (`no_tail`) |
 | `--min-signal-ratio` | 0.05 | minimum number of supporting reads per read of local depth |
@@ -97,7 +98,12 @@ skipped with a warning.
    primary, mapped, not duplicates and above `--min-mapq` can anchor a signal.
    - **Soft-clips** of at least `--min-clip-len` bases: the junction gives the
      breakpoint to the base, and a poly(A) or poly(T) tail at the junction
-     gives the strand of the element.
+     gives the strand of the element. Shorter clips, down to
+     `--min-short-clip-len`, are kept only with a poly(A/T) tail or when
+     typed to an MEI consensus (step 3), and count at the junctions only
+     when a mate is an MEI mate (step 4): with 2x75 bp reads, a read often
+     holds a short piece of the junction, but alone a short clip is often a
+     piece of a nearby repeat.
    - **Mate signals**: the mate is unmapped, maps with a low MAPQ, maps to
      another contig, or maps unusually far away on the same contig (beyond the
      median insert size + 6 × 1.4826 × MAD of the sample).
@@ -115,7 +121,9 @@ skipped with a warning.
    large insert) by the reference at their position, with `--reference`.
 4. **Filters**: `no_junction` when fewer than `--min-clips` soft-clips mark
    the junctions (mate signals alone); `untyped` when fewer than
-   `--min-typed-clips` of them are typed; `non_mei_mates` when mates were
+   `--min-typed-clips` of them are typed, unless one typed clip has a
+   poly(A/T) tail and the candidate has as many MEI mates (short clips count
+   in both only when a mate is an MEI mate); `non_mei_mates` when mates were
    checked and fewer than `--min-mei-mate-fraction` of them are mobile
    elements; `no_tail` (with `--require-tail`)
    without any poly(A/T) tail;

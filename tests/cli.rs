@@ -91,7 +91,10 @@ fn scan_logs_a_summary() {
             ))
             .stderr(predicate::str::contains("3615 reads: 3341 kept, 4 duplicates"))
             .stderr(predicate::str::contains(
-                "602 signals: 209 soft-clips (86 with a poly(A/T) tail, 0 more set aside for their base quality, 0 of which are masked read ends), 270 unmapped mates, 123 low-MAPQ mates, 0 mates on another contig, 0 large inserts",
+                "616 signals: 223 soft-clips (90 with a poly(A/T) tail, 0 more set aside for their base quality, 0 of which are masked read ends), 270 unmapped mates, 123 low-MAPQ mates, 0 mates on another contig, 0 large inserts",
+            ))
+            .stderr(predicate::str::contains(
+                "14 short soft-clips (15 to 19 bp): 14 kept with a poly(A/T) tail or MEI sequence",
             ))
             .stderr(predicate::str::contains(
                 "5 clusters, 5 with enough support: 3 PASS (3 high, 0 medium, 0 low confidence), 2 filtered",
