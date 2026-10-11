@@ -21,6 +21,7 @@ simulation and regenerate.
 | `targets_tract.bed` | One target around a reference poly(A) tract on `chr2` (see below). |
 | `positive.bam`, `.bai`, `.cram`, `.crai` | Heterozygous Alu, LINE-1 and SVA insertions, probe-edge artefact, PCR duplicates; expanded reference poly(A) tract; chimeric junction. |
 | `negative.bam`, `.bai`, `.cram`, `.crai` | Same targets without the insertions; same probe-edge artefact. |
+| `homozygous.bam`, `.bai`, `.cram`, `.crai` | The Alu insertion on both haplotypes (`1/1`), in its target only. |
 | `truth.tsv` | The simulated insertions, machine-readable. |
 
 BAM and CRAM hold the same records (samtools adds `MD`/`NM` when decoding the

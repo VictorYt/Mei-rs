@@ -49,6 +49,17 @@ project follows [Semantic Versioning](https://semver.org/).
   the poly(A) tail. The assembled junctions and TSD replace the estimates
   from the clips. New columns `assembled`, `tsd` and `polya_length`, and
   `assembly` with the contigs in JSON.
+- Genotype (#34): at each junction of the written candidates, the reads
+  clipped there (alternative) and the reads aligned over the whole site
+  (reference) give the most likely of `0/0`, `0/1` and `1/1` (binomial
+  likelihoods) and its quality. New columns `genotype`, `gq`, `alt_reads`
+  and `ref_reads`.
+- Fixture `homozygous` (BAM and CRAM): the Alu insertion on both haplotypes.
+  (#34)
+- Quality score (#34): column `qual`, the phred-scaled probability that a
+  candidate is not an insertion, from its evidence (naive Bayes with
+  likelihood ratios measured on the HGSVC3 exomes); `low_qual` filter below
+  `--min-qual` (0, off, by default).
 
 ### Changed
 

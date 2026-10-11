@@ -43,6 +43,11 @@
       "short_typed_clips": 0,
       "checked_mates": 0,
       "mei_mates": 0,
+      "qual": 0,
+      "genotype": "0/0",
+      "gq": 23,
+      "alt_reads": 10,
+      "ref_reads": 96,
       "signals": [
         {
           "kind": "soft_clip",
@@ -234,6 +239,11 @@
       "short_typed_clips": 2,
       "checked_mates": 40,
       "mei_mates": 39,
+      "qual": 20,
+      "genotype": "0/1",
+      "gq": 99,
+      "alt_reads": 61,
+      "ref_reads": 64,
       "signals": [
         {
           "kind": "mate_unmapped",
@@ -2680,6 +2690,11 @@
       "short_typed_clips": 6,
       "checked_mates": 4,
       "mei_mates": 4,
+      "qual": 20,
+      "genotype": "0/1",
+      "gq": 99,
+      "alt_reads": 75,
+      "ref_reads": 52,
       "signals": [
         {
           "kind": "mate_unmapped",
@@ -5502,6 +5517,11 @@
       "short_typed_clips": 2,
       "checked_mates": 40,
       "mei_mates": 39,
+      "qual": 20,
+      "genotype": "0/1",
+      "gq": 99,
+      "alt_reads": 74,
+      "ref_reads": 56,
       "signals": [
         {
           "kind": "mate_unmapped",
@@ -8061,6 +8081,11 @@
       "short_typed_clips": 0,
       "checked_mates": 6,
       "mei_mates": 0,
+      "qual": 1,
+      "genotype": "0/0",
+      "gq": 45,
+      "alt_reads": 3,
+      "ref_reads": 55,
       "signals": [
         {
           "kind": "mate_unmapped",

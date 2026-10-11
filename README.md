@@ -83,8 +83,9 @@ skipped with a warning.
 | `--min-mei-mate-fraction` | 0.3 | minimum fraction of MEI mates among the mates checked against the consensus sequences (`non_mei_mates` below; 0 turns the filter off) |
 | `--require-tail` | off | also require a soft-clip with a poly(A/T) tail (`no_tail`) |
 | `--min-signal-ratio` | 0.05 | minimum number of supporting reads per read of local depth |
+| `--min-qual` | 0 | minimum quality score (`low_qual` below; 0 turns the filter off) |
 | `--probe-edge-tolerance` | 2 | distance in bp to a probe start or end within which a soft-clip stops at the probe edge |
-| `--keep-filtered` | off | also write the candidates flagged `no_junction`, `no_tail`, `untyped`, `non_mei_mates`, `tandem_repeat`, `probe_edge` or `low_ratio` |
+| `--keep-filtered` | off | also write the candidates flagged `no_junction`, `no_tail`, `untyped`, `non_mei_mates`, `tandem_repeat`, `probe_edge`, `low_ratio` or `low_qual` |
 | **Output** | | |
 | `-o`, `--output` | stdout | output file |
 | `--format` | `tsv` | `tsv`, `bed` or `json` (with every signal of every candidate) |
@@ -133,7 +134,12 @@ skipped with a warning.
    `probe_edge` when every soft-clip stops within `--probe-edge-tolerance`
    of a probe start or end, without any poly(A/T) tail, typed clip or TSD
    (digestion or ligation artefact of the capture); `low_ratio` when the
-   supporting reads are too few for the local depth.
+   supporting reads are too few for the local depth; `low_qual` when the
+   quality score is below `--min-qual` (off by default). The quality score
+   is the phred-scaled probability that the candidate is not an insertion,
+   from its evidence (tail, MEI mates, typing identity, distinct fragments,
+   reads for the depth, both sides, TSD), with likelihood ratios measured on
+   the HGSVC3 exomes.
 5. **Assembly** (with `--reference`), for typed candidates with junction
    soft-clips: the reads clipped at each junction, and the unmapped reads
    placed near the candidate, are assembled from the reference flank into
@@ -144,7 +150,13 @@ skipped with a warning.
    do not overlap), and the run of A (or T) next to a junction is the
    poly(A) tail. The assembled junctions and TSD replace the estimates from
    the clips; when a junction is not assembled, the estimate stays.
-6. **Confidence** of the `PASS` candidates: `high` with a poly(A/T) tail and a
+6. **Genotype** of the written candidates: at each junction, reads clipped
+   there (alternative allele) against reads aligned over the whole site
+   (reference allele), each with at least `--min-short-clip-len` bases on
+   both sides of the junction; the most likely of `0/0`, `0/1` and `1/1`
+   (30% of alternative reads expected for `0/1`: they are under-counted),
+   with its quality.
+7. **Confidence** of the `PASS` candidates: `high` with a poly(A/T) tail and a
    TSD (complete evidence of a retrotransposition), `medium` with a tail,
    `low` without a tail (typed clips only).
 

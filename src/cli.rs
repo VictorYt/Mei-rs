@@ -159,6 +159,15 @@ pub struct ScanArgs {
         value_parser = parse_ratio, help_heading = "Clustering and filters")]
     pub min_signal_ratio: f64,
 
+    /// Minimum quality score (fewer: `low_qual`; 0 turns the filter off)
+    #[arg(
+        long,
+        value_name = "QUAL",
+        default_value_t = 0,
+        help_heading = "Clustering and filters"
+    )]
+    pub min_qual: u32,
+
     /// Distance to a probe start or end within which a soft-clip stops at the
     /// probe edge (`probe_edge`, when no clip has a poly(A/T) tail and there
     /// is no TSD)
@@ -171,8 +180,8 @@ pub struct ScanArgs {
     pub probe_edge_tolerance: u64,
 
     /// Also output the candidates flagged `no_junction`, `no_tail`,
-    /// `untyped`, `non_mei_mates`, `tandem_repeat`, `probe_edge` or
-    /// `low_ratio`, with their filter status (low-support
+    /// `untyped`, `non_mei_mates`, `tandem_repeat`, `probe_edge`,
+    /// `low_ratio` or `low_qual`, with their filter status (low-support
     /// clusters are never output)
     #[arg(long, help_heading = "Clustering and filters")]
     pub keep_filtered: bool,
@@ -227,6 +236,7 @@ impl ScanArgs {
             min_clips: usize::try_from(self.min_clips).unwrap_or(usize::MAX),
             min_typed_clips: usize::try_from(self.min_typed_clips).unwrap_or(usize::MAX),
             min_mei_mate_fraction: self.min_mei_mate_fraction,
+            min_qual: self.min_qual,
         }
     }
 }

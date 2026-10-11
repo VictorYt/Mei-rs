@@ -9,6 +9,7 @@
 pub mod assembly;
 pub mod cli;
 pub mod cluster;
+pub mod genotype;
 pub mod inputs;
 pub mod reader;
 pub mod regions;
