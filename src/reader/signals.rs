@@ -53,6 +53,10 @@ pub enum SignalKind {
         tail: Option<PolyTail>,
         /// The read has supplementary alignments (`SA` tag).
         supplementary: bool,
+        /// Shorter than the minimum length of a soft-clip (see
+        /// [`ClipOptions::is_short`]): evidence only with a poly(A/T) tail or
+        /// MEI sequence, and with MEI mates.
+        short: bool,
     },
     /// The mate is unmapped.
     MateUnmapped,
@@ -149,6 +153,11 @@ pub struct Signal {
 pub struct ClipOptions {
     /// Minimum length of a soft-clip.
     pub min_length: u32,
+    /// Minimum length of a short soft-clip (below `min_length`): extracted
+    /// too, and kept by the caller only with a poly(A/T) tail or MEI
+    /// sequence (see [`ClipOptions::is_short`]). At or above `min_length`, no
+    /// short clip is extracted.
+    pub min_short_length: u32,
     /// Minimum median base quality of a soft-clip.
     pub min_quality: u8,
     /// Minimum length of a poly(A/T) tail.
@@ -161,10 +170,26 @@ impl Default for ClipOptions {
     fn default() -> Self {
         Self {
             min_length: 20,
+            min_short_length: 15,
             min_quality: 20,
             polya_min_length: 10,
             polya_min_fraction: 0.8,
         }
+    }
+}
+
+impl ClipOptions {
+    /// Shortest soft-clip extracted.
+    #[must_use]
+    pub fn min_extracted_length(&self) -> u32 {
+        self.min_length.min(self.min_short_length)
+    }
+
+    /// Whether a soft-clip of this length is short: extracted, but evidence
+    /// only with a poly(A/T) tail or MEI sequence.
+    #[must_use]
+    pub fn is_short(&self, length: usize) -> bool {
+        length < self.min_length as usize
     }
 }
 
@@ -281,7 +306,7 @@ fn clip_signals(
         .map(|op| op.map(|op| (op.kind(), op.len())))
         .collect::<io::Result<Vec<_>>>()?;
     let (left, right) = clip_lengths(&ops);
-    let min = options.min_length as usize;
+    let min = options.min_extracted_length() as usize;
     if left < min && right < min {
         return Ok(());
     }
@@ -324,6 +349,7 @@ fn clip_signals(
                 median_quality,
                 tail,
                 supplementary,
+                short: options.is_short(length),
             },
             ..anchor.clone()
         });
@@ -565,13 +591,26 @@ mod tests {
     #[test]
     fn short_and_low_quality_clips() {
         let seq = "C".repeat(100);
-        let short = read(
-            Flags::empty(),
-            &[(Kind::SoftClip, 19), (Kind::Match, 81)],
-            &seq,
-        )
-        .build();
-        assert_eq!(signals(&short).signals, []);
+        let clipped = |length| {
+            read(
+                Flags::empty(),
+                &[(Kind::SoftClip, length), (Kind::Match, 100 - length)],
+                &seq,
+            )
+            .build()
+        };
+        // Short clips are extracted down to `min_short_length`; the caller
+        // decides whether they count.
+        assert_eq!(signals(&clipped(15)).signals.len(), 1);
+        assert_eq!(signals(&clipped(14)).signals, []);
+        let options = ClipOptions::default();
+        assert!(options.is_short(19) && !options.is_short(20));
+        let long_only = ClipOptions {
+            min_short_length: 20,
+            ..options
+        };
+        let out = read_signals(&clipped(19), &header(), &long_only, 20).unwrap();
+        assert_eq!(out.signals, []);
 
         let mut qualities = vec![30; 100];
         qualities[..20].fill(10);

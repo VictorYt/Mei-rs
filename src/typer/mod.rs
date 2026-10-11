@@ -80,6 +80,9 @@ pub struct Typing {
     pub identity: f64,
     /// Junction clips typed to the family.
     pub typed_clips: usize,
+    /// Of these, short clips (see
+    /// [`crate::reader::signals::ClipOptions::is_short`]).
+    pub short_typed_clips: usize,
 }
 
 /// Alignments of a sequence (reference orientation) that pass
@@ -188,6 +191,22 @@ fn best_band(diagonals: &mut [i64]) -> Band {
     best
 }
 
+/// Whether a soft-clip is evidence of a mobile element on its own: it has a
+/// poly(A/T) tail, or its sequence is typed to an MEI consensus
+/// ([`type_sequence`]). Short clips must be (see
+/// [`crate::reader::signals::ClipOptions::is_short`]): a random 15 bp
+/// sequence is typed about once in a hundred times with the default set,
+/// and short clips are far more frequent than long ones. Other signals are
+/// not soft-clips: `false`.
+#[must_use]
+pub fn is_mei_clip(set: &ConsensusSet, kind: &SignalKind) -> bool {
+    match kind {
+        SignalKind::SoftClip { tail: Some(_), .. } => true,
+        SignalKind::SoftClip { sequence, .. } => !type_sequence(set, sequence).is_empty(),
+        _ => false,
+    }
+}
+
 /// Type the element inserted at a candidate from its junction soft-clips;
 /// `None` if no clip is typed.
 #[must_use]
@@ -195,12 +214,18 @@ pub fn type_candidate(set: &ConsensusSet, candidate: &Candidate) -> Option<Typin
     let near = |junction: Option<u64>, position: u64| {
         junction.is_some_and(|j| j.abs_diff(position) <= JUNCTION_TOLERANCE)
     };
-    // Hits of each typed clip.
-    let clips: Vec<Vec<ClipHit>> = candidate
+    // Hits of each typed clip, and whether it is short.
+    let typed: Vec<(Vec<ClipHit>, bool)> = candidate
         .signals
         .iter()
         .filter_map(|signal| {
-            let SignalKind::SoftClip { sequence, tail, .. } = &signal.kind else {
+            let SignalKind::SoftClip {
+                sequence,
+                tail,
+                short,
+                ..
+            } = &signal.kind
+            else {
                 return None;
             };
             let junction = match signal.side {
@@ -220,17 +245,18 @@ pub fn type_candidate(set: &ConsensusSet, candidate: &Candidate) -> Option<Typin
                 Side::Right => &sequence[run..],
             };
             let hits = type_sequence(set, rest);
-            (!hits.is_empty()).then_some(hits)
+            (!hits.is_empty()).then_some((hits, *short))
         })
         .collect();
-    if clips.is_empty() {
+    if typed.is_empty() {
         return None;
     }
 
     let family_of = |hit: &ClipHit| set.sequences()[hit.consensus].family;
-    // Best hit of each family per clip, summed per family.
-    let mut families: HashMap<Family, (i64, usize)> = HashMap::new();
-    for hits in &clips {
+    // Best hit of each family per clip, summed per family, with the number
+    // of clips and of short clips.
+    let mut families: HashMap<Family, (i64, usize, usize)> = HashMap::new();
+    for (hits, short) in &typed {
         let mut best: HashMap<Family, i32> = HashMap::new();
         for hit in hits {
             let score = best.entry(family_of(hit)).or_insert(hit.score);
@@ -240,23 +266,28 @@ pub fn type_candidate(set: &ConsensusSet, candidate: &Candidate) -> Option<Typin
             let entry = families.entry(family).or_default();
             entry.0 += i64::from(score);
             entry.1 += 1;
+            entry.2 += usize::from(*short);
         }
     }
-    let (&family, &(_, typed_clips)) = families
+    let (&family, &(_, typed_clips, short_typed_clips)) = families
         .iter()
         .max_by(|a, b| a.1.0.cmp(&b.1.0).then(b.0.cmp(a.0)))?;
 
     // Subfamily: the consensus of the family with the highest summed score.
     let mut scores: HashMap<usize, i64> = HashMap::new();
-    for hit in clips.iter().flatten().filter(|h| family_of(h) == family) {
+    for hit in typed
+        .iter()
+        .flat_map(|(hits, _)| hits)
+        .filter(|h| family_of(h) == family)
+    {
         *scores.entry(hit.consensus).or_default() += i64::from(hit.score);
     }
     let (&best, _) = scores
         .iter()
         .max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0)))?;
-    let on_best: Vec<&ClipHit> = clips
+    let on_best: Vec<&ClipHit> = typed
         .iter()
-        .flatten()
+        .flat_map(|(hits, _)| hits)
         .filter(|h| h.consensus == best)
         .collect();
     let reverse_score: i64 = on_best
@@ -273,6 +304,7 @@ pub fn type_candidate(set: &ConsensusSet, candidate: &Candidate) -> Option<Typin
         element_end: on_best.iter().map(|h| h.element_end).max()?,
         identity,
         typed_clips,
+        short_typed_clips,
     })
 }
 
@@ -310,6 +342,7 @@ mod tests {
                 length: u32::try_from(length).unwrap(),
             }),
             supplementary: false,
+            short: false,
         };
         signal
     }
@@ -371,6 +404,30 @@ mod tests {
         // Too short, or only a tail.
         assert_eq!(type_sequence(&set, &consensus(&set, "AluY")[30..42]), []);
         assert_eq!(type_sequence(&set, &[b'A'; 40]), []);
+    }
+
+    #[test]
+    fn mei_clips() {
+        let set = set();
+        let soft_clip = |sequence: &[u8], tail| SignalKind::SoftClip {
+            sequence: sequence.to_vec(),
+            median_quality: 30,
+            tail,
+            supplementary: false,
+            short: false,
+        };
+        let alu = consensus(&set, "AluY");
+        assert!(is_mei_clip(&set, &soft_clip(&alu[120..136], None)));
+        assert!(!is_mei_clip(&set, &soft_clip(b"TGCATGCTAGCTAGGA", None)));
+        let tail = PolyTail {
+            base: b'A',
+            length: 12,
+        };
+        assert!(is_mei_clip(
+            &set,
+            &soft_clip(b"AAAAAAAAAAAAGTC", Some(tail))
+        ));
+        assert!(!is_mei_clip(&set, &SignalKind::MateUnmapped));
     }
 
     #[test]

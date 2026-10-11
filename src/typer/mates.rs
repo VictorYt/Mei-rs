@@ -214,6 +214,7 @@ mod tests {
             element_end: 50,
             identity: 1.0,
             typed_clips: 2,
+            short_typed_clips: 0,
         }
     }
 

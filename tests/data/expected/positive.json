@@ -22,6 +22,7 @@
       "right_clips": 0,
       "left_junction_clips": 0,
       "right_junction_clips": 10,
+      "short_junction_clips": 0,
       "unmapped_mates": 0,
       "discordant_mates": 0,
       "polya_clips": 0,
@@ -39,6 +40,7 @@
       "element_end": null,
       "identity": null,
       "typed_clips": 0,
+      "short_typed_clips": 0,
       "checked_mates": 0,
       "mei_mates": 0,
       "signals": [
@@ -54,7 +56,8 @@
           "mapq": 60,
           "clipped_sequence": "TACAGCACTGCCACGTCAATGCAGC",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -68,7 +71,8 @@
           "mapq": 60,
           "clipped_sequence": "GCCTTCTTTGACCTGTGTTCAATTT",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -82,7 +86,8 @@
           "mapq": 60,
           "clipped_sequence": "ATAGATTCTCCAGCACCATCAGTGG",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -96,7 +101,8 @@
           "mapq": 60,
           "clipped_sequence": "GACGTGCACGTAGAATTTAGTCCTG",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -110,7 +116,8 @@
           "mapq": 60,
           "clipped_sequence": "ACTGATTTCACCCGAATCCCATCTT",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -124,7 +131,8 @@
           "mapq": 60,
           "clipped_sequence": "GATACAGAGGACCCACCGAGTTGCA",
           "median_quality": 33,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -138,7 +146,8 @@
           "mapq": 60,
           "clipped_sequence": "GTGAAACCATTCGAGATACCAGAAG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -152,7 +161,8 @@
           "mapq": 60,
           "clipped_sequence": "GTAAAAAGTATGAGGAGTAACTCGA",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -166,7 +176,8 @@
           "mapq": 60,
           "clipped_sequence": "CGCAGTCTTCATCTGCATCCGTTAT",
           "median_quality": 33,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -180,7 +191,8 @@
           "mapq": 60,
           "clipped_sequence": "CACATCAAGGCCGAGACCTAAATGG",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         }
       ]
     },
@@ -196,11 +208,12 @@
         "PASS"
       ],
       "confidence": "high",
-      "support": 148,
+      "support": 150,
       "left_clips": 20,
-      "right_clips": 39,
-      "left_junction_clips": 39,
+      "right_clips": 41,
+      "left_junction_clips": 41,
       "right_junction_clips": 20,
+      "short_junction_clips": 2,
       "unmapped_mates": 130,
       "discordant_mates": 0,
       "polya_clips": 20,
@@ -208,16 +221,17 @@
       "both_sides": true,
       "distinct_starts": 112,
       "depth": 129,
-      "signal_ratio": 1.147,
+      "signal_ratio": 1.163,
       "start": 5864,
       "end": 6097,
       "family": "SVA",
       "subfamily": "SVA_F",
       "element_strand": "+",
-      "element_start": 766,
+      "element_start": 556,
       "element_end": 1375,
-      "identity": 0.998,
-      "typed_clips": 50,
+      "identity": 0.999,
+      "typed_clips": 52,
+      "short_typed_clips": 2,
       "checked_mates": 40,
       "mei_mates": 39,
       "signals": [
@@ -641,7 +655,8 @@
           "clipped_sequence": "TAAAAAAAATNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 35,
           "tail": "A40",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -668,7 +683,8 @@
           "clipped_sequence": "AATAAAAAAAATNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 36,
           "tail": "A43",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -694,7 +710,8 @@
           "clipped_sequence": "CCCCCTCTGTGAGAAACACCCAAGAATTATCAATAAAAAAAATNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 35,
           "tail": "A61",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -732,7 +749,8 @@
           "clipped_sequence": "CCCAAGAATTATCAATAAAAAAAATNAAAAAAAAAAAAAAAAAAAAAAAAGAAAAA",
           "median_quality": 35,
           "tail": "A53",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -758,7 +776,8 @@
           "clipped_sequence": "ATCCCCCTCTGTGAGAAACACCCAAGAATTATCAATAAAAAAAATNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 35,
           "tail": "A61",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -807,7 +826,8 @@
           "clipped_sequence": "AAATNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 34,
           "tail": "A35",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -833,7 +853,8 @@
           "clipped_sequence": "TCAATAAAAAAAATNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 35,
           "tail": "A43",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -859,7 +880,8 @@
           "clipped_sequence": "TGTGAGAAACACCCAAGAATTATCAATAAAAAAAATNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 34,
           "tail": "A61",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -886,7 +908,8 @@
           "clipped_sequence": "TGAGAAACACCCAAGAATTATCAATAAAAAAAATNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 35,
           "tail": "A61",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -912,7 +935,8 @@
           "clipped_sequence": "AAAAAAAATNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 34,
           "tail": "A40",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -938,7 +962,8 @@
           "clipped_sequence": "CCTCTGTGAGAAACACCCAAGAATTATCAATAAAAAAAATNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 34,
           "tail": "A61",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -965,7 +990,8 @@
           "clipped_sequence": "CTCTGTGAGAAACACCCAAGAATTATCAATAAAAAAAATNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 35,
           "tail": "A61",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1002,7 +1028,8 @@
           "clipped_sequence": "CAAATCCCCCTCTGTGAGAAACACCCAAGAATTATCAATAAAAAAAATNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 34,
           "tail": "A61",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -1017,7 +1044,8 @@
           "clipped_sequence": "GAATTATCAATAAAAAAAATNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 35,
           "tail": "A50",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1055,7 +1083,8 @@
           "clipped_sequence": "TNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 36,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1081,7 +1110,8 @@
           "clipped_sequence": "AAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 33,
           "tail": "A21",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1107,7 +1137,8 @@
           "clipped_sequence": "AAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 37,
           "tail": "A28",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1134,7 +1165,8 @@
           "clipped_sequence": "AATTATCAATAAAAAAAATNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 34,
           "tail": "A50",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1171,7 +1203,8 @@
           "clipped_sequence": "AAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 37,
           "tail": "A23",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1198,7 +1231,8 @@
           "clipped_sequence": "AAAATNAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 35,
           "tail": "A36",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1280,7 +1314,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1305,7 +1340,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCG",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1330,7 +1366,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGAAG",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -1344,7 +1381,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCC",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -1358,7 +1396,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGA",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1383,7 +1422,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCC",
           "median_quality": 32,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -1397,7 +1437,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGAAGTGAGG",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1434,7 +1475,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACT",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -1448,7 +1490,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTAC",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1465,6 +1508,21 @@
           "kind": "soft_clip",
           "position": 6010,
           "side": "right",
+          "read": "positive_01688",
+          "segment": 2,
+          "strand": "-",
+          "read_start": 5927,
+          "read_end": 6010,
+          "mapq": 60,
+          "clipped_sequence": "CCCGTCCGGGAGGTGA",
+          "median_quality": 34,
+          "supplementary": false,
+          "short": true
+        },
+        {
+          "kind": "soft_clip",
+          "position": 6010,
+          "side": "right",
           "read": "positive_01698",
           "segment": 1,
           "strand": "-",
@@ -1473,7 +1531,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCC",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -1487,7 +1546,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGAAGTGAGGA",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1513,7 +1573,23 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGAAGTGAGGAGC",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
+        },
+        {
+          "kind": "soft_clip",
+          "position": 6010,
+          "side": "right",
+          "read": "positive_01707",
+          "segment": 2,
+          "strand": "-",
+          "read_start": 5930,
+          "read_end": 6010,
+          "mapq": 60,
+          "clipped_sequence": "CCCGTCCGGGAGGTGAGGG",
+          "median_quality": 37,
+          "supplementary": false,
+          "short": true
         },
         {
           "kind": "mate_unmapped",
@@ -1538,7 +1614,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGAAGTGAGGAGCCCCTCTGCCCGGC",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1575,7 +1652,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTC",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1600,7 +1678,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGAAGTGAGGAGCCCCTCTGCCCGGCC",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1625,7 +1704,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGTCTCTGCCCGGCCGCCCCTACTGGGAAGTGAGGAGCCCCTCTGCCCG",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1651,7 +1731,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGAAGTGAGGAGCCCCTCTGCCCGG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -1665,7 +1746,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGC",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -1679,7 +1761,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTA",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1704,7 +1787,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGAAGTGAGGAGCCCCTCTGCCCGGCCACCGCC",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1729,7 +1813,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGAAGTGA",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1754,7 +1839,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1780,7 +1866,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGAAGTGAGGAGCC",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1805,7 +1892,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGAAGTGAGGAGCCCCTCTGCCCGGCCACCGCCCC",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1853,7 +1941,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGAAGTGAGGAGCCCCTCT",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -1867,7 +1956,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGAAGTGAGGAGCCCCTCTGCCC",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -1881,7 +1971,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGCCGCCTCTGCCCGGCCGCCCCTACTGGGAAGTGAGGAGCCCCTCTGCCCGGCCACCGCCCC",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1906,7 +1997,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGC",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -1920,7 +2012,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCC",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1946,7 +2039,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGAAGTGAGGAGCCCCTCTGCCCGGCCAC",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -1971,7 +2065,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTAC",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -1985,7 +2080,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGAAGTGAGGAGCCCCTCTGCCC",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -2010,7 +2106,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGACCGGCCGCCCCTACTGG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -2036,7 +2133,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGAAGTGAGGAGCCCCTCTGCCCGGCCACC",
           "median_quality": 33,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -2050,7 +2148,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTG",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -2075,7 +2174,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGAAGTGAGGAGCCCCTCTGC",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -2089,7 +2189,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCT",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -2114,7 +2215,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGAAGTGAGGAGCCCCTCTGCCCGG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -2139,7 +2241,8 @@
           "mapq": 60,
           "clipped_sequence": "CCCGTCCGGGAGGTGAGGGGCGCCTCTGCCCGGCCGCCCCTACTGGGAAG",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -2551,19 +2654,20 @@
         "PASS"
       ],
       "confidence": "high",
-      "support": 160,
-      "left_clips": 21,
-      "right_clips": 47,
-      "left_junction_clips": 47,
-      "right_junction_clips": 21,
+      "support": 161,
+      "left_clips": 22,
+      "right_clips": 53,
+      "left_junction_clips": 53,
+      "right_junction_clips": 22,
+      "short_junction_clips": 7,
       "unmapped_mates": 14,
       "discordant_mates": 123,
-      "polya_clips": 21,
+      "polya_clips": 22,
       "polyt_clips": 0,
       "both_sides": true,
       "distinct_starts": 118,
       "depth": 148,
-      "signal_ratio": 1.081,
+      "signal_ratio": 1.088,
       "start": 9856,
       "end": 10099,
       "family": "ALU",
@@ -2572,7 +2676,8 @@
       "element_start": 1,
       "element_end": 288,
       "identity": 0.998,
-      "typed_clips": 61,
+      "typed_clips": 67,
+      "short_typed_clips": 6,
       "checked_mates": 4,
       "mei_mates": 4,
       "signals": [
@@ -3028,7 +3133,8 @@
           "clipped_sequence": "CTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 34,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3055,7 +3161,8 @@
           "clipped_sequence": "AAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 34,
           "tail": "A26",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3082,7 +3189,8 @@
           "clipped_sequence": "CACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 34,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3109,7 +3217,8 @@
           "clipped_sequence": "CTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 35,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3148,7 +3257,8 @@
           "clipped_sequence": "TGGGCGACAGAGCGAGACTCCGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 34,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3187,7 +3297,8 @@
           "clipped_sequence": "GCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 35,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3214,7 +3325,8 @@
           "clipped_sequence": "AAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 33,
           "tail": "A28",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3253,7 +3365,8 @@
           "clipped_sequence": "GCGACAGAGCGAGACTCCGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 35,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3280,7 +3393,8 @@
           "clipped_sequence": "GAGCGAGACTCCGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 34,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3293,6 +3407,22 @@
           "read_end": 10053,
           "mapq": 60,
           "mate_mapq": 0
+        },
+        {
+          "kind": "soft_clip",
+          "position": 10000,
+          "side": "left",
+          "read": "positive_00310",
+          "segment": 2,
+          "strand": "-",
+          "read_start": 10001,
+          "read_end": 10081,
+          "mapq": 60,
+          "clipped_sequence": "AAAAAAAAAAAAAAAAAAA",
+          "median_quality": 35,
+          "tail": "A19",
+          "supplementary": false,
+          "short": true
         },
         {
           "kind": "mate_low_mapq",
@@ -3319,7 +3449,8 @@
           "clipped_sequence": "ACAGAGCGAGACTCCGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 36,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3346,7 +3477,8 @@
           "clipped_sequence": "TCCGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 34,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -3372,7 +3504,8 @@
           "clipped_sequence": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 35,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3399,7 +3532,8 @@
           "clipped_sequence": "ACTCCGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 35,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3426,7 +3560,8 @@
           "clipped_sequence": "CCGTCTCAAAAAAACAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 33,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3453,7 +3588,8 @@
           "clipped_sequence": "CCGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 36,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3480,7 +3616,8 @@
           "clipped_sequence": "TGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 34,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3507,7 +3644,8 @@
           "clipped_sequence": "CCGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 37,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3546,7 +3684,8 @@
           "clipped_sequence": "GGGCGACAGAGCGAGACTCCGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 35,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3597,7 +3736,8 @@
           "clipped_sequence": "TGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 34,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3624,7 +3764,8 @@
           "clipped_sequence": "TCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 35,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3663,7 +3804,8 @@
           "clipped_sequence": "CGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
           "median_quality": 35,
           "tail": "A30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3797,7 +3939,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCAC",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3823,7 +3966,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -3837,7 +3981,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAG",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3863,7 +4008,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAGGTCAGGAGC",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -3888,7 +4034,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCAC",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3914,7 +4061,8 @@
           "mapq": 60,
           "clipped_sequence": "GCCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAGGTCAGGAGATCG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -3928,7 +4076,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCGCG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -3966,7 +4115,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAGG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -3980,7 +4130,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGG",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -3994,7 +4145,23 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAG",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
+        },
+        {
+          "kind": "soft_clip",
+          "position": 10012,
+          "side": "right",
+          "read": "positive_00229",
+          "segment": 1,
+          "strand": "+",
+          "read_start": 9931,
+          "read_end": 10012,
+          "mapq": 60,
+          "clipped_sequence": "GGCCGGGCGCGGTGGCTC",
+          "median_quality": 33,
+          "supplementary": false,
+          "short": true
         },
         {
           "kind": "mate_low_mapq",
@@ -4020,7 +4187,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATC",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4035,6 +4203,21 @@
           "mate_mapq": 0
         },
         {
+          "kind": "soft_clip",
+          "position": 10012,
+          "side": "right",
+          "read": "positive_00235",
+          "segment": 1,
+          "strand": "+",
+          "read_start": 9929,
+          "read_end": 10012,
+          "mapq": 60,
+          "clipped_sequence": "GGCCGGGCGCGGTGGC",
+          "median_quality": 36,
+          "supplementary": false,
+          "short": true
+        },
+        {
           "kind": "mate_low_mapq",
           "position": 10012,
           "side": "right",
@@ -4045,6 +4228,21 @@
           "read_end": 10012,
           "mapq": 60,
           "mate_mapq": 0
+        },
+        {
+          "kind": "soft_clip",
+          "position": 10012,
+          "side": "right",
+          "read": "positive_00236",
+          "segment": 1,
+          "strand": "+",
+          "read_start": 9932,
+          "read_end": 10012,
+          "mapq": 60,
+          "clipped_sequence": "GGCCGGGCGCGGTGGCTCA",
+          "median_quality": 35,
+          "supplementary": false,
+          "short": true
         },
         {
           "kind": "mate_low_mapq",
@@ -4070,7 +4268,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4096,7 +4295,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAAACCCAGCACTT",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -4110,7 +4310,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGA",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -4124,7 +4325,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAGGTC",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4150,7 +4352,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCAGTGGCTCACGCCTGTAATCCCAGCACTT",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4176,7 +4379,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAGGTCAGGA",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -4190,7 +4394,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGA",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -4204,7 +4409,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTA",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -4218,7 +4424,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGG",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4244,7 +4451,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAGGTCAGGAGAT",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -4258,7 +4466,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACG",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4284,7 +4493,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -4310,7 +4520,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -4324,7 +4535,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGG",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -4338,7 +4550,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCA",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4364,7 +4577,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGA",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4402,7 +4616,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGA",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4428,7 +4643,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAGGTCAGGAGATC",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -4442,7 +4658,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCA",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4460,6 +4677,21 @@
           "kind": "soft_clip",
           "position": 10012,
           "side": "right",
+          "read": "positive_00335",
+          "segment": 1,
+          "strand": "-",
+          "read_start": 9929,
+          "read_end": 10012,
+          "mapq": 60,
+          "clipped_sequence": "GGCCGGGCGCGGTGGC",
+          "median_quality": 33,
+          "supplementary": false,
+          "short": true
+        },
+        {
+          "kind": "soft_clip",
+          "position": 10012,
+          "side": "right",
           "read": "positive_00339",
           "segment": 1,
           "strand": "+",
@@ -4468,7 +4700,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4494,7 +4727,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -4508,7 +4742,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAGGTCAGG",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4534,7 +4769,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAGGTCAGGA",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4560,7 +4796,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGA",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -4574,7 +4811,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAGGTCAGGAGATCG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -4588,7 +4826,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCA",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -4602,7 +4841,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAG",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4628,7 +4868,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGG",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -4642,7 +4883,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4668,7 +4910,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCC",
           "median_quality": 37,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4706,7 +4949,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAG",
           "median_quality": 37,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4719,6 +4963,21 @@
           "read_end": 10012,
           "mapq": 60,
           "mate_mapq": 0
+        },
+        {
+          "kind": "soft_clip",
+          "position": 10012,
+          "side": "right",
+          "read": "positive_00398",
+          "segment": 1,
+          "strand": "+",
+          "read_start": 9931,
+          "read_end": 10012,
+          "mapq": 60,
+          "clipped_sequence": "GGCCGGGCGCGGTGGCTC",
+          "median_quality": 33,
+          "supplementary": false,
+          "short": true
         },
         {
           "kind": "mate_low_mapq",
@@ -4744,7 +5003,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAA",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4782,7 +5042,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAGGTCAGGAGATCG",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4808,7 +5069,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -4834,7 +5096,23 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGGCTGTAATCCCAGCACTTTGGGAG",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
+        },
+        {
+          "kind": "soft_clip",
+          "position": 10012,
+          "side": "right",
+          "read": "positive_00422",
+          "segment": 1,
+          "strand": "+",
+          "read_start": 9931,
+          "read_end": 10012,
+          "mapq": 60,
+          "clipped_sequence": "GGCCGGGCGCGGTGGCTC",
+          "median_quality": 34,
+          "supplementary": false,
+          "short": true
         },
         {
           "kind": "mate_low_mapq",
@@ -4860,7 +5138,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAGG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_low_mapq",
@@ -5197,19 +5476,20 @@
         "PASS"
       ],
       "confidence": "high",
-      "support": 139,
-      "left_clips": 24,
-      "right_clips": 45,
-      "left_junction_clips": 45,
-      "right_junction_clips": 24,
+      "support": 141,
+      "left_clips": 26,
+      "right_clips": 48,
+      "left_junction_clips": 48,
+      "right_junction_clips": 26,
+      "short_junction_clips": 5,
       "unmapped_mates": 120,
       "discordant_mates": 0,
       "polya_clips": 0,
-      "polyt_clips": 45,
+      "polyt_clips": 48,
       "both_sides": true,
       "distinct_starts": 108,
       "depth": 136,
-      "signal_ratio": 1.022,
+      "signal_ratio": 1.037,
       "start": 14885,
       "end": 15099,
       "family": "LINE1",
@@ -5218,7 +5498,8 @@
       "element_start": 390,
       "element_end": 902,
       "identity": 0.999,
-      "typed_clips": 54,
+      "typed_clips": 56,
+      "short_typed_clips": 2,
       "checked_mates": 40,
       "mei_mates": 39,
       "signals": [
@@ -5597,7 +5878,8 @@
           "mapq": 60,
           "clipped_sequence": "ATACGTGTGCATGTGTCTTTATAGCAGCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -5622,7 +5904,8 @@
           "mapq": 60,
           "clipped_sequence": "CTATTGTGAATAGTGCCGCAATAAACATACGTGTGCATGTGTCTTTATAGCAGCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -5648,7 +5931,8 @@
           "mapq": 60,
           "clipped_sequence": "TAAACATACGTGTGCATGTGTCTTTATAGCAGCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -5662,7 +5946,8 @@
           "mapq": 60,
           "clipped_sequence": "ATAGTGCCGCAATAAACATACGTGTGCATGTGTCTTTATAGCAGCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -5687,7 +5972,8 @@
           "mapq": 60,
           "clipped_sequence": "TGTGCATGTGTCTTTATAGCAGCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -5712,7 +5998,8 @@
           "mapq": 60,
           "clipped_sequence": "GAATAGTGCCGCAATAAACATACGTGTGCATGTGTCTTTATAGCAGCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -5738,7 +6025,8 @@
           "mapq": 60,
           "clipped_sequence": "ATTTATAGTCCTTTGGGTATATA",
           "median_quality": 33,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -5750,6 +6038,21 @@
           "read_start": 15001,
           "read_end": 15077,
           "mapq": 60
+        },
+        {
+          "kind": "soft_clip",
+          "position": 15000,
+          "side": "left",
+          "read": "positive_01328",
+          "segment": 2,
+          "strand": "-",
+          "read_start": 15001,
+          "read_end": 15081,
+          "mapq": 60,
+          "clipped_sequence": "ATAGTCCTTTGGGTATATA",
+          "median_quality": 36,
+          "supplementary": false,
+          "short": true
         },
         {
           "kind": "mate_unmapped",
@@ -5774,7 +6077,8 @@
           "mapq": 60,
           "clipped_sequence": "ATTGTGAATAGTGCCGCAATAAACATACGTGTGCATGTGTCTTTATAGCAGCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -5811,7 +6115,8 @@
           "mapq": 60,
           "clipped_sequence": "CAGCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 36,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -5836,7 +6141,8 @@
           "mapq": 60,
           "clipped_sequence": "TCTTTATAGCAGCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -5862,7 +6168,8 @@
           "mapq": 60,
           "clipped_sequence": "CTTTATAGCAGCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -5887,7 +6194,8 @@
           "mapq": 60,
           "clipped_sequence": "TGTGAATAGTGCCGCAATAAACATACGTGTGCATGTGTCTTTATAGCAGCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -5912,7 +6220,8 @@
           "mapq": 60,
           "clipped_sequence": "GATTTATAGTCCTTTGGGTATATA",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -5938,7 +6247,8 @@
           "mapq": 60,
           "clipped_sequence": "ATGTGTCTTTATAGCAGCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -5963,7 +6273,8 @@
           "mapq": 60,
           "clipped_sequence": "AGTGCCGCAATAAACATACGTGTGCATGTGTCTTTATAGCAGCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -5975,6 +6286,21 @@
           "read_start": 15001,
           "read_end": 15031,
           "mapq": 60
+        },
+        {
+          "kind": "soft_clip",
+          "position": 15000,
+          "side": "left",
+          "read": "positive_01392",
+          "segment": 2,
+          "strand": "-",
+          "read_start": 15001,
+          "read_end": 15084,
+          "mapq": 60,
+          "clipped_sequence": "GTCCTTTGGGTATATA",
+          "median_quality": 35,
+          "supplementary": false,
+          "short": true
         },
         {
           "kind": "mate_unmapped",
@@ -6000,7 +6326,8 @@
           "mapq": 60,
           "clipped_sequence": "AGTGCCGCAATAAACATACGTGTGCATGTGTCTTTATAGCAGCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6025,7 +6352,8 @@
           "mapq": 60,
           "clipped_sequence": "CTATTGTGAATAGTGCCGCAATAAACATACGTGTGCACGTGTCTTTATAGCAGCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6050,7 +6378,8 @@
           "mapq": 60,
           "clipped_sequence": "ATAGCAGCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 33,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6076,7 +6405,8 @@
           "mapq": 60,
           "clipped_sequence": "GCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6101,7 +6431,8 @@
           "mapq": 60,
           "clipped_sequence": "ATTGTGAATAGTGCCGCAATAAACATACGTGTGCATGTGTCTTTATAGCAGCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6149,7 +6480,8 @@
           "mapq": 60,
           "clipped_sequence": "TGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6174,7 +6506,8 @@
           "mapq": 60,
           "clipped_sequence": "ATAGCAGCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6211,7 +6544,8 @@
           "mapq": 60,
           "clipped_sequence": "GCATGATTTATAGTCCTTTGGGTATATA",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6236,7 +6570,8 @@
           "mapq": 60,
           "clipped_sequence": "GCATGTGTCTTTATAGCAGCATGATTTAAAGTCCTTTGGGTATATA",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6308,7 +6643,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGCACATTGTGCAGG",
           "median_quality": 35,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6334,7 +6670,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGCACATTGTGCAGGTTAGTTAC",
           "median_quality": 34,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6361,7 +6698,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGCACATTGTGCA",
           "median_quality": 35,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -6376,7 +6714,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGCACATTG",
           "median_quality": 35,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6402,7 +6741,8 @@
           "clipped_sequence": "TTTTTTTGTTTTTTTTTTTTTTTTTTTTTTA",
           "median_quality": 36,
           "tail": "T30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -6417,7 +6757,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTG",
           "median_quality": 35,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6443,7 +6784,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGCACATTGTGCAG",
           "median_quality": 35,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6470,7 +6812,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGCACATTGTGCAGGT",
           "median_quality": 36,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6496,7 +6839,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGCACATTGTGCAGGTTAGTT",
           "median_quality": 36,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6522,7 +6866,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGCACATTGTGC",
           "median_quality": 35,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -6537,7 +6882,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTAT",
           "median_quality": 36,
           "tail": "T35",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6564,7 +6910,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTT",
           "median_quality": 33,
           "tail": "T20",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6590,7 +6937,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTA",
           "median_quality": 35,
           "tail": "T30",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -6605,7 +6953,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTT",
           "median_quality": 33,
           "tail": "T24",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6631,7 +6980,24 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGC",
           "median_quality": 35,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
+        },
+        {
+          "kind": "soft_clip",
+          "position": 15015,
+          "side": "right",
+          "read": "positive_01325",
+          "segment": 1,
+          "strand": "-",
+          "read_start": 14931,
+          "read_end": 15015,
+          "mapq": 60,
+          "clipped_sequence": "TTTTTTTTTTTTTTT",
+          "median_quality": 36,
+          "tail": "T15",
+          "supplementary": false,
+          "short": true
         },
         {
           "kind": "soft_clip",
@@ -6646,7 +7012,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTT",
           "median_quality": 35,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6673,7 +7040,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGCACATTGTGCAGGT",
           "median_quality": 36,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6699,7 +7067,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTT",
           "median_quality": 34,
           "tail": "T21",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6725,7 +7094,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGCACATTGTGCA",
           "median_quality": 36,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6752,7 +7122,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGCACATTGTGC",
           "median_quality": 34,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -6767,7 +7138,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACGTGTGCACATTGTGCAGGTTAGTTA",
           "median_quality": 36,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6793,7 +7165,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGCAC",
           "median_quality": 35,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -6808,7 +7181,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGCACATTGTGCAGG",
           "median_quality": 34,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6846,7 +7220,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAG",
           "median_quality": 36,
           "tail": "T40",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6872,7 +7247,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGCACATTGTG",
           "median_quality": 35,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6898,7 +7274,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACA",
           "median_quality": 35,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -6913,7 +7290,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTT",
           "median_quality": 34,
           "tail": "T28",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -6928,7 +7306,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGCAC",
           "median_quality": 36,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -6943,7 +7322,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTT",
           "median_quality": 35,
           "tail": "T21",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6970,7 +7350,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTT",
           "median_quality": 37,
           "tail": "T21",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -6996,7 +7377,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTAC",
           "median_quality": 36,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -7011,7 +7393,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGC",
           "median_quality": 36,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -7037,7 +7420,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTA",
           "median_quality": 35,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -7052,7 +7436,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
           "median_quality": 37,
           "tail": "T29",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -7079,7 +7464,24 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTT",
           "median_quality": 35,
           "tail": "T20",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
+        },
+        {
+          "kind": "soft_clip",
+          "position": 15015,
+          "side": "right",
+          "read": "positive_01412",
+          "segment": 2,
+          "strand": "+",
+          "read_start": 14935,
+          "read_end": 15015,
+          "mapq": 60,
+          "clipped_sequence": "TTTTTTTTTTTTTTTTTTT",
+          "median_quality": 33,
+          "tail": "T19",
+          "supplementary": false,
+          "short": true
         },
         {
           "kind": "mate_unmapped",
@@ -7105,7 +7507,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATCATACTCTAAGTTTTAGGGTACATGTGCACATTGTGCAGGTTAGTTA",
           "median_quality": 36,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -7120,7 +7523,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGT",
           "median_quality": 36,
           "tail": "T44",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -7146,7 +7550,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTAT",
           "median_quality": 34,
           "tail": "T35",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -7173,7 +7578,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTA",
           "median_quality": 35,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -7199,7 +7605,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGCACATTGT",
           "median_quality": 34,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -7225,7 +7632,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTT",
           "median_quality": 34,
           "tail": "T24",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -7252,7 +7660,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGCA",
           "median_quality": 36,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -7278,7 +7687,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAG",
           "median_quality": 36,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -7293,7 +7703,8 @@
           "clipped_sequence": "TTTTTTTTTTATTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGTACATGTGCACA",
           "median_quality": 34,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -7308,7 +7719,8 @@
           "clipped_sequence": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTATTATACTCTAAGTTTTAGGGT",
           "median_quality": 35,
           "tail": "T47",
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "mate_unmapped",
@@ -7332,6 +7744,22 @@
           "read_end": 15015,
           "mapq": 60,
           "mei_mate": true
+        },
+        {
+          "kind": "soft_clip",
+          "position": 15015,
+          "side": "right",
+          "read": "positive_01468",
+          "segment": 2,
+          "strand": "-",
+          "read_start": 14932,
+          "read_end": 15015,
+          "mapq": 60,
+          "clipped_sequence": "TTTTTTTTTTTTTTTT",
+          "median_quality": 34,
+          "tail": "T16",
+          "supplementary": false,
+          "short": true
         },
         {
           "kind": "mate_unmapped",
@@ -7612,6 +8040,7 @@
       "right_clips": 3,
       "left_junction_clips": 3,
       "right_junction_clips": 0,
+      "short_junction_clips": 0,
       "unmapped_mates": 6,
       "discordant_mates": 0,
       "polya_clips": 0,
@@ -7629,6 +8058,7 @@
       "element_end": 25,
       "identity": 1.0,
       "typed_clips": 3,
+      "short_typed_clips": 0,
       "checked_mates": 6,
       "mei_mates": 0,
       "signals": [
@@ -7716,7 +8146,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTG",
           "median_quality": 35,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -7730,7 +8161,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTG",
           "median_quality": 32,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         },
         {
           "kind": "soft_clip",
@@ -7744,7 +8176,8 @@
           "mapq": 60,
           "clipped_sequence": "GGCCGGGCGCGGTGGCTCACGCCTG",
           "median_quality": 34,
-          "supplementary": false
+          "supplementary": false,
+          "short": false
         }
       ]
     }
