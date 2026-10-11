@@ -57,6 +57,12 @@ pub struct ScanArgs {
     #[arg(long, value_name = "FILE", help_heading = "Input")]
     pub reference: Option<PathBuf>,
 
+    /// MEI consensus sequences (FASTA, headers `>name#SINE/Alu`,
+    /// `>name#LINE/L1` or `>name#Retroposon/SVA`) [default: the Dfam Alu,
+    /// LINE-1 and SVA consensus sequences built into mei-rs]
+    #[arg(long, value_name = "FILE", help_heading = "Input")]
+    pub consensus: Option<PathBuf>,
+
     /// Bases added on each side of every target
     #[arg(long, value_name = "BP", default_value_t = 300, help_heading = "Input")]
     pub padding: u32,
@@ -82,6 +88,15 @@ pub struct ScanArgs {
     #[arg(long, value_name = "BP", default_value_t = 20,
         value_parser = clap::value_parser!(u32).range(1..), help_heading = "Signal extraction")]
     pub min_clip_len: u32,
+
+    /// Minimum length of a soft-clip shorter than `--min-clip-len`, kept only
+    /// with a poly(A/T) tail or typed to an MEI consensus, and counted at the
+    /// junctions only when a mate is an MEI mate (short reads often see a
+    /// short piece of the junction); at or above `--min-clip-len`, short clips
+    /// are not used
+    #[arg(long, value_name = "BP", default_value_t = 15,
+        value_parser = clap::value_parser!(u32).range(1..), help_heading = "Signal extraction")]
+    pub min_short_clip_len: u32,
 
     /// Minimum median base quality of a soft-clip
     #[arg(
@@ -118,14 +133,40 @@ pub struct ScanArgs {
         value_parser = clap::value_parser!(u64).range(1..), help_heading = "Clustering and filters")]
     pub min_clips: u64,
 
-    /// Do not require a soft-clip with a poly(A/T) tail (`no_tail`) to pass
+    /// Require a soft-clip with a poly(A/T) tail (`no_tail`) to pass
     #[arg(long, help_heading = "Clustering and filters")]
-    pub allow_no_tail: bool,
+    pub require_tail: bool,
+
+    /// Minimum number of junction soft-clips typed to an MEI consensus
+    /// (fewer: `untyped`, unless one typed clip has a poly(A/T) tail and the
+    /// candidate has as many MEI mates; 0 turns the filter off)
+    #[arg(
+        long,
+        value_name = "READS",
+        default_value_t = 2,
+        help_heading = "Clustering and filters"
+    )]
+    pub min_typed_clips: u64,
+
+    /// Minimum fraction of MEI mates among the mates checked against the
+    /// consensus sequences (fewer: `non_mei_mates`; 0 turns the filter off)
+    #[arg(long, value_name = "FRACTION", default_value_t = 0.3,
+        value_parser = parse_unit, help_heading = "Clustering and filters")]
+    pub min_mei_mate_fraction: f64,
 
     /// Minimum number of supporting reads per read of local depth
     #[arg(long, value_name = "RATIO", default_value_t = 0.05,
         value_parser = parse_ratio, help_heading = "Clustering and filters")]
     pub min_signal_ratio: f64,
+
+    /// Minimum quality score (fewer: `low_qual`; 0 turns the filter off)
+    #[arg(
+        long,
+        value_name = "QUAL",
+        default_value_t = 0,
+        help_heading = "Clustering and filters"
+    )]
+    pub min_qual: u32,
 
     /// Distance to a probe start or end within which a soft-clip stops at the
     /// probe edge (`probe_edge`, when no clip has a poly(A/T) tail and there
@@ -139,7 +180,8 @@ pub struct ScanArgs {
     pub probe_edge_tolerance: u64,
 
     /// Also output the candidates flagged `no_junction`, `no_tail`,
-    /// `tandem_repeat`, `probe_edge` or `low_ratio`, with their filter status (low-support
+    /// `untyped`, `non_mei_mates`, `tandem_repeat`, `probe_edge`,
+    /// `low_ratio` or `low_qual`, with their filter status (low-support
     /// clusters are never output)
     #[arg(long, help_heading = "Clustering and filters")]
     pub keep_filtered: bool,
@@ -164,6 +206,7 @@ impl ScanArgs {
             },
             clip: ClipOptions {
                 min_length: self.min_clip_len,
+                min_short_length: self.min_short_clip_len,
                 min_quality: self.min_clip_quality,
                 polya_min_length: self.polya_min_len,
                 polya_min_fraction: self.polya_min_frac,
@@ -180,7 +223,7 @@ impl ScanArgs {
             window: self.window,
             min_support: usize::try_from(self.min_support).unwrap_or(usize::MAX),
             min_clips: usize::try_from(self.min_clips).unwrap_or(usize::MAX),
-            require_tail: !self.allow_no_tail,
+            require_tail: self.require_tail,
         }
     }
 
@@ -190,6 +233,10 @@ impl ScanArgs {
         FilterOptions {
             min_signal_ratio: self.min_signal_ratio,
             probe_edge_tolerance: self.probe_edge_tolerance,
+            min_clips: usize::try_from(self.min_clips).unwrap_or(usize::MAX),
+            min_typed_clips: usize::try_from(self.min_typed_clips).unwrap_or(usize::MAX),
+            min_mei_mate_fraction: self.min_mei_mate_fraction,
+            min_qual: self.min_qual,
         }
     }
 }
@@ -214,6 +261,16 @@ fn parse_fraction(s: &str) -> Result<f64, String> {
     }
 }
 
+/// Parse a fraction in [0, 1].
+fn parse_unit(s: &str) -> Result<f64, String> {
+    let value: f64 = s.parse().map_err(|_| format!("`{s}` is not a number"))?;
+    if (0.0..=1.0).contains(&value) {
+        Ok(value)
+    } else {
+        Err(format!("{value} is not in [0, 1]"))
+    }
+}
+
 /// Format of the candidate list.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum OutputFormat {
@@ -223,6 +280,9 @@ pub enum OutputFormat {
     Bed,
     /// JSON, with the detailed signals of every candidate
     Json,
+    /// VCF 4.2, bgzipped and indexed (`.tbi`) when the output file ends with
+    /// `.gz`
+    Vcf,
 }
 
 #[cfg(test)]
@@ -273,7 +333,9 @@ mod tests {
             "5",
             "--min-clips",
             "4",
-            "--allow-no-tail",
+            "--require-tail",
+            "--min-typed-clips",
+            "3",
             "--min-signal-ratio",
             "0.1",
             "--probe-edge-tolerance",
@@ -284,7 +346,8 @@ mod tests {
         assert_eq!(args.cluster_options().window, 50);
         assert_eq!(args.cluster_options().min_support, 5);
         assert_eq!(args.cluster_options().min_clips, 4);
-        assert!(!args.cluster_options().require_tail);
+        assert!(args.cluster_options().require_tail);
+        assert_eq!(args.filter_options().min_typed_clips, 3);
         assert!((args.filter_options().min_signal_ratio - 0.1).abs() < f64::EPSILON);
         assert_eq!(args.filter_options().probe_edge_tolerance, 0);
         assert!(args.keep_filtered);
@@ -375,7 +438,7 @@ mod tests {
     #[test]
     fn invalid_values_are_rejected() {
         assert_eq!(
-            scan(&["--format", "vcf"]).unwrap_err().kind(),
+            scan(&["--format", "bcf"]).unwrap_err().kind(),
             ErrorKind::InvalidValue
         );
         assert_eq!(

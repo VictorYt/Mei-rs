@@ -23,8 +23,9 @@ pub struct ClusterOptions {
     /// Minimum number of soft-clips at the junctions; each junction needs as
     /// many to give a TSD.
     pub min_clips: usize,
-    /// Require a soft-clip with a poly(A/T) tail: until element typing, the
-    /// only evidence that the inserted sequence is a retrotransposon.
+    /// Require a soft-clip with a poly(A/T) tail (`no_tail`). Off by default:
+    /// typed clips (`untyped`) are the evidence of a retrotransposon, and the
+    /// tail sets the confidence level.
     pub require_tail: bool,
 }
 
@@ -34,7 +35,7 @@ impl Default for ClusterOptions {
             window: 100,
             min_support: 3,
             min_clips: 2,
-            require_tail: true,
+            require_tail: false,
         }
     }
 }
@@ -47,11 +48,21 @@ pub const JUNCTION_TOLERANCE: u64 = 2;
 pub enum Filter {
     /// Fewer distinct supporting reads than `--min-support`.
     LowSupport,
-    /// Fewer soft-clips at the junctions than `--min-clips`: mate signals
-    /// alone do not resolve the insertion to the base.
+    /// Fewer soft-clips at the junctions than `--min-clips` (short ones
+    /// count only with an MEI mate): mate signals alone do not resolve the
+    /// insertion to the base.
     NoJunction,
-    /// No soft-clip with a poly(A/T) tail.
+    /// No soft-clip with a poly(A/T) tail (only with `--require-tail`).
     NoTail,
+    /// Fewer junction soft-clips typed to an MEI consensus than
+    /// `--min-typed-clips` (short ones count only with an MEI mate), and not
+    /// one typed clip with a poly(A/T) tail and at least as many MEI mates:
+    /// nothing shows that the inserted sequence is a mobile element.
+    Untyped,
+    /// Of the mates checked against the consensus sequences, fewer than
+    /// `--min-mei-mate-fraction` are mobile elements: the mate signals are
+    /// mostly noise.
+    NonMeiMates,
     /// The soft-clips are a length variant of a reference homopolymer or
     /// tandem repeat, not an insertion (see [`tracts`]).
     TandemRepeat,
@@ -60,6 +71,8 @@ pub enum Filter {
     ProbeEdge,
     /// Too few supporting reads for the local depth.
     LowRatio,
+    /// Quality score below `--min-qual` (see [`crate::genotype::score`]).
+    LowQual,
 }
 
 impl Filter {
@@ -70,9 +83,12 @@ impl Filter {
             Self::LowSupport => "low_support",
             Self::NoJunction => "no_junction",
             Self::NoTail => "no_tail",
+            Self::Untyped => "untyped",
+            Self::NonMeiMates => "non_mei_mates",
             Self::TandemRepeat => "tandem_repeat",
             Self::ProbeEdge => "probe_edge",
             Self::LowRatio => "low_ratio",
+            Self::LowQual => "low_qual",
         }
     }
 }
@@ -80,13 +96,13 @@ impl Filter {
 /// Confidence level of a candidate that passes the filters.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Confidence {
-    /// Soft-clips with a poly(A/T) tail and a TSD: complete evidence of a
-    /// retrotransposition.
+    /// Typed soft-clips with a poly(A/T) tail and a TSD: complete evidence
+    /// of a retrotransposition.
     High,
-    /// Soft-clips and mate signals, without a TSD (or without a tail when
-    /// tails are not required).
+    /// Typed soft-clips with a poly(A/T) tail, without a TSD.
     Medium,
-    /// Soft-clips only, without a TSD.
+    /// Typed soft-clips without a poly(A/T) tail (often the tailed junction
+    /// is not covered by clips long enough).
     Low,
 }
 
@@ -115,10 +131,10 @@ pub struct Candidate {
     /// junction, or else estimated from the mate signals.
     pub breakpoint: u64,
     /// End of the upstream flank: most supported junction of the clips on
-    /// the right end of reads, if any.
+    /// the right end of reads, if any; the assembled one once assembled.
     pub left_junction: Option<u64>,
     /// Start of the downstream flank: most supported junction of the clips
-    /// on the left end of reads, if any.
+    /// on the left end of reads, if any; the assembled one once assembled.
     pub right_junction: Option<u64>,
     /// Soft-clips supporting the left junction (within
     /// [`JUNCTION_TOLERANCE`]).
@@ -126,7 +142,11 @@ pub struct Candidate {
     /// Soft-clips supporting the right junction (within
     /// [`JUNCTION_TOLERANCE`]).
     pub right_junction_clips: usize,
-    /// Length of the target site duplication suggested by the junctions.
+    /// Of the soft-clips supporting either junction, short ones (see
+    /// [`crate::reader::signals::ClipOptions::is_short`]).
+    pub short_junction_clips: usize,
+    /// Length of the target site duplication: assembled, or suggested by
+    /// the junctions.
     tsd: Option<u64>,
     /// Signals of the cluster, sorted.
     pub signals: Vec<Signal>,
@@ -149,6 +169,24 @@ pub struct Candidate {
     pub distinct_starts: usize,
     /// Local depth at the breakpoint (filtered reads), once computed.
     pub depth: Option<u64>,
+    /// Element typed from the junction soft-clips, once typed.
+    pub typing: Option<crate::typer::Typing>,
+    /// Mates sampled to be checked against the consensus sequences (see
+    /// [`crate::typer::mates`]).
+    pub mate_checks: Vec<crate::typer::mates::MateCheck>,
+    /// Mates whose sequence was checked.
+    pub checked_mates: usize,
+    /// Of these, mates typed to the family of the candidate (to any family
+    /// if it is untyped).
+    pub mei_mates: usize,
+    /// Local assembly of the junctions, once done (see [`crate::assembly`]).
+    pub assembly: Option<crate::assembly::Assembly>,
+    /// Genotype, once the reads of each allele are counted at the junctions
+    /// (see [`crate::genotype`]).
+    pub genotype: Option<crate::genotype::Genotype>,
+    /// Quality score, once the filters are applied (see
+    /// [`crate::genotype::score`]).
+    pub qual: Option<u32>,
     /// Filters the candidate fails; empty if it passes.
     pub filters: Vec<Filter>,
 }
@@ -163,15 +201,18 @@ impl Candidate {
         };
         let left_junction = mode(clips(Side::Right).map(|s| s.position));
         let right_junction = mode(clips(Side::Left).map(|s| s.position));
+        // Clips of a junction: all of them, and the short ones.
         let near = |junction: Option<u64>, side: Side| {
-            junction.map_or(0, |j| {
-                clips(side)
-                    .filter(|s| s.position.abs_diff(j) <= JUNCTION_TOLERANCE)
-                    .count()
+            let at = clips(side)
+                .filter(|s| junction.is_some_and(|j| s.position.abs_diff(j) <= JUNCTION_TOLERANCE));
+            at.fold((0, 0), |(all, short), s| {
+                let is_short = matches!(s.kind, SignalKind::SoftClip { short: true, .. });
+                (all + 1, short + usize::from(is_short))
             })
         };
-        let left_junction_clips = near(left_junction, Side::Right);
-        let right_junction_clips = near(right_junction, Side::Left);
+        let (left_junction_clips, left_short) = near(left_junction, Side::Right);
+        let (right_junction_clips, right_short) = near(right_junction, Side::Left);
+        let short_junction_clips = left_short + right_short;
         let tsd = match (left_junction, right_junction) {
             (Some(left), Some(right))
                 if left_junction_clips >= options.min_clips
@@ -216,6 +257,7 @@ impl Candidate {
             right_junction,
             left_junction_clips,
             right_junction_clips,
+            short_junction_clips,
             tsd,
             support,
             left_clips: clips(Side::Left).count(),
@@ -228,6 +270,13 @@ impl Candidate {
             polyt_clips: tails(b'T'),
             distinct_starts,
             depth: None,
+            typing: None,
+            mate_checks: Vec::new(),
+            checked_mates: 0,
+            mei_mates: 0,
+            assembly: None,
+            genotype: None,
+            qual: None,
             filters: Vec::new(),
             signals,
         };
@@ -264,12 +313,29 @@ impl Candidate {
             .map(|depth| self.support as f64 / depth.max(1) as f64)
     }
 
-    /// Length of the target site duplication suggested by the junctions: the
-    /// overlap of the two flanks, when each junction has at least
-    /// `min_clips` soft-clips and they overlap by 1 to 50 bp.
+    /// Length of the target site duplication: with both junctions assembled,
+    /// the assembled one (see [`Self::set_assembly`]); otherwise suggested by
+    /// the junctions, the overlap of the two flanks, when each junction has
+    /// at least `min_clips` soft-clips and they overlap by 1 to 50 bp.
     #[must_use]
     pub fn tsd_length(&self) -> Option<u64> {
         self.tsd
+    }
+
+    /// Keep the assembly of the junctions: the assembled junctions replace
+    /// the estimated ones, and with both, the assembled TSD replaces the
+    /// estimate (an assembly that finds no TSD removes it).
+    pub fn set_assembly(&mut self, assembly: crate::assembly::Assembly) {
+        if let Some(left) = &assembly.left {
+            self.left_junction = Some(left.junction);
+        }
+        if let Some(right) = &assembly.right {
+            self.right_junction = Some(right.junction);
+        }
+        if assembly.both() {
+            self.tsd = assembly.tsd.as_ref().map(|t| t.len() as u64);
+        }
+        self.assembly = Some(assembly);
     }
 
     /// Whether the candidate failed `--min-support` (it is never written).
@@ -283,9 +349,11 @@ impl Candidate {
     pub fn confidence(&self) -> Option<Confidence> {
         if !self.is_pass() {
             None
-        } else if self.tsd.is_some() && self.polya_clips + self.polyt_clips > 0 {
+        } else if self.polya_clips + self.polyt_clips == 0 {
+            Some(Confidence::Low)
+        } else if self.tsd.is_some() {
             Some(Confidence::High)
-        } else if self.unmapped_mates + self.discordant_mates > 0 {
+        } else if self.polya_clips + self.polyt_clips > 0 {
             Some(Confidence::Medium)
         } else {
             Some(Confidence::Low)
@@ -361,6 +429,7 @@ pub(crate) mod tests {
                 median_quality: 30,
                 tail: tail.map(|base| PolyTail { base, length: 20 }),
                 supplementary: false,
+                short: false,
             },
             reverse: side == Side::Left,
             start: if side == Side::Left {
@@ -428,7 +497,10 @@ pub(crate) mod tests {
             1_050,
             Side::Left,
             "m2",
-            SignalKind::MateLowMapq { mapq: 0 },
+            SignalKind::MateLowMapq {
+                mapq: 0,
+                mate: None,
+            },
         ));
         // A read with both a clip and a mate signal counts once.
         signals.push(mate(1_000, Side::Left, "l0", SignalKind::MateUnmapped));
@@ -542,7 +614,7 @@ pub(crate) mod tests {
         let c = &cluster(sorted(two), &options)[0];
         assert!(c.is_pass());
         assert_eq!(c.left_junction_clips, 2);
-        assert_eq!(c.confidence(), Some(Confidence::Medium));
+        assert_eq!(c.confidence(), Some(Confidence::Low));
 
         // A clip 3 bp away does not support the junction.
         let far = sorted(vec![
@@ -578,16 +650,29 @@ pub(crate) mod tests {
         let high = &cluster(sorted(signals.clone()), &options)[0];
         assert_eq!(high.confidence(), Some(Confidence::High));
 
-        // A tail without a TSD: medium with mates, low without.
+        // A tail without a TSD: medium, with or without mates.
         let mut one_junction: Vec<Signal> = (0..3)
             .map(|i| clip(1_000, Side::Left, &format!("l{i}"), Some(b'T')))
             .collect();
-        let low = &cluster(sorted(one_junction.clone()), &options)[0];
-        assert_eq!(low.tsd_length(), None);
-        assert_eq!(low.confidence(), Some(Confidence::Low));
+        let medium = &cluster(sorted(one_junction.clone()), &options)[0];
+        assert_eq!(medium.tsd_length(), None);
+        assert_eq!(medium.confidence(), Some(Confidence::Medium));
         one_junction.push(mate(1_050, Side::Left, "m", SignalKind::MateUnmapped));
         let medium = &cluster(sorted(one_junction), &options)[0];
         assert_eq!(medium.confidence(), Some(Confidence::Medium));
+
+        // No tail: low, even with a TSD.
+        let untailed: Vec<Signal> = (0..3)
+            .flat_map(|i| {
+                [
+                    clip(1_012, Side::Right, &format!("r{i}"), None),
+                    clip(1_000, Side::Left, &format!("l{i}"), None),
+                ]
+            })
+            .collect();
+        let low = &cluster(sorted(untailed), &options)[0];
+        assert_eq!(low.tsd_length(), Some(12));
+        assert_eq!(low.confidence(), Some(Confidence::Low));
     }
 
     #[test]
@@ -605,18 +690,20 @@ pub(crate) mod tests {
                     .collect(),
             )
         };
-        let c = &cluster(untailed(), &ClusterOptions::default())[0];
-        assert_eq!(c.filters, [Filter::NoTail]);
-        assert_eq!(c.confidence(), None);
-
-        // --allow-no-tail: the TSD alone is not `high`.
+        // --require-tail.
         let options = ClusterOptions {
-            require_tail: false,
+            require_tail: true,
             ..ClusterOptions::default()
         };
         let c = &cluster(untailed(), &options)[0];
+        assert_eq!(c.filters, [Filter::NoTail]);
+        assert_eq!(c.confidence(), None);
+
+        // By default the tail is not required, and the TSD alone is not
+        // `high`.
+        let c = &cluster(untailed(), &ClusterOptions::default())[0];
         assert_eq!(c.tsd_length(), Some(12));
-        assert_eq!(c.confidence(), Some(Confidence::Medium));
+        assert_eq!(c.confidence(), Some(Confidence::Low));
     }
 
     #[test]

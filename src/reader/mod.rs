@@ -2,8 +2,11 @@
 //! signals (soft-clipped reads, discordant pairs, unmapped mates).
 
 pub mod alignment;
+pub mod alleles;
 pub mod batch;
 pub mod depth;
 pub mod extract;
 pub mod filter;
+pub mod junctions;
+pub mod mates;
 pub mod signals;

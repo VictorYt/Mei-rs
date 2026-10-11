@@ -1,0 +1,6 @@
+# Processes run by cargo (`cargo test`, `cargo run`).
+[env]
+# The rANS Nx16 decoder of the CRAM 3.1 test fixtures needs more than the
+# 2 MiB of a test thread or a rayon worker in release test builds (#49);
+# the mei-rs binary itself reads them with 512 KiB.
+RUST_MIN_STACK = "8388608"

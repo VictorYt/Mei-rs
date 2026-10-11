@@ -24,6 +24,7 @@ fn scan_help_lists_every_option() {
         "--bam",
         "--bed",
         "--reference",
+        "--consensus",
         "--padding",
         "--region",
         "--min-mapq",
@@ -32,6 +33,8 @@ fn scan_help_lists_every_option() {
         "--min-clip-quality",
         "--polya-min-len",
         "--polya-min-frac",
+        "--require-tail",
+        "--min-typed-clips",
         "--output",
         "--format",
         "--threads",
@@ -58,11 +61,11 @@ fn version() {
 fn invalid_option_fails_with_usage_error() {
     mei_rs()
         .args([
-            "scan", "--bam", "s.bam", "--bed", "t.bed", "--format", "vcf",
+            "scan", "--bam", "s.bam", "--bed", "t.bed", "--format", "bcf",
         ])
         .assert()
         .code(2)
-        .stderr(predicate::str::contains("invalid value 'vcf'"));
+        .stderr(predicate::str::contains("invalid value 'bcf'"));
 }
 
 fn data(name: &str) -> String {
@@ -84,14 +87,20 @@ fn scan_logs_a_summary() {
             .success()
             .stderr(predicate::str::contains("sample positive"))
             .stderr(predicate::str::contains(
-                "3 targets (800 bp), 3 regions to scan (2600 bp with 300 bp of padding)",
+                "5 targets (1400 bp), 5 regions to scan (4400 bp with 300 bp of padding)",
             ))
-            .stderr(predicate::str::contains("2023 reads: 2005 kept, 4 duplicates"))
+            .stderr(predicate::str::contains("3615 reads: 3341 kept, 4 duplicates"))
             .stderr(predicate::str::contains(
-                "215 signals: 78 soft-clips (21 with a poly(A/T) tail, 0 more set aside for their base quality, 0 of which are masked read ends), 14 unmapped mates, 123 low-MAPQ mates, 0 mates on another contig, 0 large inserts",
+                "616 signals: 223 soft-clips (90 with a poly(A/T) tail, 0 more set aside for their base quality, 0 of which are masked read ends), 270 unmapped mates, 123 low-MAPQ mates, 0 mates on another contig, 0 large inserts",
             ))
             .stderr(predicate::str::contains(
-                "2 clusters, 2 with enough support: 1 PASS (1 high, 0 medium, 0 low confidence), 1 filtered",
+                "14 short soft-clips (15 to 19 bp): 14 kept with a poly(A/T) tail or MEI sequence",
+            ))
+            .stderr(predicate::str::contains(
+                "5 clusters, 5 with enough support: 3 PASS (3 high, 0 medium, 0 low confidence), 2 filtered",
+            ))
+            .stderr(predicate::str::contains(
+                "58 consensus sequences (built-in Dfam set); candidates typed: 2 ALU, 1 LINE1, 1 SVA",
             ));
     }
 }

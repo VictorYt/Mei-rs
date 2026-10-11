@@ -2,6 +2,9 @@
 ##command: {command}
 ##sample: positive
 ##positions: 1-based; a position p means the insertion is right after base p
-#id	contig	position	left_junction	right_junction	tsd_length	strand	filter	confidence	support	left_clips	right_clips	left_junction_clips	right_junction_clips	unmapped_mates	discordant_mates	polya_clips	polyt_clips	both_sides	distinct_starts	depth	signal_ratio	start	end
-MEI_1	chr1	3000	.	3000	.	.	no_tail;probe_edge	.	10	10	0	0	10	0	0	0	0	no	1	160	0.063	3000	3000
-MEI_2	chr1	10012	10012	10000	12	+	PASS	high	160	21	47	47	21	14	123	21	0	yes	118	148	1.081	9856	10099
+#id	contig	position	left_junction	right_junction	tsd_length	strand	filter	confidence	support	left_clips	right_clips	left_junction_clips	right_junction_clips	short_junction_clips	unmapped_mates	discordant_mates	polya_clips	polyt_clips	both_sides	distinct_starts	depth	signal_ratio	start	end	family	subfamily	element_strand	element_start	element_end	identity	typed_clips	short_typed_clips	checked_mates	mei_mates	assembled	tsd	polya_length	qual	genotype	gq	alt_reads	ref_reads
+MEI_1	chr1	3000	.	3000	.	.	untyped;probe_edge	.	10	10	0	0	10	0	0	0	0	0	no	1	160	0.063	3000	3000	.	.	.	.	.	.	0	0	0	0	.	.	.	0	0/0	23	10	96
+MEI_2	chr1	6010	6010	6000	10	+	PASS	high	150	20	41	41	20	2	130	0	20	0	yes	112	129	1.163	5864	6097	SVA	SVA_F	+	556	1375	0.999	52	2	40	39	.	.	.	20	0/1	99	61	64
+MEI_3	chr1	10012	10012	10000	12	+	PASS	high	161	22	53	53	22	7	14	123	22	0	yes	118	148	1.088	9856	10099	ALU	AluY	+	1	288	0.998	67	6	4	4	.	.	.	20	0/1	99	75	52
+MEI_4	chr1	15015	15015	15000	15	-	PASS	high	141	26	48	48	26	5	120	0	0	48	yes	108	136	1.037	14885	15099	LINE1	L1HS_3end	-	390	902	0.999	56	2	40	39	.	.	.	20	0/1	99	74	56
+MEI_5	chr2	4150	4150	.	.	.	non_mei_mates	.	9	0	3	3	0	0	6	0	0	0	no	7	94	0.096	4107	4150	ALU	AluY	+	1	25	1.000	3	0	6	0	.	.	.	1	0/0	45	3	55
