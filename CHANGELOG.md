@@ -16,6 +16,14 @@ project follows [Semantic Versioning](https://semver.org/).
   and MEI mates, the mates matching the consensus with 96% identity, at
   `low` confidence. New fixture `tailonly`. HGSVC3 exomes: 99 → 111 true,
   48 → 49 false (precision 0.694, recall 0.299; `--min-qual 2`: 0.852).
+- Position of the candidates placed by their mates (#58): without enough
+  junction soft-clips, at the inner edge of the larger group of mate signals
+  (or between the two groups when they do not overlap), with the interval
+  where the insertion lies (new column `cipos`, VCF `CIPOS`). For those with
+  enough supporting reads for the local depth, the interval is read again
+  and the boundary where at least 2 reads are soft-clipped by 3 bases or
+  more becomes the position (new column `breakpoint_clips`, VCF
+  `BREAKPOINT_CLIPS`).
 
 ## [0.2.0] - 2026-10-11
 

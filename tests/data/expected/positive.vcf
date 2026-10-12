@@ -20,6 +20,8 @@
 ##INFO=<ID=SVLEN,Number=1,Type=Integer,Description="Length of the element consensus covered by the reads (MEINFO end - start + 1): a lower bound of the inserted length">
 ##INFO=<ID=MEINFO,Number=4,Type=String,Description="Mobile element info of the form NAME,START,END,POLARITY: subfamily, part of its consensus covered by the reads (1-based), strand">
 ##INFO=<ID=IMPRECISE,Number=0,Type=Flag,Description="No junction assembled: junctions estimated from the soft-clips">
+##INFO=<ID=CIPOS,Number=2,Type=Integer,Description="Confidence interval around POS for an insertion placed by its mate signals only">
+##INFO=<ID=BREAKPOINT_CLIPS,Number=1,Type=Integer,Description="Reads soft-clipped by 3 bases or more at POS, for an insertion without junction soft-clips placed among them">
 ##INFO=<ID=LEFT_JUNCTION,Number=1,Type=Integer,Description="End of the upstream flank (1-based: the insertion is right after this base)">
 ##INFO=<ID=RIGHT_JUNCTION,Number=1,Type=Integer,Description="Start of the downstream flank, minus one (1-based: the downstream flank starts after this base)">
 ##INFO=<ID=TSD,Number=1,Type=String,Description="Target site duplication, from the assembled junctions">
