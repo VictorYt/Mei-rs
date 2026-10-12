@@ -1,5 +1,6 @@
 //! Breakpoints of the candidates without junction soft-clips, looked for
-//! again among all the soft-clips of their reads.
+//! again among all the soft-clips of their reads (those with MEI mates, see
+//! `scan`).
 //!
 //! Without soft-clips of at least `--min-short-clip-len` bases at a junction,
 //! a candidate is placed from its mate signals, within an interval of a few

@@ -13,6 +13,42 @@ use crate::regions::targets::TargetSet;
 /// more, most false ones at 0.90-0.95).
 pub const MIN_MATE_IDENTITY: f64 = 0.96;
 
+/// Minimum identity of the mates to the consensus for a candidate without
+/// junction clips to pass (see [`mate_only_insertion`]).
+pub const MATE_ONLY_MIN_IDENTITY: f64 = 0.98;
+
+/// Minimum fraction of MEI mates among the checked mates of a candidate
+/// without junction clips to pass.
+pub const MATE_ONLY_MIN_FRACTION: f64 = 0.6;
+
+/// Minimum number of MEI mates of a candidate without junction clips to
+/// pass.
+pub const MATE_ONLY_MIN_MEI_MATES: usize = 4;
+
+/// Whether a candidate without enough junction clips (`no_junction`) is an
+/// insertion all the same: typed by its mates, mostly MEI mates
+/// ([`MATE_ONLY_MIN_FRACTION`], at least [`MATE_ONLY_MIN_MEI_MATES`]) of a
+/// young element ([`MATE_ONLY_MIN_IDENTITY`]), and reads soft-clipped by a
+/// few bases at its breakpoint ([`Candidate::breakpoint_clips`], #58): on
+/// short exome reads the junction is often covered by clips shorter than
+/// `--min-short-clip-len` only. Without the clips, or with looser
+/// thresholds, background mate signals pass (HGSVC3 exomes: 7 true and no
+/// false candidates with these thresholds; 11 true and 14 false without the
+/// clips and at 0.96).
+#[must_use]
+pub fn mate_only_insertion(candidate: &Candidate) -> bool {
+    #[allow(clippy::cast_precision_loss)]
+    let fraction = candidate.mei_mates as f64 / candidate.checked_mates.max(1) as f64;
+    candidate.filters.contains(&Filter::NoJunction)
+        && candidate.breakpoint_clips > 0
+        && candidate.mei_mates >= MATE_ONLY_MIN_MEI_MATES
+        && fraction >= MATE_ONLY_MIN_FRACTION
+        && candidate
+            .typing
+            .as_ref()
+            .is_some_and(|t| t.by_mates && t.identity >= MATE_ONLY_MIN_IDENTITY)
+}
+
 /// Capture filter options.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FilterOptions {
@@ -53,6 +89,10 @@ impl Default for FilterOptions {
 /// left out of the junction clips ([`Filter::NoJunction`], against
 /// `min_clips`) and of the typed clips.
 ///
+/// A candidate placed by its mates that is an insertion all the same
+/// ([`mate_only_insertion`]) is cleared of [`Filter::NoJunction`] and
+/// [`Filter::Untyped`].
+///
 /// - [`Filter::Untyped`]: fewer junction soft-clips typed to an MEI consensus
 ///   than the minimum, unless one typed clip, a poly(A/T) tail and as many
 ///   MEI mates as the minimum stand for them; or, typed by its mates (no clip
@@ -77,9 +117,14 @@ pub fn apply(
     options: &FilterOptions,
 ) {
     let typed_clips = candidate.typing.as_ref().map_or(0, |t| t.typed_clips);
+    let mate_only = mate_only_insertion(candidate);
+    if mate_only {
+        candidate.filters.retain(|f| *f != Filter::NoJunction);
+    }
     let short_counts = candidate.mei_mates > 0;
     let junction_clips = candidate.left_junction_clips + candidate.right_junction_clips;
     if !short_counts
+        && !mate_only
         && junction_clips - candidate.short_junction_clips < options.min_clips
         && !candidate.filters.contains(&Filter::NoJunction)
     {
@@ -106,7 +151,11 @@ pub fn apply(
             && candidate.polya_clips + candidate.polyt_clips >= options.min_typed_clips
             && candidate.mei_mates >= options.min_typed_clips
     });
-    if counted_typed_clips < options.min_typed_clips && !typed_with_mates && !typed_by_mates {
+    if counted_typed_clips < options.min_typed_clips
+        && !typed_with_mates
+        && !typed_by_mates
+        && !mate_only
+    {
         candidate.filters.push(Filter::Untyped);
     }
     #[allow(clippy::cast_precision_loss)]
@@ -412,6 +461,50 @@ mod tests {
         c.mei_mates = 1;
         apply(&mut c, "chr1", &targets(), &options);
         assert_eq!(c.filters, [Filter::Untyped]);
+    }
+
+    #[test]
+    fn mate_only_insertions() {
+        let mates: Vec<_> = (0..6)
+            .map(|i| {
+                crate::cluster::tests::mate(
+                    1_000 + i,
+                    Side::Right,
+                    &format!("m{i}"),
+                    SignalKind::MateUnmapped,
+                )
+            })
+            .collect();
+        let insertion = || {
+            let mut c = candidate(mates.clone(), 20);
+            assert!(c.filters.contains(&Filter::NoJunction));
+            c.typing = Some(crate::typer::Typing {
+                identity: 0.99,
+                by_mates: true,
+                ..alu_typing(0, 0)
+            });
+            c.checked_mates = 6;
+            c.mei_mates = 5;
+            c.breakpoint_clips = 3;
+            c
+        };
+        let options = FilterOptions::default();
+        let mut c = insertion();
+        apply(&mut c, "chr1", &targets(), &options);
+        assert!(c.is_pass(), "{:?}", c.filters);
+        assert_eq!(c.confidence(), Some(crate::cluster::Confidence::Low));
+        // Without clips at the breakpoint, too few or too old MEI mates.
+        for change in [
+            (|c: &mut Candidate| c.breakpoint_clips = 0) as fn(&mut Candidate),
+            |c| c.mei_mates = 3,
+            |c| c.checked_mates = 9,
+            |c| c.typing.as_mut().unwrap().identity = 0.97,
+        ] {
+            let mut c = insertion();
+            change(&mut c);
+            apply(&mut c, "chr1", &targets(), &options);
+            assert_eq!(c.filters, [Filter::NoJunction, Filter::Untyped]);
+        }
     }
 
     /// Re-apply the filters from scratch.

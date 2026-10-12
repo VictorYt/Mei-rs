@@ -128,12 +128,17 @@ skipped with a warning.
    typed candidate are checked the same way: unmapped mates by their read (placed
    at the anchor, it is read with it), mapped ones (low MAPQ, another contig,
    large insert) by the reference at their position, with `--reference`.
-   Untyped candidates with a poly(A/T) tail clip have their mates checked
-   too: on short reads the clips at the tail junction are often the tail
-   alone, and at least 2 mates of one family type the candidate
-   (`typed_by` `mates`).
+   Untyped candidates with a poly(A/T) tail clip, and candidates without
+   junction clips but with enough mate signals for their depth, have their
+   mates checked too: on short reads the clips at the tail junction are
+   often the tail alone, or the junctions have no clip of 15 bases, and at
+   least 2 mates of one family type the candidate (`typed_by` `mates`).
+   Those without junction clips but with MEI mates are placed again among
+   the reads clipped by 3 bases or more.
 4. **Filters**: `no_junction` when fewer than `--min-clips` soft-clips mark
-   the junctions (mate signals alone); `untyped` when fewer than
+   the junctions (mate signals alone), unless young MEI mates (98% identity,
+   at least 60% and 4 of the checked mates) type it and reads are clipped
+   by a few bases at its position; `untyped` when fewer than
    `--min-typed-clips` of them are typed, unless one typed clip has a
    poly(A/T) tail and the candidate has as many MEI mates, or the candidate
    is typed by its mates with as many tailed clips and MEI mates of 96%

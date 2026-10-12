@@ -20,10 +20,15 @@ project follows [Semantic Versioning](https://semver.org/).
   junction soft-clips, at the inner edge of the larger group of mate signals
   (or between the two groups when they do not overlap), with the interval
   where the insertion lies (new column `cipos`, VCF `CIPOS`). For those with
-  enough supporting reads for the local depth, the interval is read again
-  and the boundary where at least 2 reads are soft-clipped by 3 bases or
-  more becomes the position (new column `breakpoint_clips`, VCF
-  `BREAKPOINT_CLIPS`).
+  MEI mates, the interval is read again and the boundary where at least 2
+  reads are soft-clipped by 3 bases or more becomes the position (new column
+  `breakpoint_clips`, VCF `BREAKPOINT_CLIPS`).
+- Insertions without junction soft-clips (#59): the mates of candidates
+  without junction clips (at least 3 mate signals, `signal_ratio` 0.2) are
+  checked and may type them (#57); such a candidate passes `no_junction` and
+  `untyped` (confidence `low`, VCF `IMPRECISE`) when typed by its mates with
+  98% identity, at least 60% and 4 of its checked mates are MEI mates, and
+  reads are soft-clipped by a few bases at its position (#58).
 
 ## [0.2.0] - 2026-10-11
 

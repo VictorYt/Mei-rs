@@ -204,6 +204,7 @@ Same seven exomes, PASS calls:
 | #33 assembly, #34 score, #35 VCF | 139 | 91 | 0.669 | 0.245 | 12 / 13 |
 | #56 LINE-1 ORF2 (v0.2.0) | 150 | 99 | 0.673 | 0.267 | 12 / 13 |
 | #57 typing by the mates | 163 | 111 | 0.694 | 0.299 | 12 / 13 |
+| #58, #59 insertions without junction clips | 170 | 118 | 0.707 | 0.318 | 12 / 13 |
 
 #57 types untyped candidates with a poly(A/T) tail clip by their mates
 (junction clips that are the tail alone): 12 more true calls, 1 more false
@@ -212,6 +213,17 @@ targets, 81 of 131 truth MEIs are PASS (73 before). HG002: 16 true / 25
 false (13 / 21 before). Without the identity (96%) and tailed-clip (2)
 conditions, the mates typed 35 more false candidates for 13 true: most
 false ones had one tailed clip and mates matching older reference copies.
+
+#58 places the candidates without junction clips at the inner edge of their
+mate signals and, for those with MEI mates, among the reads soft-clipped by
+3 bases or more (of 15 truth MEIs whose candidate was 43-431 bp off, 8 are
+then within 20 bp and 4 within the interval). #59 checks their mates and
+passes them when young MEI mates (98% identity, at least 60% and 4 of the
+checked mates) type them and reads are clipped at their position: 7 more
+true calls, no false one (`--min-qual 2`: 116 true / 19 false, precision
+0.859); within 100 bp of the targets, 85 of 131 truth MEIs are PASS. HG002
+unchanged. Looser thresholds (96% identity, without the clips) added 11
+true and 14 false candidates.
 
 Before typing, most false positives were poly(A) length variants of reference
 Alus (`high`) and background unmapped mates of the deep samples (`medium`):

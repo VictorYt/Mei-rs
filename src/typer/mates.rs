@@ -56,6 +56,15 @@ pub const MIN_MATE_LENGTH: u64 = 50;
 /// not typed.
 pub const MIN_TYPED_MATES: usize = 2;
 
+/// Minimum number of mate signals of a candidate without junction clips to
+/// have its mates checked.
+pub const MATE_ONLY_MIN_MATES: usize = 3;
+
+/// Minimum supporting reads per read of local depth of a candidate without
+/// junction clips to have its mates checked: most of them are background
+/// (HGSVC3 exomes: 59 of the 61 true ones above, a seventh of the others).
+pub const MATE_ONLY_MIN_RATIO: f64 = 0.2;
+
 /// A mate sampled to be checked.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MateCheck {
@@ -69,13 +78,23 @@ pub struct MateCheck {
 
 /// Whether the mates of a candidate are checked: it is typed and has enough
 /// junction soft-clips (`no_junction` is decided at clustering), so it can
-/// pass; or it is untyped and has a soft-clip with a poly(A/T) tail, so its
-/// mates may type it.
+/// pass; or it is untyped and has a soft-clip with a poly(A/T) tail, or no
+/// junction clips but enough mate signals for its depth
+/// ([`MATE_ONLY_MIN_MATES`], [`MATE_ONLY_MIN_RATIO`]), so its mates may type
+/// it.
 #[must_use]
 pub fn checked(candidate: &Candidate) -> bool {
+    let no_junction = candidate.filters.contains(&Filter::NoJunction);
     match candidate.typing {
-        Some(_) => !candidate.filters.contains(&Filter::NoJunction),
-        None => candidate.polya_clips + candidate.polyt_clips > 0,
+        Some(_) => !no_junction,
+        None => {
+            candidate.polya_clips + candidate.polyt_clips > 0
+                || (no_junction
+                    && candidate.unmapped_mates + candidate.discordant_mates >= MATE_ONLY_MIN_MATES
+                    && candidate
+                        .signal_ratio()
+                        .is_some_and(|ratio| ratio >= MATE_ONLY_MIN_RATIO))
+        }
     }
 }
 
