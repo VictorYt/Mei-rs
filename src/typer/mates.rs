@@ -16,6 +16,12 @@
 //! A mate is an MEI mate when its best alignment ([`super::type_sequence`])
 //! is in the family of the candidate, or in any family for an untyped one.
 //!
+//! Untyped candidates with a poly(A/T) tail clip have their mates checked
+//! too: on short reads, the clips at the tail junction are often the tail
+//! alone, with too few element bases to be typed. At least
+//! [`MIN_TYPED_MATES`] mates of one family type such a candidate
+//! ([`Typing::by_mates`]).
+//!
 //! The checks are kept in the candidate ([`Candidate::mate_checks`]), not in
 //! the signals: millions of signals, a few thousand checked candidates.
 //!
@@ -28,8 +34,10 @@ use std::path::Path;
 use noodles::core::{Position, Region};
 use noodles::fasta;
 
-use super::consensus::ConsensusSet;
-use super::type_sequence;
+use std::collections::HashMap;
+
+use super::consensus::{ConsensusSet, Family};
+use super::{ClipHit, Typing, type_sequence};
 use crate::cluster::{Candidate, Filter};
 use crate::reader::mates::{MateRequest, name_hash};
 use crate::reader::signals::{Locus, SignalKind};
@@ -44,6 +52,10 @@ pub const MAX_CHECKED_MATES: usize = 40;
 /// the anchored read is shorter.
 pub const MIN_MATE_LENGTH: u64 = 50;
 
+/// Minimum number of mates of one family to type a candidate whose clips are
+/// not typed.
+pub const MIN_TYPED_MATES: usize = 2;
+
 /// A mate sampled to be checked.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MateCheck {
@@ -57,9 +69,20 @@ pub struct MateCheck {
 
 /// Whether the mates of a candidate are checked: it is typed and has enough
 /// junction soft-clips (`no_junction` is decided at clustering), so it can
-/// pass.
+/// pass; or it is untyped and has a soft-clip with a poly(A/T) tail, so its
+/// mates may type it.
 #[must_use]
 pub fn checked(candidate: &Candidate) -> bool {
+    match candidate.typing {
+        Some(_) => !candidate.filters.contains(&Filter::NoJunction),
+        None => candidate.polya_clips + candidate.polyt_clips > 0,
+    }
+}
+
+/// Whether a candidate can pass once its mates are checked: typed, by its
+/// clips or by its mates, with enough junction soft-clips.
+#[must_use]
+pub fn may_pass(candidate: &Candidate) -> bool {
     candidate.typing.is_some() && !candidate.filters.contains(&Filter::NoJunction)
 }
 
@@ -177,18 +200,31 @@ pub fn fetch_mapped_mates(
 }
 
 /// Type the sampled mates of a candidate with a sequence: `checked_mates` and
-/// `mei_mates` (typed to its family, or to any family if it is untyped).
+/// `mei_mates` (typed to its family, or to any family if it is untyped). An
+/// untyped candidate is first typed by its mates (see the module documentation).
 pub fn type_mates(set: &ConsensusSet, candidate: &mut Candidate) {
+    let hits: Vec<Option<Option<ClipHit>>> = candidate
+        .mate_checks
+        .iter()
+        .map(|check| {
+            check
+                .sequence
+                .as_deref()
+                .map(|sequence| type_sequence(set, sequence).first().copied())
+        })
+        .collect();
+    if candidate.typing.is_none() {
+        let typed: Vec<ClipHit> = hits.iter().flatten().flatten().copied().collect();
+        candidate.typing = mate_typing(set, candidate, &typed);
+    }
     let family = candidate.typing.as_ref().map(|t| t.family);
     let (mut checked, mut mei) = (0, 0);
-    for check in &mut candidate.mate_checks {
-        let Some(sequence) = check.sequence.as_deref() else {
+    for (check, hit) in candidate.mate_checks.iter_mut().zip(hits) {
+        let Some(hit) = hit else {
             continue;
         };
         checked += 1;
-        let best = type_sequence(set, sequence)
-            .first()
-            .map(|hit| set.sequences()[hit.consensus].family);
+        let best = hit.map(|hit| set.sequences()[hit.consensus].family);
         let is_mei = best.is_some_and(|f| family.is_none_or(|family| f == family));
         check.mei = Some(is_mei);
         mei += usize::from(is_mei);
@@ -197,10 +233,59 @@ pub fn type_mates(set: &ConsensusSet, candidate: &mut Candidate) {
     candidate.mei_mates = mei;
 }
 
+/// Element typed from the best hits of the mates of an untyped candidate:
+/// the family of the most mates (at least [`MIN_TYPED_MATES`]; ties go to
+/// the higher summed score). Mapped mates stand for a copy of the element in
+/// the reference, often of an older subfamily: the subfamily is the
+/// consensus with more than half of the summed score of the family, else
+/// only the family is known (its name). The element strand comes from the
+/// tails (poly(T): minus strand).
+fn mate_typing(set: &ConsensusSet, candidate: &Candidate, hits: &[ClipHit]) -> Option<Typing> {
+    let family_of = |hit: &ClipHit| set.sequences()[hit.consensus].family;
+    let mut families: HashMap<Family, (usize, i64)> = HashMap::new();
+    for hit in hits {
+        let entry = families.entry(family_of(hit)).or_default();
+        entry.0 += 1;
+        entry.1 += i64::from(hit.score);
+    }
+    let (&family, &(mates, family_score)) = families
+        .iter()
+        .max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0)))?;
+    if mates < MIN_TYPED_MATES {
+        return None;
+    }
+    let in_family: Vec<&ClipHit> = hits.iter().filter(|h| family_of(h) == family).collect();
+    let mut scores: HashMap<usize, i64> = HashMap::new();
+    for hit in &in_family {
+        *scores.entry(hit.consensus).or_default() += i64::from(hit.score);
+    }
+    let (&best, &best_score) = scores
+        .iter()
+        .max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0)))?;
+    let on_best: Vec<&&ClipHit> = in_family.iter().filter(|h| h.consensus == best).collect();
+    #[allow(clippy::cast_precision_loss)]
+    let identity = on_best.iter().map(|h| h.identity).sum::<f64>() / on_best.len() as f64;
+    Some(Typing {
+        family,
+        subfamily: if 2 * best_score > family_score {
+            set.sequences()[best].name.clone()
+        } else {
+            family.name().to_owned()
+        },
+        reverse: candidate.polyt_clips > candidate.polya_clips,
+        element_start: on_best.iter().map(|h| h.element_start).min()?,
+        element_end: on_best.iter().map(|h| h.element_end).max()?,
+        identity,
+        typed_clips: 0,
+        short_typed_clips: 0,
+        by_mates: true,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cluster::tests::mate;
+    use crate::cluster::tests::{clip, mate};
     use crate::cluster::{ClusterOptions, cluster};
     use crate::reader::signals::Side;
     use crate::typer::consensus::{Family, reverse_complement};
@@ -215,6 +300,7 @@ mod tests {
             identity: 1.0,
             typed_clips: 2,
             short_typed_clips: 0,
+            by_mates: false,
         }
     }
 
@@ -252,7 +338,8 @@ mod tests {
         assert_eq!(requests[0].1.len(), MAX_CHECKED_MATES);
         assert_eq!(requests[0].1[1].1.anchor_start, candidate.signals[3].start);
 
-        // Few mates: all kept. Not checked: `no_junction`, or untyped.
+        // Few mates: all kept. Not checked: `no_junction`, or untyped
+        // without a tail.
         let mut few = typed(cluster(signals[..10].to_vec(), &unchecked_options()).remove(0));
         sample_mates(&mut few);
         assert_eq!(few.mate_checks.len(), 10);
@@ -263,6 +350,16 @@ mod tests {
         let mut untyped = cluster(signals[..10].to_vec(), &unchecked_options()).remove(0);
         sample_mates(&mut untyped);
         assert_eq!(untyped.mate_checks, []);
+        // Untyped with a tail clip, even without enough junction clips: its
+        // mates may type it.
+        let mut tailed = signals[..10].to_vec();
+        tailed.push(clip(1_005, Side::Right, "t", Some(b'A')));
+        tailed.sort();
+        let mut tailed = cluster(tailed, &ClusterOptions::default()).remove(0);
+        assert!(tailed.filters.contains(&Filter::NoJunction));
+        sample_mates(&mut tailed);
+        assert_eq!(tailed.mate_checks.len(), 10);
+        assert!(!may_pass(&tailed));
     }
 
     #[test]
@@ -281,28 +378,50 @@ mod tests {
             .map(|read| mate(1_000, Side::Right, read, SignalKind::MateUnmapped))
             .collect();
         let mut candidate = cluster(signals, &unchecked_options()).remove(0);
-        let sequences: [Option<Vec<u8>>; 5] = [
+        let random = b"TGCATGCTAGCTAGGATCGATCGTAGCTAGCTTTAGGCGATCGATTGCATGCTAGCTAGG".to_vec();
+        let checks = |sequences: Vec<Option<Vec<u8>>>| -> Vec<MateCheck> {
+            sequences
+                .into_iter()
+                .enumerate()
+                .map(|(signal, sequence)| MateCheck {
+                    signal,
+                    sequence,
+                    mei: None,
+                })
+                .collect()
+        };
+
+        // Untyped, one mate per family: not typed, any family counts.
+        candidate.mate_checks = checks(vec![
             Some(alu[20..96].to_vec()),
-            Some(reverse_complement(&alu[150..226])),
-            Some(b"TGCATGCTAGCTAGGATCGATCGTAGCTAGCTTTAGGCGATCGATTGCATGCTAGCTAGG".to_vec()),
+            Some(random.clone()),
             Some(sva[300..376].to_vec()),
             None,
-        ];
-        candidate.mate_checks = sequences
-            .into_iter()
-            .enumerate()
-            .map(|(signal, sequence)| MateCheck {
-                signal,
-                sequence,
-                mei: None,
-            })
-            .collect();
-
-        // Untyped: any family counts.
+        ]);
         type_mates(&set, &mut candidate);
-        assert_eq!((candidate.checked_mates, candidate.mei_mates), (4, 3));
+        assert_eq!(candidate.typing, None);
+        assert_eq!((candidate.checked_mates, candidate.mei_mates), (3, 2));
 
-        // Typed Alu: the SVA mate does not count.
+        // Untyped, two Alu mates: typed Alu by its mates; the SVA mate does
+        // not count.
+        candidate.mate_checks = checks(vec![
+            Some(alu[20..96].to_vec()),
+            Some(reverse_complement(&alu[150..226])),
+            Some(random),
+            Some(sva[300..376].to_vec()),
+            None,
+        ]);
+        type_mates(&set, &mut candidate);
+        let typing = candidate.typing.clone().unwrap();
+        assert!(typing.by_mates);
+        assert_eq!(
+            (typing.family, typing.subfamily.as_str(), typing.typed_clips),
+            (Family::Alu, "AluY", 0)
+        );
+        assert_eq!((typing.element_start, typing.element_end), (20, 226));
+        assert_eq!((candidate.checked_mates, candidate.mei_mates), (4, 2));
+
+        // Typed Alu by its clips: the SVA mate does not count.
         candidate.typing = Some(alu_typing());
         type_mates(&set, &mut candidate);
         assert_eq!((candidate.checked_mates, candidate.mei_mates), (4, 2));

@@ -84,7 +84,7 @@ skipped with a warning.
 | `--window` | 100 | maximum distance between two consecutive signals of a candidate |
 | `--min-support` | 3 | minimum number of distinct supporting reads of a candidate |
 | `--min-clips` | 2 | minimum number of soft-clips at the junctions (`no_junction` below); each junction needs as many to give a TSD |
-| `--min-typed-clips` | 2 | minimum number of junction soft-clips typed to an MEI consensus (`untyped` below, unless one typed clip has a poly(A/T) tail and the candidate has as many MEI mates; 0 turns the filter off) |
+| `--min-typed-clips` | 2 | minimum number of junction soft-clips typed to an MEI consensus (`untyped` below, unless one typed clip has a poly(A/T) tail and the candidate has as many MEI mates, or, typed by its mates, as many tailed clips and MEI mates of 96% identity; 0 turns the filter off) |
 | `--min-mei-mate-fraction` | 0.3 | minimum fraction of MEI mates among the mates checked against the consensus sequences (`non_mei_mates` below; 0 turns the filter off) |
 | `--require-tail` | off | also require a soft-clip with a poly(A/T) tail (`no_tail`) |
 | `--min-signal-ratio` | 0.05 | minimum number of supporting reads per read of local depth |
@@ -125,10 +125,16 @@ skipped with a warning.
    typed candidate are checked the same way: unmapped mates by their read (placed
    at the anchor, it is read with it), mapped ones (low MAPQ, another contig,
    large insert) by the reference at their position, with `--reference`.
+   Untyped candidates with a poly(A/T) tail clip have their mates checked
+   too: on short reads the clips at the tail junction are often the tail
+   alone, and at least 2 mates of one family type the candidate
+   (`typed_by` `mates`).
 4. **Filters**: `no_junction` when fewer than `--min-clips` soft-clips mark
    the junctions (mate signals alone); `untyped` when fewer than
    `--min-typed-clips` of them are typed, unless one typed clip has a
-   poly(A/T) tail and the candidate has as many MEI mates (short clips count
+   poly(A/T) tail and the candidate has as many MEI mates, or the candidate
+   is typed by its mates with as many tailed clips and MEI mates of 96%
+   identity or more (short clips count
    in both only when a mate is an MEI mate); `non_mei_mates` when mates were
    checked and fewer than `--min-mei-mate-fraction` of them are mobile
    elements; `no_tail` (with `--require-tail`)
@@ -163,7 +169,7 @@ skipped with a warning.
    with its quality.
 7. **Confidence** of the `PASS` candidates: `high` with a poly(A/T) tail and a
    TSD (complete evidence of a retrotransposition), `medium` with a tail,
-   `low` without a tail (typed clips only).
+   `low` without a tail (typed clips only), or when typed by its mates only.
 
 ### Output
 
@@ -203,8 +209,9 @@ Other limitations:
   not the assembled contigs. Close subfamilies (e.g. AluY and AluYa5) are
   often not told apart; LINE-1 typed by the ORF2 model (#56) are reported as
   `L1P1_orf2`, with coordinates in that model.
-- Candidates whose clips are tail-only or too few, typed by none of their
-  mates, stay `untyped` or `no_junction` (v0.3.0, #57-#59).
+- Candidates without enough junction clips, or with tail-only clips that
+  their mates do not type (#57), stay `no_junction` or `untyped` (v0.3.0,
+  #58, #59).
 - Assembly needs `--reference`, and few exome candidates have both junctions
   assembled; otherwise the TSD comes from the soft-clip junctions.
 - The genotype under-counts insertion reads (clips of 15 good bases): it
