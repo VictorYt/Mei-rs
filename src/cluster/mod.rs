@@ -59,7 +59,8 @@ pub enum Filter {
     LowSupport,
     /// Fewer soft-clips at the junctions than `--min-clips` (short ones
     /// count only with an MEI mate): mate signals alone do not resolve the
-    /// insertion to the base.
+    /// insertion to the base, unless reads clipped by a few bases and young
+    /// MEI mates do (see [`filters::mate_only_insertion`]).
     NoJunction,
     /// No soft-clip with a poly(A/T) tail (only with `--require-tail`).
     NoTail,

@@ -68,12 +68,11 @@ pub fn run(args: &ScanArgs) -> Result<()> {
     let clusters = candidates.len();
     candidates.retain(|c| !c.is_low_support());
 
-    let depths = place_candidates(
+    set_depths(
         &mut candidates,
         &inputs.alignment,
         &contigs,
         extract_options.filter,
-        args.filter_options().min_signal_ratio,
     )?;
     if let Some(reference) = &args.reference {
         flag_tandem_repeats(&mut candidates, &header_contigs, reference)?;
@@ -90,6 +89,12 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         &consensus,
         args.reference.as_deref(),
     )?;
+    locate_mate_only(
+        &mut candidates,
+        &inputs.alignment,
+        &contigs,
+        extract_options.filter,
+    )?;
     assemble_candidates(
         &mut candidates,
         &inputs.alignment,
@@ -98,8 +103,7 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         &extract_options,
     )?;
     let filter_options = args.filter_options();
-    for (candidate, depth) in candidates.iter_mut().zip(depths) {
-        candidate.depth = Some(depth);
+    for candidate in &mut candidates {
         filters::apply(
             candidate,
             &contigs[candidate.contig],
@@ -118,11 +122,22 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         &extract_options,
     )?;
 
+    report(args, &inputs.sample, &header_contigs, &candidates)
+}
+
+/// Write the candidates in the output format.
+fn report(
+    args: &ScanArgs,
+    sample: &str,
+    header_contigs: &[Contig],
+    candidates: &[Candidate],
+) -> Result<()> {
+    let contigs: Vec<String> = header_contigs.iter().map(|c| c.name.clone()).collect();
     let command = command_line();
     let contig_lengths: Vec<u64> = header_contigs.iter().map(|c| c.length).collect();
     let reference_bases = match (&args.reference, args.format) {
         (Some(reference), OutputFormat::Vcf) => {
-            Some(reference_bases(&candidates, &header_contigs, reference)?)
+            Some(reference_bases(candidates, header_contigs, reference)?)
         }
         _ => None,
     };
@@ -132,13 +147,13 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         .and_then(Path::file_name)
         .map(|n| n.to_string_lossy().into_owned());
     let report = Report {
-        sample: &inputs.sample,
+        sample,
         command: &command,
         contigs: &contigs,
         contig_lengths: &contig_lengths,
         reference: reference_name.as_deref(),
         reference_bases: reference_bases.as_deref(),
-        candidates: &candidates,
+        candidates,
     };
     write_output(&report, args)
 }
@@ -220,63 +235,52 @@ fn type_candidates(candidates: &mut [Candidate], consensus: &ConsensusSet, path:
     );
 }
 
-/// Local depth at the breakpoint of each candidate, once the candidates
-/// placed by their mates are looked for among the soft-clips
-/// ([`locate_mate_only`]).
-fn place_candidates(
+/// Local depth of each candidate at its breakpoint.
+fn set_depths(
     candidates: &mut [Candidate],
     alignment: &AlignmentFile,
     contigs: &[String],
     filter: ReadFilter,
-    min_signal_ratio: f64,
-) -> Result<Vec<u64>> {
+) -> Result<()> {
     let boundaries: Vec<(String, u64)> = candidates
         .iter()
         .map(|c| (contigs[c.contig].clone(), c.breakpoint))
         .collect();
-    let mut depths = local_depths(alignment, &boundaries, &filter)?;
-    locate_mate_only(
-        candidates,
-        &mut depths,
-        alignment,
-        contigs,
-        filter,
-        min_signal_ratio,
-    )?;
-    Ok(depths)
+    for (candidate, depth) in
+        candidates
+            .iter_mut()
+            .zip(local_depths(alignment, &boundaries, &filter)?)
+    {
+        candidate.depth = Some(depth);
+    }
+    Ok(())
 }
 
 /// Look for the breakpoint of the candidates placed by their mates among
 /// the soft-clips of their reads ([`reader::breakpoints`]), for those with
-/// enough supporting reads for the local depth (`--min-signal-ratio`). The
+/// MEI mates (see [`mates::MIN_TYPED_MATES`]): the others cannot pass. The
 /// depth of the candidates moved is measured again at their breakpoint.
 fn locate_mate_only(
     candidates: &mut [Candidate],
-    depths: &mut [u64],
     alignment: &AlignmentFile,
     contigs: &[String],
     filter: ReadFilter,
-    min_signal_ratio: f64,
 ) -> Result<()> {
     let mut selected: Vec<(usize, BreakpointRequest)> = candidates
         .iter()
-        .zip(depths.iter())
         .enumerate()
-        .filter_map(|(i, (c, &depth))| {
+        .filter(|(_, c)| c.mei_mates >= mates::MIN_TYPED_MATES)
+        .filter_map(|(i, c)| {
             let (first, last) = c.mate_interval?;
-            #[allow(clippy::cast_precision_loss)]
-            let ratio = c.support as f64 / depth.max(1) as f64;
-            (ratio >= min_signal_ratio).then(|| {
-                (
-                    i,
-                    BreakpointRequest {
-                        contig: contigs[c.contig].clone(),
-                        first,
-                        last,
-                        estimate: c.breakpoint,
-                    },
-                )
-            })
+            Some((
+                i,
+                BreakpointRequest {
+                    contig: contigs[c.contig].clone(),
+                    first,
+                    last,
+                    estimate: c.breakpoint,
+                },
+            ))
         })
         .collect();
     // Sorted by contig and first boundary, as the batches need.
@@ -306,10 +310,10 @@ fn locate_mate_only(
         .iter()
         .zip(local_depths(alignment, &boundaries, &filter)?)
     {
-        depths[i] = depth;
+        candidates[i].depth = Some(depth);
     }
     info!(
-        "candidates placed by their mates: {} looked for among the soft-clips of their reads, {} found",
+        "candidates placed by their mates, with MEI mates: {} looked for among the soft-clips of their reads, {} found",
         selected.len(),
         moved.len()
     );
