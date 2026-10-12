@@ -115,7 +115,10 @@ skipped with a warning.
      median insert size + 6 × 1.4826 × MAD of the sample).
 2. **Clustering**: signals at most `--window` bases apart form a candidate.
    Its position is the most supported junction; the junctions of the two
-   flanks give the TSD.
+   flanks give the TSD. Without junction soft-clips, the mate signals place
+   it (inner edge of the reads facing the insertion, within a confidence
+   interval), then the interval is read again: the boundary where reads are
+   soft-clipped by 3 bases or more (at least 2) becomes the position.
 3. **Typing**: each junction soft-clip, without the pure run of its tail, is
    seeded against a k-mer index of the consensus sequences (both strands) and
    aligned locally (Smith-Waterman) to the best ones; a clip is typed when at

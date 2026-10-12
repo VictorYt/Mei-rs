@@ -10,7 +10,7 @@
 
 use std::io::{self, Write};
 
-use super::{Report, candidate_id, confidence, filter, typed_by};
+use super::{Report, candidate_id, cipos, confidence, filter, typed_by};
 use crate::cluster::{Candidate, Filter};
 use crate::typer::consensus::Family;
 
@@ -48,7 +48,7 @@ const FILTERS: [(Filter, &str); 8] = [
 ];
 
 /// `INFO` lines of the header: ID, number, type, description.
-const INFO: [(&str, &str, &str, &str); 20] = [
+const INFO: [(&str, &str, &str, &str); 22] = [
     ("SVTYPE", "1", "String", "Type of structural variant"),
     (
         "SVLEN",
@@ -67,6 +67,18 @@ const INFO: [(&str, &str, &str, &str); 20] = [
         "0",
         "Flag",
         "No junction assembled: junctions estimated from the soft-clips",
+    ),
+    (
+        "CIPOS",
+        "2",
+        "Integer",
+        "Confidence interval around POS for an insertion placed by its mate signals only",
+    ),
+    (
+        "BREAKPOINT_CLIPS",
+        "1",
+        "Integer",
+        "Reads soft-clipped by 3 bases or more at POS, for an insertion without junction soft-clips placed among them",
     ),
     (
         "LEFT_JUNCTION",
@@ -278,6 +290,12 @@ fn info(c: &Candidate) -> Vec<String> {
     let assembled = c.assembly.as_ref();
     if assembled.is_none_or(|a| a.left.is_none() && a.right.is_none()) {
         fields.push("IMPRECISE".to_owned());
+    }
+    if let Some((first, last)) = cipos(c) {
+        fields.push(format!("CIPOS={first},{last}"));
+    }
+    if c.breakpoint_clips > 0 {
+        fields.push(format!("BREAKPOINT_CLIPS={}", c.breakpoint_clips));
     }
     if let Some(left) = c.left_junction {
         fields.push(format!("LEFT_JUNCTION={left}"));

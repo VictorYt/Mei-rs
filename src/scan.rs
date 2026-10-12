@@ -16,8 +16,10 @@ use crate::cluster::{Candidate, Confidence, Filter, cluster, filters, tracts};
 use crate::genotype::{self, AlleleCounts};
 use crate::inputs::Inputs;
 use crate::reader::alleles::Site;
+use crate::reader::breakpoints::BreakpointRequest;
 use crate::reader::extract::ExtractOptions;
 use crate::reader::extract::{Extraction, extract};
+use crate::reader::filter::ReadFilter;
 use crate::reader::junctions::JunctionRequest;
 use crate::reader::signals::{ClipOptions, Signal, SignalKind};
 use crate::reader::{self, alignment::AlignmentFile, depth::local_depths, mates::MateRequest};
@@ -66,11 +68,13 @@ pub fn run(args: &ScanArgs) -> Result<()> {
     let clusters = candidates.len();
     candidates.retain(|c| !c.is_low_support());
 
-    let boundaries: Vec<(String, u64)> = candidates
-        .iter()
-        .map(|c| (contigs[c.contig].clone(), c.breakpoint))
-        .collect();
-    let depths = local_depths(&inputs.alignment, &boundaries, &extract_options.filter)?;
+    let depths = place_candidates(
+        &mut candidates,
+        &inputs.alignment,
+        &contigs,
+        extract_options.filter,
+        args.filter_options().min_signal_ratio,
+    )?;
     if let Some(reference) = &args.reference {
         flag_tandem_repeats(&mut candidates, &header_contigs, reference)?;
     } else {
@@ -214,6 +218,102 @@ fn type_candidates(candidates: &mut [Candidate], consensus: &ConsensusSet, path:
         typed(Family::Line1),
         typed(Family::Sva)
     );
+}
+
+/// Local depth at the breakpoint of each candidate, once the candidates
+/// placed by their mates are looked for among the soft-clips
+/// ([`locate_mate_only`]).
+fn place_candidates(
+    candidates: &mut [Candidate],
+    alignment: &AlignmentFile,
+    contigs: &[String],
+    filter: ReadFilter,
+    min_signal_ratio: f64,
+) -> Result<Vec<u64>> {
+    let boundaries: Vec<(String, u64)> = candidates
+        .iter()
+        .map(|c| (contigs[c.contig].clone(), c.breakpoint))
+        .collect();
+    let mut depths = local_depths(alignment, &boundaries, &filter)?;
+    locate_mate_only(
+        candidates,
+        &mut depths,
+        alignment,
+        contigs,
+        filter,
+        min_signal_ratio,
+    )?;
+    Ok(depths)
+}
+
+/// Look for the breakpoint of the candidates placed by their mates among
+/// the soft-clips of their reads ([`reader::breakpoints`]), for those with
+/// enough supporting reads for the local depth (`--min-signal-ratio`). The
+/// depth of the candidates moved is measured again at their breakpoint.
+fn locate_mate_only(
+    candidates: &mut [Candidate],
+    depths: &mut [u64],
+    alignment: &AlignmentFile,
+    contigs: &[String],
+    filter: ReadFilter,
+    min_signal_ratio: f64,
+) -> Result<()> {
+    let mut selected: Vec<(usize, BreakpointRequest)> = candidates
+        .iter()
+        .zip(depths.iter())
+        .enumerate()
+        .filter_map(|(i, (c, &depth))| {
+            let (first, last) = c.mate_interval?;
+            #[allow(clippy::cast_precision_loss)]
+            let ratio = c.support as f64 / depth.max(1) as f64;
+            (ratio >= min_signal_ratio).then(|| {
+                (
+                    i,
+                    BreakpointRequest {
+                        contig: contigs[c.contig].clone(),
+                        first,
+                        last,
+                        estimate: c.breakpoint,
+                    },
+                )
+            })
+        })
+        .collect();
+    // Sorted by contig and first boundary, as the batches need.
+    selected.sort_by_key(|(i, request)| (candidates[*i].contig, request.first));
+    let requests: Vec<BreakpointRequest> = selected.iter().map(|(_, r)| r.clone()).collect();
+    let found = reader::breakpoints::find_breakpoints(alignment, &requests, &filter)?;
+    let mut moved: Vec<usize> = Vec::new();
+    for ((i, _), breakpoint) in selected.iter().zip(found) {
+        if let Some(breakpoint) = breakpoint {
+            let c = &mut candidates[*i];
+            c.breakpoint = breakpoint.position;
+            c.breakpoint_clips = breakpoint.clips;
+            c.mate_interval = None;
+            moved.push(*i);
+        }
+    }
+    let boundaries: Vec<(String, u64)> = moved
+        .iter()
+        .map(|&i| {
+            (
+                contigs[candidates[i].contig].clone(),
+                candidates[i].breakpoint,
+            )
+        })
+        .collect();
+    for (&i, depth) in moved
+        .iter()
+        .zip(local_depths(alignment, &boundaries, &filter)?)
+    {
+        depths[i] = depth;
+    }
+    info!(
+        "candidates placed by their mates: {} looked for among the soft-clips of their reads, {} found",
+        selected.len(),
+        moved.len()
+    );
+    Ok(())
 }
 
 /// Check a sample of the mates of each candidate against the consensus

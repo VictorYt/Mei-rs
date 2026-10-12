@@ -24,7 +24,7 @@ convention), then one `#` line names the columns:
 |---|---|
 | `id` | Candidate identifier (`MEI_1`, `MEI_2`, ... in output order). |
 | `contig` | Contig. |
-| `position` | Estimated insertion point: the most supported soft-clip junction, or, without soft-clips, the midpoint between the reads of the two flanks. |
+| `position` | Estimated insertion point: the most supported soft-clip junction. Without enough junction soft-clips (`--min-clips`), the mate signals place it: between the reads of the two flanks when the upstream ones end before the downstream ones start, else at the inner edge of the larger group (the furthest upstream read, or the nearest downstream one), the insertion lying within `cipos`. For candidates with enough supporting reads for the local depth, this interval is read again, and the boundary where most reads are soft-clipped by 3 bases or more (at least 2 reads) becomes `position` (`breakpoint_clips`). |
 | `left_junction` | End of the upstream flank: the assembled junction (`assembled` is `both` or `left`), or else the most supported junction of the reads clipped on their right end (`.` if none). |
 | `right_junction` | Start of the downstream flank: the assembled junction (`assembled` is `both` or `right`), or else the most supported junction of the reads clipped on their left end (`.` if none). |
 | `tsd_length` | Length of the target site duplication: with both junctions assembled, the length of `tsd` (`.` when the assembled flanks do not overlap by 1 to 50 bp); otherwise estimated from the clips, `left_junction - right_junction` when each junction has at least `--min-clips` soft-clips and the flanks overlap by 1 to 50 bp (`.` otherwise). |
@@ -64,6 +64,8 @@ convention), then one `#` line names the columns:
 | `alt_reads` | Reads clipped at a junction (within 5 bp) by at least `--min-short-clip-len` bases of median quality at least `--min-clip-quality`, summed over the junctions. |
 | `ref_reads` | Reads aligned over the whole site (both junctions) with at least `--min-short-clip-len` bases on each side, counted at each junction (twice with two junctions). |
 | `typed_by` | What typed the element: `clips` (junction soft-clips) or `mates` (no clip typed; see `family`); `.` if untyped. |
+| `cipos` | For a candidate placed by its mate signals only, the interval where the insertion lies, relative to `position` (`first,last`, as the VCF `CIPOS`): between the two groups of reads with 20 bp of margin, or from 20 bp before the inner edge of one group to 300 bp beyond it; `.` otherwise. |
+| `breakpoint_clips` | Reads soft-clipped by 3 bases or more at `position`, when it was found among them (see `position`); 0 otherwise. |
 
 Missing values are written `.`.
 
@@ -129,7 +131,9 @@ than 2^29 bp).
 | `SVTYPE` | `INS`. |
 | `SVLEN` | `element_end - element_start + 1`: the part of the consensus covered by the reads, a lower bound of the inserted length (typed candidates). |
 | `MEINFO` | `subfamily,element_start,element_end,element_strand` (typed candidates). |
-| `IMPRECISE` | No junction assembled: the junctions are estimated from the soft-clips. |
+| `IMPRECISE` | No junction assembled: the junctions are estimated from the soft-clips, or the position from the mates. |
+| `CIPOS` | `cipos`, for a candidate placed by its mate signals only. |
+| `BREAKPOINT_CLIPS` | `breakpoint_clips`, when not 0. |
 | `LEFT_JUNCTION`, `RIGHT_JUNCTION` | `left_junction`, `right_junction`. |
 | `TSD`, `TSD_LEN` | `tsd` (assembled), `tsd_length` (assembled or estimated). |
 | `POLYA_LEN` | `polya_length`. |
