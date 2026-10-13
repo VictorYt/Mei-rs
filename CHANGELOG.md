@@ -42,6 +42,15 @@ project follows [Semantic Versioning](https://semver.org/).
   HGSVC3 exomes: 118 → 117 true, 49 → 39 false (precision 0.750;
   `--min-qual 2`: 0.891, `--min-qual 5`: 0.952); HG002: 16 true, 25 → 23
   false.
+- Candidates typed by a single clip (#70): the mates of candidates with
+  too few junction clips are checked when typed too, and they pass as
+  mate-only insertions (#59) with the mean identity of their MEI mates and
+  their junction clip as breakpoint evidence; one typed clip without a
+  poly(A/T) tail passes `untyped` with at least 60% and 4 MEI mates matching
+  the consensus with 96% identity; `low_ratio` no longer applies with 5 or
+  more typed junction clips (very deep sites). HGSVC3 exomes: 117 → 121
+  true, 39 false (precision 0.756; `--min-qual 2`: 0.895); within 100 bp of
+  the targets 85 → 89 of 131; HG002 unchanged.
 
 ## [0.2.0] - 2026-10-11
 

@@ -97,23 +97,22 @@ pub struct MateCheck {
 
 /// Whether the mates of a candidate are checked: it is typed and has enough
 /// junction soft-clips (`no_junction` is decided at clustering), so it can
-/// pass; or it is untyped and has a soft-clip with a poly(A/T) tail, or no
-/// junction clips but enough mate signals for its depth
-/// ([`MATE_ONLY_MIN_MATES`], [`MATE_ONLY_MIN_RATIO`]), so its mates may type
-/// it.
+/// pass; or it is untyped and has a soft-clip with a poly(A/T) tail, so its
+/// mates may type it; or, typed or not, it has too few junction clips but
+/// enough mate signals for its depth ([`MATE_ONLY_MIN_MATES`],
+/// [`MATE_ONLY_MIN_RATIO`]), so its mates may make it an insertion (#59,
+/// #70).
 #[must_use]
 pub fn checked(candidate: &Candidate) -> bool {
     let no_junction = candidate.filters.contains(&Filter::NoJunction);
+    let mate_only = no_junction
+        && candidate.unmapped_mates + candidate.discordant_mates >= MATE_ONLY_MIN_MATES
+        && candidate
+            .signal_ratio()
+            .is_some_and(|ratio| ratio >= MATE_ONLY_MIN_RATIO);
     match candidate.typing {
-        Some(_) => !no_junction,
-        None => {
-            candidate.polya_clips + candidate.polyt_clips > 0
-                || (no_junction
-                    && candidate.unmapped_mates + candidate.discordant_mates >= MATE_ONLY_MIN_MATES
-                    && candidate
-                        .signal_ratio()
-                        .is_some_and(|ratio| ratio >= MATE_ONLY_MIN_RATIO))
-        }
+        Some(_) => !no_junction || mate_only,
+        None => candidate.polya_clips + candidate.polyt_clips > 0 || mate_only,
     }
 }
 
@@ -373,19 +372,25 @@ pub fn type_mates(set: &ConsensusSet, candidate: &mut Candidate) {
         candidate.typing = mate_typing(set, candidate, &typed);
     }
     let family = candidate.typing.as_ref().map(|t| t.family);
-    let (mut checked, mut mei) = (0, 0);
+    let (mut checked, mut mei, mut identity) = (0, 0, 0.0);
     for (check, hit) in candidate.mate_checks.iter_mut().zip(hits) {
         let Some(hit) = hit else {
             continue;
         };
         checked += 1;
-        let best = hit.map(|hit| set.sequences()[hit.consensus].family);
-        let is_mei = best.is_some_and(|f| family.is_none_or(|family| f == family));
-        check.mei = Some(is_mei);
-        mei += usize::from(is_mei);
+        let mei_hit =
+            hit.filter(|hit| family.is_none_or(|f| set.sequences()[hit.consensus].family == f));
+        check.mei = Some(mei_hit.is_some());
+        if let Some(hit) = mei_hit {
+            mei += 1;
+            identity += hit.identity;
+        }
     }
     candidate.checked_mates = checked;
     candidate.mei_mates = mei;
+    #[allow(clippy::cast_precision_loss)]
+    let mean = (mei > 0).then(|| identity / mei as f64);
+    candidate.mate_identity = mean;
 }
 
 /// Element typed from the best hits of the mates of an untyped candidate:
@@ -613,6 +618,11 @@ mod tests {
             typed(cluster(signals[..10].to_vec(), &ClusterOptions::default()).remove(0));
         sample_mates(&mut no_junction);
         assert_eq!(no_junction.mate_checks, []);
+        // Unless its mates are many for its depth: they may make it an
+        // insertion (#70).
+        no_junction.depth = Some(20);
+        sample_mates(&mut no_junction);
+        assert_eq!(no_junction.mate_checks.len(), 10);
         let mut untyped = cluster(signals[..10].to_vec(), &unchecked_options()).remove(0);
         sample_mates(&mut untyped);
         assert_eq!(untyped.mate_checks, []);

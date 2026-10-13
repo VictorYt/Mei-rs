@@ -200,6 +200,8 @@ pub struct Candidate {
     /// Of these, mates typed to the family of the candidate (to any family
     /// if it is untyped).
     pub mei_mates: usize,
+    /// Mean identity of the MEI mates to the consensus, once checked.
+    pub mate_identity: Option<f64>,
     /// Local assembly of the junctions, once done (see [`crate::assembly`]).
     pub assembly: Option<crate::assembly::Assembly>,
     /// Genotype, once the reads of each allele are counted at the junctions
@@ -294,6 +296,7 @@ impl Candidate {
             mate_checks: Vec::new(),
             checked_mates: 0,
             mei_mates: 0,
+            mate_identity: None,
             assembly: None,
             genotype: None,
             qual: None,
