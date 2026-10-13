@@ -43,6 +43,15 @@ impl Default for ClusterOptions {
 /// Distance within which a soft-clip supports a junction.
 pub const JUNCTION_TOLERANCE: u64 = 2;
 
+/// Span, in bp, beyond the inner edge of a group of mate signals in which
+/// the insertion can lie when only one side of it has reads: a fragment
+/// length minus a read length on exomes.
+pub const MATE_SPAN: u64 = 300;
+
+/// Overlap, in bp, tolerated between the upstream and downstream groups of
+/// mate signals of one insertion.
+pub const MATE_OVERLAP: u64 = 20;
+
 /// Reason a candidate is filtered out.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Filter {
@@ -50,7 +59,8 @@ pub enum Filter {
     LowSupport,
     /// Fewer soft-clips at the junctions than `--min-clips` (short ones
     /// count only with an MEI mate): mate signals alone do not resolve the
-    /// insertion to the base.
+    /// insertion to the base, unless reads clipped by a few bases and young
+    /// MEI mates do (see [`filters::mate_only_insertion`]).
     NoJunction,
     /// No soft-clip with a poly(A/T) tail (only with `--require-tail`).
     NoTail,
@@ -128,8 +138,19 @@ pub struct Candidate {
     /// Last signal position (boundary).
     pub end: u64,
     /// Estimated insertion point (boundary): the most supported soft-clip
-    /// junction, or else estimated from the mate signals.
+    /// junction, or else estimated from the mate signals (see
+    /// [`Self::mate_interval`]).
     pub breakpoint: u64,
+    /// Without enough junction soft-clips (`--min-clips`) but with mate
+    /// signals, the interval (boundaries, inclusive) where the insertion lies
+    /// according to them; `None` with junction soft-clips, or once the
+    /// breakpoint is found among the soft-clips of the reads.
+    pub mate_interval: Option<(u64, u64)>,
+    /// Reads soft-clipped by at least
+    /// [`crate::reader::breakpoints::MIN_CLIP`] bases at the breakpoint,
+    /// counted when it is looked for again among all clips (candidates
+    /// without junction soft-clips, see [`crate::reader::breakpoints`]).
+    pub breakpoint_clips: usize,
     /// End of the upstream flank: most supported junction of the clips on
     /// the right end of reads, if any; the assembled one once assembled.
     pub left_junction: Option<u64>,
@@ -179,6 +200,8 @@ pub struct Candidate {
     /// Of these, mates typed to the family of the candidate (to any family
     /// if it is untyped).
     pub mei_mates: usize,
+    /// Mean identity of the MEI mates to the consensus, once checked.
+    pub mate_identity: Option<f64>,
     /// Local assembly of the junctions, once done (see [`crate::assembly`]).
     pub assembly: Option<crate::assembly::Assembly>,
     /// Genotype, once the reads of each allele are counted at the junctions
@@ -223,13 +246,10 @@ impl Candidate {
             }
             _ => None,
         };
-        let breakpoint = mode(
-            signals
-                .iter()
-                .filter(|s| matches!(s.kind, SignalKind::SoftClip { .. }))
-                .map(|s| s.position),
-        )
-        .unwrap_or_else(|| mate_breakpoint(&signals));
+        let (breakpoint, mate_interval) = place(
+            &signals,
+            left_junction_clips + right_junction_clips >= options.min_clips,
+        );
 
         let count = |f: &dyn Fn(&Signal) -> bool| signals.iter().filter(|s| f(s)).count();
         let tails = |base: u8| {
@@ -253,6 +273,8 @@ impl Candidate {
             start: signals.iter().map(|s| s.position).min().unwrap_or(0),
             end: signals.iter().map(|s| s.position).max().unwrap_or(0),
             breakpoint,
+            mate_interval,
+            breakpoint_clips: 0,
             left_junction,
             right_junction,
             left_junction_clips,
@@ -274,6 +296,7 @@ impl Candidate {
             mate_checks: Vec::new(),
             checked_mates: 0,
             mei_mates: 0,
+            mate_identity: None,
             assembly: None,
             genotype: None,
             qual: None,
@@ -344,12 +367,15 @@ impl Candidate {
         self.filters.contains(&Filter::LowSupport)
     }
 
-    /// Confidence level, for a candidate that passes the filters.
+    /// Confidence level, for a candidate that passes the filters: `low` when
+    /// typed by its mates only (no clip typed), else from the tail and TSD.
     #[must_use]
     pub fn confidence(&self) -> Option<Confidence> {
         if !self.is_pass() {
             None
-        } else if self.polya_clips + self.polyt_clips == 0 {
+        } else if self.polya_clips + self.polyt_clips == 0
+            || self.typing.as_ref().is_some_and(|t| t.by_mates)
+        {
             Some(Confidence::Low)
         } else if self.tsd.is_some() {
             Some(Confidence::High)
@@ -371,23 +397,68 @@ fn mode(values: impl Iterator<Item = u64>) -> Option<u64> {
     counts.into_iter().find(|&(_, n)| n == max).map(|(v, _)| v)
 }
 
-/// Breakpoint from mate signals only: between the furthest read of the
-/// upstream flank and the nearest read of the downstream flank.
-fn mate_breakpoint(signals: &[Signal]) -> u64 {
-    let upstream = signals
-        .iter()
-        .filter(|s| s.side == Side::Right)
-        .map(|s| s.position)
-        .max();
-    let downstream = signals
-        .iter()
-        .filter(|s| s.side == Side::Left)
-        .map(|s| s.position)
-        .min();
+/// Breakpoint of a cluster: the most frequent soft-clip position when the
+/// junctions have enough clips (`junctions`) or there is no mate signal;
+/// otherwise a lone clip is as often noise, and the mate signals place the
+/// insertion, within an interval ([`mate_breakpoint`]).
+fn place(signals: &[Signal], junctions: bool) -> (u64, Option<(u64, u64)>) {
+    let clip_breakpoint = mode(
+        signals
+            .iter()
+            .filter(|s| matches!(s.kind, SignalKind::SoftClip { .. }))
+            .map(|s| s.position),
+    );
+    let has_mates = signals.iter().any(|s| s.kind.is_mate_signal());
+    match clip_breakpoint {
+        Some(position) if junctions || !has_mates => (position, None),
+        _ => {
+            let (position, interval) = mate_breakpoint(signals);
+            (position, Some(interval))
+        }
+    }
+}
+
+/// Breakpoint from mate signals only, and the interval where the insertion
+/// lies. Reads of the upstream flank point downstream (their mates are in
+/// the insertion, after them): the insertion lies after the furthest of
+/// them; reads of the downstream flank before the nearest of them.
+///
+/// - Both groups, the upstream one ending before the downstream one starts
+///   (within [`MATE_OVERLAP`]): between their inner edges, at the middle.
+/// - Otherwise (one group, or groups that overlap: some signals are
+///   background), the inner edge of the larger group, the insertion lying
+///   within [`MATE_SPAN`] beyond it.
+///
+/// The interval reaches [`MATE_OVERLAP`] beyond the inner edges: a read can
+/// end a few bases past the junction when the inserted bases match the
+/// reference.
+fn mate_breakpoint(signals: &[Signal]) -> (u64, (u64, u64)) {
+    let positions = |side| {
+        signals
+            .iter()
+            .filter(move |s| s.side == side && s.kind.is_mate_signal())
+            .map(|s| s.position)
+    };
+    let upstream = positions(Side::Right).max();
+    let downstream = positions(Side::Left).min();
+    let (n_up, n_down) = (
+        positions(Side::Right).count(),
+        positions(Side::Left).count(),
+    );
     match (upstream, downstream) {
-        (Some(up), Some(down)) => up.midpoint(down),
-        (Some(position), None) | (None, Some(position)) => position,
-        (None, None) => signals[0].position,
+        (Some(up), Some(down)) if up <= down + MATE_OVERLAP => {
+            let (first, last) = (up.min(down), up.max(down));
+            (
+                first.midpoint(last),
+                (first.saturating_sub(MATE_OVERLAP), last + MATE_OVERLAP),
+            )
+        }
+        (Some(up), _) if n_up >= n_down => (up, (up.saturating_sub(MATE_OVERLAP), up + MATE_SPAN)),
+        (_, Some(down)) => (down, (down.saturating_sub(MATE_SPAN), down + MATE_OVERLAP)),
+        _ => {
+            let position = signals[0].position;
+            (position, (position, position))
+        }
     }
 }
 
@@ -539,6 +610,60 @@ pub(crate) mod tests {
         let c = &cluster(one_side, &ClusterOptions::default())[0];
         assert_eq!(c.breakpoint, 980);
         assert!(!c.both_sides());
+        // Beyond the inner edge of the upstream reads, within a fragment.
+        assert_eq!(c.mate_interval, Some((980 - MATE_OVERLAP, 980 + MATE_SPAN)));
+    }
+
+    #[test]
+    fn breakpoint_from_overlapping_mate_groups() {
+        // The downstream reads start before the upstream ones end (some are
+        // background): the inner edge of the larger group.
+        let signals = sorted(vec![
+            mate(1_000, Side::Left, "x", SignalKind::MateUnmapped),
+            mate(1_100, Side::Right, "a", SignalKind::MateUnmapped),
+            mate(1_150, Side::Right, "b", SignalKind::MateUnmapped),
+            mate(1_170, Side::Right, "c", SignalKind::MateUnmapped),
+        ]);
+        let c = &cluster(signals, &ClusterOptions::default())[0];
+        assert_eq!(c.breakpoint, 1_170);
+        assert_eq!(c.mate_interval, Some((1_150, 1_470)));
+        // Downstream reads only: before the nearest one.
+        let signals = sorted(vec![
+            mate(1_100, Side::Left, "a", SignalKind::MateUnmapped),
+            mate(1_140, Side::Left, "b", SignalKind::MateUnmapped),
+            mate(1_190, Side::Right, "x", SignalKind::MateUnmapped),
+            mate(1_200, Side::Left, "c", SignalKind::MateUnmapped),
+        ]);
+        let c = &cluster(signals, &ClusterOptions::default())[0];
+        assert_eq!(c.breakpoint, 1_100);
+        assert_eq!(c.mate_interval, Some((800, 1_120)));
+        // Consistent groups: between them, with the margin.
+        let signals = sorted(vec![
+            mate(980, Side::Right, "a", SignalKind::MateUnmapped),
+            mate(1_020, Side::Left, "b", SignalKind::MateUnmapped),
+        ]);
+        let c = &cluster(signals, &ClusterOptions::default())[0];
+        assert_eq!(c.mate_interval, Some((960, 1_040)));
+    }
+
+    #[test]
+    fn lone_clip_with_mates() {
+        // One clip is not enough junction clips: the mates place it.
+        let signals = sorted(vec![
+            clip(1_120, Side::Left, "z", None),
+            mate(1_000, Side::Right, "a", SignalKind::MateUnmapped),
+            mate(1_050, Side::Right, "b", SignalKind::MateUnmapped),
+        ]);
+        let candidates = cluster(signals, &ClusterOptions::default());
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].breakpoint, 1_050);
+        assert!(candidates[0].mate_interval.is_some());
+        // Without mates, the clip does.
+        let c = &cluster(
+            sorted(vec![clip(1_120, Side::Left, "z", None)]),
+            &ClusterOptions::default(),
+        )[0];
+        assert_eq!((c.breakpoint, c.mate_interval), (1_120, None));
     }
 
     #[test]

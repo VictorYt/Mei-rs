@@ -75,6 +75,28 @@ python3 docs/validation/evaluate.py \
 
 ## Results
 
+v0.3.0 (`develop` after #70), default options with `--reference`: seven
+exomes 121 true / 39 false PASS (precision 0.756, recall 0.326, recall of any
+candidate 0.437; 377 truth MEIs in the padded targets of any sample, 371 in
+these seven); HG002 (held out) 16 true / 23 false (0.410 / 0.327). Per sample:
+
+| Sample | Truth MEIs | PASS | True PASS | Precision | Recall (PASS) |
+|---|---|---|---|---|---|
+| HG00512 | 49 | 28 | 20 | 0.741 | 0.408 |
+| HG00513 | 45 | 27 | 20 | 0.741 | 0.444 |
+| HG00731 | 45 | 11 | 9 | 0.818 | 0.200 |
+| HG00733 | 45 | 15 | 11 | 0.786 | 0.244 |
+| NA19238 | 59 | 36 | 30 | 0.833 | 0.508 |
+| NA19239 | 60 | 23 | 16 | 0.727 | 0.267 |
+| NA19240 | 68 | 23 | 15 | 0.652 | 0.221 |
+
+By confidence: `high` 13 of 14, `medium` 34 of 37, `low` 74 of 112. Recall
+(PASS) by distance to the target: inside 28 / 36, 1-100 bp 61 / 95, 101-300 bp
+32 / 240; by family: Alu 103 / 325, L1 15 / 32, SVA 3 / 14. Genotypes of the
+true PASS calls: 90 of 119 right. `--min-qual 2`: 119 / 14 (0.895; HG002
+15 / 12), `--min-qual 5`: 103 / 5 (0.954; HG002 13 / 8). The numbers below
+are those of v0.2.0.
+
 v0.2.0 (`develop` after #56), default options with `--reference`.
 
 | Sample | Truth MEIs | PASS | True PASS | Precision | Recall (PASS) | Recall (any) |
@@ -203,6 +225,50 @@ Same seven exomes, PASS calls:
 | #32 short clips | 140 | 91 | 0.664 | 0.245 | 9 / 10 |
 | #33 assembly, #34 score, #35 VCF | 139 | 91 | 0.669 | 0.245 | 12 / 13 |
 | #56 LINE-1 ORF2 (v0.2.0) | 150 | 99 | 0.673 | 0.267 | 12 / 13 |
+| #57 typing by the mates | 163 | 111 | 0.694 | 0.299 | 12 / 13 |
+| #58, #59 insertions without junction clips | 170 | 118 | 0.707 | 0.318 | 12 / 13 |
+| #69 mate checks | 159 | 117 | 0.750 | 0.315 | 13 / 14 |
+| #70 single typed clips | 163 | 121 | 0.756 | 0.326 | 13 / 14 |
+
+#57 types untyped candidates with a poly(A/T) tail clip by their mates
+(junction clips that are the tail alone): 12 more true calls, 1 more false
+(`--min-qual 2`: 109 true / 19 false, precision 0.852); within 100 bp of the
+targets, 81 of 131 truth MEIs are PASS (73 before). HG002: 16 true / 25
+false (13 / 21 before). Without the identity (96%) and tailed-clip (2)
+conditions, the mates typed 35 more false candidates for 13 true: most
+false ones had one tailed clip and mates matching older reference copies.
+
+#58 places the candidates without junction clips at the inner edge of their
+mate signals and, for those with MEI mates, among the reads soft-clipped by
+3 bases or more (of 15 truth MEIs whose candidate was 43-431 bp off, 8 are
+then within 20 bp and 4 within the interval). #59 checks their mates and
+passes them when young MEI mates (98% identity, at least 60% and 4 of the
+checked mates) type them and reads are clipped at their position: 7 more
+true calls, no false one (`--min-qual 2`: 116 true / 19 false, precision
+0.859); within 100 bp of the targets, 85 of 131 truth MEIs are PASS. HG002
+unchanged. Looser thresholds (96% identity, without the clips) added 11
+true and 14 false candidates.
+
+#69 changes how mates are checked: mapped mates are read over the span of
+their alignment (`MC` tag) and typed without their A/T runs, and mapped
+mates found in the reference within 600 bp of their candidate are not MEI
+mates (next to a reference copy of an element, the mates of the reads in
+that copy map with a low MAPQ to other copies). 1 fewer true call, 10 fewer
+false (`--min-qual 2`: 115 true / 14 false, precision 0.891; `--min-qual 5`:
+100 / 5, 0.952); within 100 bp of the targets, 85 of 131 truth MEIs are PASS.
+HG002: 16 true / 23 false (`--min-qual 2`: 15 / 12). It was meant to raise
+recall: the mates of several missed MEIs (`non_mei_mates`) carry 30 to 50 A
+of the poly(A) tail and 30 to 45 bases of the element end, too few to be
+typed. Not counting untyped mates with a long A/T run raised recall (124
+true) but added false calls next to reference Alus (53 false); set aside in
+#71.
+
+#70 checks the mates of candidates typed by a single clip without enough
+junction clips and lets them pass as mate-only insertions (#59), lets one
+typed clip without a tail pass with mostly young MEI mates, and lifts
+`low_ratio` with 5 or more typed junction clips: 4 more true calls, no false
+one (`--min-qual 2`: 119 true / 14 false, precision 0.895); within 100 bp of
+the targets, 89 of 131 truth MEIs are PASS. HG002 unchanged.
 
 Before typing, most false positives were poly(A) length variants of reference
 Alus (`high`) and background unmapped mates of the deep samples (`medium`):

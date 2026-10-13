@@ -12,11 +12,12 @@
 //! 0-based: boundary `b` lies between bases `b - 1` and `b`).
 
 use std::io;
+use std::num::NonZeroU32;
 
 use noodles::sam::Header;
 use noodles::sam::alignment::Record;
 use noodles::sam::alignment::record::cigar::op::Kind;
-use noodles::sam::alignment::record::data::field::Tag;
+use noodles::sam::alignment::record::data::field::{Tag, Value};
 
 use super::filter::mapq;
 
@@ -81,13 +82,24 @@ pub enum SignalKind {
     },
 }
 
-/// Alignment start of a mapped mate.
+/// Alignment of a mapped mate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Locus {
-    /// Contig (index in the header).
-    pub contig: usize,
+    /// Contig (index in the header; `u32` keeps [`SignalKind`] at 40 bytes).
+    pub contig: u32,
+    /// Reference bases covered by the mate alignment, from its CIGAR (`MC`
+    /// tag), if known: the mate sequence beyond them is clipped.
+    pub span: Option<NonZeroU32>,
     /// 0-based alignment start.
     pub start: u64,
+}
+
+impl Locus {
+    /// Contig index in the header.
+    #[must_use]
+    pub fn contig(&self) -> usize {
+        self.contig as usize
+    }
 }
 
 impl SignalKind {
@@ -266,15 +278,20 @@ pub fn read_signals(
         } else {
             let mate_contig = record.mate_reference_sequence_id(header).transpose()?;
             let mate_start = record.mate_alignment_start().transpose()?;
-            let locus = mate_contig.zip(mate_start).map(|(contig, start)| Locus {
-                contig,
-                start: start.get() as u64 - 1,
-            });
+            let span = mate_span(record)?;
+            let locus = mate_contig
+                .and_then(|contig| u32::try_from(contig).ok())
+                .zip(mate_start)
+                .map(|(contig, start)| Locus {
+                    contig,
+                    span,
+                    start: start.get() as u64 - 1,
+                });
             let mate_mapq = mate_mapq(record)?;
             if let Some(mapq) = mate_mapq.filter(|&q| q < min_mapq && !proper) {
                 out.signals
                     .push(mate(SignalKind::MateLowMapq { mapq, mate: locus }));
-            } else if let Some(locus) = locus.filter(|l| l.contig != contig) {
+            } else if let Some(locus) = locus.filter(|l| l.contig() != contig) {
                 out.signals
                     .push(mate(SignalKind::MateElsewhere { mate: locus }));
             } else {
@@ -429,6 +446,37 @@ fn mate_mapq(record: &dyn Record) -> io::Result<Option<u8>> {
                 .and_then(|v| v.as_int())
                 .and_then(|q| u8::try_from(q).ok())
         })
+}
+
+/// Reference bases covered by the mate alignment, from the mate CIGAR (`MC`
+/// tag; `M`, `D`, `N`, `=` and `X` operations), if present and valid.
+fn mate_span(record: &dyn Record) -> io::Result<Option<NonZeroU32>> {
+    let Some(value) = record.data().get(&Tag::MATE_CIGAR).transpose()? else {
+        return Ok(None);
+    };
+    let Value::String(cigar) = value else {
+        return Ok(None);
+    };
+    Ok(reference_span(cigar))
+}
+
+/// Reference bases covered by a CIGAR string, `None` if it is invalid or
+/// covers none.
+fn reference_span(cigar: &[u8]) -> Option<NonZeroU32> {
+    let (mut span, mut length) = (0u32, 0u32);
+    for &c in cigar {
+        if c.is_ascii_digit() {
+            length = length.checked_mul(10)?.checked_add(u32::from(c - b'0'))?;
+        } else {
+            if matches!(c, b'M' | b'D' | b'N' | b'=' | b'X') {
+                span = span.checked_add(length)?;
+            } else if !matches!(c, b'I' | b'S' | b'H' | b'P') {
+                return None;
+            }
+            length = 0;
+        }
+    }
+    NonZeroU32::new(span)
 }
 
 #[cfg(test)]
@@ -704,16 +752,29 @@ mod tests {
     }
 
     #[test]
+    fn mate_cigar_span() {
+        assert_eq!(reference_span(b"76M"), NonZeroU32::new(76));
+        assert_eq!(reference_span(b"34M42S"), NonZeroU32::new(34));
+        assert_eq!(reference_span(b"5S20M3D10=2X1N4I8H"), NonZeroU32::new(36));
+        assert_eq!(reference_span(b"76S"), None);
+        assert_eq!(reference_span(b"*"), None);
+        assert_eq!(reference_span(b"99999999999M"), None);
+    }
+
+    #[test]
     fn mate_low_mapq_and_elsewhere() {
         let mq = |q: u8| {
             [(Tag::MATE_MAPPING_QUALITY, Value::from(q))]
                 .into_iter()
                 .collect()
         };
+        // The mate CIGAR gives the reference bases of the mate alignment.
+        let mut data: noodles::sam::alignment::record_buf::Data = mq(0);
+        data.insert(Tag::MATE_CIGAR, Value::from("10S30M2I4M6D30S"));
         let low = pair(Flags::empty())
             .set_mate_reference_sequence_id(1)
             .set_mate_alignment_start(Position::try_from(500).unwrap())
-            .set_data(mq(0))
+            .set_data(data)
             .build();
         assert_eq!(
             mate_kinds(&low),
@@ -724,6 +785,7 @@ mod tests {
                     mapq: 0,
                     mate: Some(Locus {
                         contig: 1,
+                        span: NonZeroU32::new(40),
                         start: 499
                     })
                 }
@@ -742,6 +804,7 @@ mod tests {
                 SignalKind::MateElsewhere {
                     mate: Locus {
                         contig: 1,
+                        span: None,
                         start: 499
                     }
                 }
@@ -779,6 +842,7 @@ mod tests {
                     length: 59_100,
                     mate: Some(Locus {
                         contig: 0,
+                        span: None,
                         start: 59_999
                     })
                 }

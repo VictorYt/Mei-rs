@@ -11,10 +11,32 @@
 //! - mapped mates (low MAPQ, another contig, large insert): the mate aligned
 //!   at its locus, so the reference there stands for its sequence; it is read
 //!   from `--reference`, one query per mate ([`fetch_mapped_mates`]; without
-//!   a reference, mapped mates are not checked).
+//!   a reference, mapped mates are not checked). Only the aligned part of the
+//!   mate stands for it: mates near the 3' end of the element are often
+//!   clipped (`34M42S`), their clipped part being the poly(A) tail or the
+//!   insertion flank, not the reference after the copy. The reference is
+//!   read over the span of the mate alignment, from its CIGAR (`MC` tag),
+//!   else over a read length (aligners often leave `MC` out of pairs on two
+//!   contigs).
+//!
+//! Mapped mates found in the reference next to their candidate
+//! ([`LOCAL_WINDOW`]) are not MEI mates: the pair fits the reference without
+//! an insertion. Next to a reference copy of an element, the mates of the
+//! reads in that copy map with a low MAPQ to other copies, and the pairs look
+//! like mates in an inserted element.
+//!
+//! Mates are typed without their runs of A or T ([`MIN_MATE_RUN`]): the
+//! poly(A) tail does not align to the consensus sequences, and A-rich
+//! sequences would align to the A-rich parts of the consensus.
 //!
 //! A mate is an MEI mate when its best alignment ([`super::type_sequence`])
 //! is in the family of the candidate, or in any family for an untyped one.
+//!
+//! Untyped candidates with a poly(A/T) tail clip have their mates checked
+//! too: on short reads, the clips at the tail junction are often the tail
+//! alone, with too few element bases to be typed. At least
+//! [`MIN_TYPED_MATES`] mates of one family type such a candidate
+//! ([`Typing::by_mates`]).
 //!
 //! The checks are kept in the candidate ([`Candidate::mate_checks`]), not in
 //! the signals: millions of signals, a few thousand checked candidates.
@@ -28,8 +50,10 @@ use std::path::Path;
 use noodles::core::{Position, Region};
 use noodles::fasta;
 
-use super::consensus::ConsensusSet;
-use super::type_sequence;
+use std::collections::{HashMap, HashSet};
+
+use super::consensus::{ConsensusSet, Family};
+use super::{ClipHit, Typing, type_sequence};
 use crate::cluster::{Candidate, Filter};
 use crate::reader::mates::{MateRequest, name_hash};
 use crate::reader::signals::{Locus, SignalKind};
@@ -44,6 +68,19 @@ pub const MAX_CHECKED_MATES: usize = 40;
 /// the anchored read is shorter.
 pub const MIN_MATE_LENGTH: u64 = 50;
 
+/// Minimum number of mates of one family to type a candidate whose clips are
+/// not typed.
+pub const MIN_TYPED_MATES: usize = 2;
+
+/// Minimum number of mate signals of a candidate without junction clips to
+/// have its mates checked.
+pub const MATE_ONLY_MIN_MATES: usize = 3;
+
+/// Minimum supporting reads per read of local depth of a candidate without
+/// junction clips to have its mates checked: most of them are background
+/// (HGSVC3 exomes: 59 of the 61 true ones above, a seventh of the others).
+pub const MATE_ONLY_MIN_RATIO: f64 = 0.2;
+
 /// A mate sampled to be checked.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MateCheck {
@@ -53,13 +90,36 @@ pub struct MateCheck {
     pub sequence: Option<Vec<u8>>,
     /// Whether it is a mobile element of the candidate family, once checked.
     pub mei: Option<bool>,
+    /// A mapped mate found in the reference next to the candidate: the pair
+    /// fits the reference, the mate is not an MEI mate.
+    pub local: bool,
 }
 
 /// Whether the mates of a candidate are checked: it is typed and has enough
 /// junction soft-clips (`no_junction` is decided at clustering), so it can
-/// pass.
+/// pass; or it is untyped and has a soft-clip with a poly(A/T) tail, so its
+/// mates may type it; or, typed or not, it has too few junction clips but
+/// enough mate signals for its depth ([`MATE_ONLY_MIN_MATES`],
+/// [`MATE_ONLY_MIN_RATIO`]), so its mates may make it an insertion (#59,
+/// #70).
 #[must_use]
 pub fn checked(candidate: &Candidate) -> bool {
+    let no_junction = candidate.filters.contains(&Filter::NoJunction);
+    let mate_only = no_junction
+        && candidate.unmapped_mates + candidate.discordant_mates >= MATE_ONLY_MIN_MATES
+        && candidate
+            .signal_ratio()
+            .is_some_and(|ratio| ratio >= MATE_ONLY_MIN_RATIO);
+    match candidate.typing {
+        Some(_) => !no_junction || mate_only,
+        None => candidate.polya_clips + candidate.polyt_clips > 0 || mate_only,
+    }
+}
+
+/// Whether a candidate can pass once its mates are checked: typed, by its
+/// clips or by its mates, with enough junction soft-clips.
+#[must_use]
+pub fn may_pass(candidate: &Candidate) -> bool {
     candidate.typing.is_some() && !candidate.filters.contains(&Filter::NoJunction)
 }
 
@@ -88,6 +148,7 @@ pub fn sample_mates(candidate: &mut Candidate) {
             signal,
             sequence: None,
             mei: None,
+            local: false,
         })
         .collect();
 }
@@ -124,8 +185,9 @@ pub fn unmapped_requests(candidates: &[Candidate]) -> Vec<(usize, Vec<(usize, Ma
 }
 
 /// Read the reference at the locus of the sampled mapped mates, as their
-/// sequence (a read length from the mate start, the length of the anchored
-/// alignment).
+/// sequence: over the span of the mate alignment (`MC` tag), else a read
+/// length from the mate start (the length of the anchored alignment); then
+/// mark the local ones ([`MateCheck::local`]).
 ///
 /// # Errors
 ///
@@ -145,10 +207,13 @@ pub fn fetch_mapped_mates(
             let Some(locus) = signal.kind.mate_locus() else {
                 continue;
             };
-            let Some(length) = contigs.get(locus.contig).map(|c| c.length) else {
+            let Some(length) = contigs.get(locus.contig()).map(|c| c.length) else {
                 continue;
             };
-            let read_length = (signal.end - signal.start).max(MIN_MATE_LENGTH);
+            let read_length = locus.span.map_or_else(
+                || (signal.end - signal.start).max(MIN_MATE_LENGTH),
+                |span| u64::from(span.get()),
+            );
             let end = (locus.start + read_length).min(length);
             if locus.start < end {
                 loci.push((c, k, locus, end));
@@ -167,40 +232,220 @@ pub fn fetch_mapped_mates(
         ) else {
             continue;
         };
-        let region = Region::new(contigs[locus.contig].name.as_str(), first..=last);
+        let region = Region::new(contigs[locus.contig()].name.as_str(), first..=last);
         let record = reader.query(&region)?;
         let mut sequence = record.sequence().as_ref().to_vec();
         sequence.make_ascii_uppercase();
-        candidates[c].mate_checks[k].sequence = Some(sequence);
+        let check = &mut candidates[c].mate_checks[k];
+        check.sequence = Some(sequence);
+    }
+    mark_local_mates(candidates, contigs, &mut reader)?;
+    Ok(())
+}
+
+/// Bases of reference read on each side of the anchored reads of a
+/// candidate, where a mate of a pair without insertion lies (fragment
+/// length).
+pub const LOCAL_WINDOW: u64 = 600;
+
+/// Minimum length of the runs of A or T removed from a mate before typing.
+pub const MIN_MATE_RUN: usize = 10;
+
+/// The sequence of a mate without its runs of at least [`MIN_MATE_RUN`] A
+/// or T: the poly(A) tail of the element, or that of the reference copy a
+/// mate maps to, does not align to the consensus and would lower its
+/// coverage.
+fn without_runs(sequence: &[u8]) -> Vec<u8> {
+    sequence
+        .chunk_by(|a, b| a == b)
+        .filter(|run| !(matches!(run[0], b'A' | b'T') && run.len() >= MIN_MATE_RUN))
+        .flatten()
+        .copied()
+        .collect()
+}
+
+/// Length of the k-mers compared between a mapped mate and the reference
+/// next to the candidate.
+pub const LOCAL_K: usize = 20;
+
+/// Fraction of the k-mers of a mapped mate found next to the candidate for
+/// it to be local.
+pub const LOCAL_MIN_SHARED: f64 = 0.5;
+
+/// Mark the mapped mates found in the reference next to their candidate
+/// (within [`LOCAL_WINDOW`]) as local ([`MateCheck::local`]): the pair fits
+/// the reference without an insertion. Next to a reference copy of an
+/// element, the mates of the reads in that copy map with a low MAPQ to other
+/// copies, and these pairs look like mates in an inserted element.
+fn mark_local_mates(
+    candidates: &mut [Candidate],
+    contigs: &[Contig],
+    reader: &mut fasta::io::IndexedReader<fasta::io::BufReader<std::fs::File>>,
+) -> io::Result<()> {
+    for candidate in candidates.iter_mut() {
+        let mapped: Vec<usize> = candidate
+            .mate_checks
+            .iter()
+            .enumerate()
+            .filter(|(_, check)| {
+                check.sequence.is_some()
+                    && candidate.signals[check.signal].kind.mate_locus().is_some()
+            })
+            .map(|(k, _)| k)
+            .collect();
+        let Some(first) = mapped.first() else {
+            continue;
+        };
+        let contig = candidate.signals[candidate.mate_checks[*first].signal].contig;
+        let Some(contig) = contigs.get(contig) else {
+            continue;
+        };
+        let start = candidate.signals.iter().map(|s| s.start).min().unwrap_or(0);
+        let end = candidate.signals.iter().map(|s| s.end).max().unwrap_or(0);
+        let (Some(first), Some(last)) = (
+            usize::try_from(start.saturating_sub(LOCAL_WINDOW) + 1)
+                .ok()
+                .and_then(|p| Position::try_from(p).ok()),
+            usize::try_from((end + LOCAL_WINDOW).min(contig.length))
+                .ok()
+                .and_then(|p| Position::try_from(p).ok()),
+        ) else {
+            continue;
+        };
+        let record = reader.query(&Region::new(contig.name.as_str(), first..=last))?;
+        let window: HashSet<u64> = canonical_kmers(record.sequence().as_ref()).collect();
+        for k in mapped {
+            let check = &mut candidate.mate_checks[k];
+            let Some(sequence) = check.sequence.as_deref() else {
+                continue;
+            };
+            let (shared, total) = canonical_kmers(sequence)
+                .fold((0usize, 0usize), |(s, t), kmer| {
+                    (s + usize::from(window.contains(&kmer)), t + 1)
+                });
+            #[allow(clippy::cast_precision_loss)]
+            let local = total > 0 && shared as f64 >= LOCAL_MIN_SHARED * total as f64;
+            check.local = local;
+        }
     }
     Ok(())
 }
 
+/// The [`LOCAL_K`]-mers of a sequence, each as the smaller code of its two
+/// strands; k-mers with other bases than ACGT are skipped.
+fn canonical_kmers(sequence: &[u8]) -> impl Iterator<Item = u64> + '_ {
+    sequence.windows(LOCAL_K).filter_map(|kmer| {
+        let (mut forward, mut reverse) = (0u64, 0u64);
+        for (i, &b) in kmer.iter().enumerate() {
+            let bits = match b.to_ascii_uppercase() {
+                b'A' => 0,
+                b'C' => 1,
+                b'G' => 2,
+                b'T' => 3,
+                _ => return None,
+            };
+            forward = (forward << 2) | bits;
+            reverse |= (3 - bits) << (2 * i);
+        }
+        Some(forward.min(reverse))
+    })
+}
+
 /// Type the sampled mates of a candidate with a sequence: `checked_mates` and
-/// `mei_mates` (typed to its family, or to any family if it is untyped).
+/// `mei_mates` (typed to its family, or to any family if it is untyped). An
+/// untyped candidate is first typed by its mates (see the module documentation).
 pub fn type_mates(set: &ConsensusSet, candidate: &mut Candidate) {
+    let hits: Vec<Option<Option<ClipHit>>> = candidate
+        .mate_checks
+        .iter()
+        .map(|check| {
+            check.sequence.as_deref().map(|sequence| {
+                if check.local {
+                    return None;
+                }
+                type_sequence(set, &without_runs(sequence)).first().copied()
+            })
+        })
+        .collect();
+    if candidate.typing.is_none() {
+        let typed: Vec<ClipHit> = hits.iter().flatten().flatten().copied().collect();
+        candidate.typing = mate_typing(set, candidate, &typed);
+    }
     let family = candidate.typing.as_ref().map(|t| t.family);
-    let (mut checked, mut mei) = (0, 0);
-    for check in &mut candidate.mate_checks {
-        let Some(sequence) = check.sequence.as_deref() else {
+    let (mut checked, mut mei, mut identity) = (0, 0, 0.0);
+    for (check, hit) in candidate.mate_checks.iter_mut().zip(hits) {
+        let Some(hit) = hit else {
             continue;
         };
         checked += 1;
-        let best = type_sequence(set, sequence)
-            .first()
-            .map(|hit| set.sequences()[hit.consensus].family);
-        let is_mei = best.is_some_and(|f| family.is_none_or(|family| f == family));
-        check.mei = Some(is_mei);
-        mei += usize::from(is_mei);
+        let mei_hit =
+            hit.filter(|hit| family.is_none_or(|f| set.sequences()[hit.consensus].family == f));
+        check.mei = Some(mei_hit.is_some());
+        if let Some(hit) = mei_hit {
+            mei += 1;
+            identity += hit.identity;
+        }
     }
     candidate.checked_mates = checked;
     candidate.mei_mates = mei;
+    #[allow(clippy::cast_precision_loss)]
+    let mean = (mei > 0).then(|| identity / mei as f64);
+    candidate.mate_identity = mean;
+}
+
+/// Element typed from the best hits of the mates of an untyped candidate:
+/// the family of the most mates (at least [`MIN_TYPED_MATES`]; ties go to
+/// the higher summed score). Mapped mates stand for a copy of the element in
+/// the reference, often of an older subfamily: the subfamily is the
+/// consensus with more than half of the summed score of the family, else
+/// only the family is known (its name). The element strand comes from the
+/// tails (poly(T): minus strand).
+fn mate_typing(set: &ConsensusSet, candidate: &Candidate, hits: &[ClipHit]) -> Option<Typing> {
+    let family_of = |hit: &ClipHit| set.sequences()[hit.consensus].family;
+    let mut families: HashMap<Family, (usize, i64)> = HashMap::new();
+    for hit in hits {
+        let entry = families.entry(family_of(hit)).or_default();
+        entry.0 += 1;
+        entry.1 += i64::from(hit.score);
+    }
+    let (&family, &(mates, family_score)) = families
+        .iter()
+        .max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0)))?;
+    if mates < MIN_TYPED_MATES {
+        return None;
+    }
+    let in_family: Vec<&ClipHit> = hits.iter().filter(|h| family_of(h) == family).collect();
+    let mut scores: HashMap<usize, i64> = HashMap::new();
+    for hit in &in_family {
+        *scores.entry(hit.consensus).or_default() += i64::from(hit.score);
+    }
+    let (&best, &best_score) = scores
+        .iter()
+        .max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0)))?;
+    let on_best: Vec<&&ClipHit> = in_family.iter().filter(|h| h.consensus == best).collect();
+    #[allow(clippy::cast_precision_loss)]
+    let identity = on_best.iter().map(|h| h.identity).sum::<f64>() / on_best.len() as f64;
+    Some(Typing {
+        family,
+        subfamily: if 2 * best_score > family_score {
+            set.sequences()[best].name.clone()
+        } else {
+            family.name().to_owned()
+        },
+        reverse: candidate.polyt_clips > candidate.polya_clips,
+        element_start: on_best.iter().map(|h| h.element_start).min()?,
+        element_end: on_best.iter().map(|h| h.element_end).max()?,
+        identity,
+        typed_clips: 0,
+        short_typed_clips: 0,
+        by_mates: true,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cluster::tests::mate;
+    use crate::cluster::tests::{clip, mate};
     use crate::cluster::{ClusterOptions, cluster};
     use crate::reader::signals::Side;
     use crate::typer::consensus::{Family, reverse_complement};
@@ -215,6 +460,7 @@ mod tests {
             identity: 1.0,
             typed_clips: 2,
             short_typed_clips: 0,
+            by_mates: false,
         }
     }
 
@@ -223,6 +469,117 @@ mod tests {
             min_clips: 0,
             ..ClusterOptions::default()
         }
+    }
+
+    #[test]
+    fn local_mates_are_marked() {
+        // Two mapped mates of a candidate at chr1:5000 of the fixture
+        // reference: one maps next to it (chr1:5300, the pair fits the
+        // reference), one on chr2.
+        let reference =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/reference.fa");
+        let contigs = [
+            Contig {
+                name: "chr1".to_owned(),
+                length: 20_000,
+            },
+            Contig {
+                name: "chr2".to_owned(),
+                length: 10_000,
+            },
+        ];
+        let locus = |contig, start| Locus {
+            contig,
+            span: std::num::NonZeroU32::new(60),
+            start,
+        };
+        let signals = vec![
+            mate(
+                5_000,
+                Side::Right,
+                "near",
+                SignalKind::MateLowMapq {
+                    mapq: 0,
+                    mate: Some(locus(0, 5_300)),
+                },
+            ),
+            mate(
+                5_010,
+                Side::Right,
+                "far",
+                SignalKind::MateElsewhere {
+                    mate: locus(1, 3_000),
+                },
+            ),
+        ];
+        let mut candidates = cluster(signals, &unchecked_options());
+        candidates[0].mate_checks = (0..2)
+            .map(|signal| MateCheck {
+                signal,
+                sequence: None,
+                mei: None,
+                local: false,
+            })
+            .collect();
+        fetch_mapped_mates(&mut candidates, &contigs, &reference).unwrap();
+        let checks = &candidates[0].mate_checks;
+        let near = checks
+            .iter()
+            .find(|c| candidates[0].signals[c.signal].read == "near");
+        let far = checks
+            .iter()
+            .find(|c| candidates[0].signals[c.signal].read == "far");
+        assert!(near.unwrap().local);
+        assert!(!far.unwrap().local);
+        assert_eq!(far.unwrap().sequence.as_ref().map(Vec::len), Some(60));
+    }
+
+    #[test]
+    fn local_mates_are_not_mei_mates() {
+        let set = ConsensusSet::load(None).unwrap();
+        let alu = set.sequences()[0].sequence.clone();
+        let signals: Vec<_> = ["a", "b", "c"]
+            .iter()
+            .map(|read| mate(1_000, Side::Right, read, SignalKind::MateUnmapped))
+            .collect();
+        let mut candidate = cluster(signals, &unchecked_options()).remove(0);
+        candidate.typing = Some(alu_typing());
+        candidate.mate_checks = (0..3)
+            .map(|signal| MateCheck {
+                signal,
+                sequence: Some(alu[20..96].to_vec()),
+                mei: None,
+                local: signal == 2,
+            })
+            .collect();
+        type_mates(&set, &mut candidate);
+        assert_eq!((candidate.checked_mates, candidate.mei_mates), (3, 2));
+        assert_eq!(candidate.mate_checks[2].mei, Some(false));
+    }
+
+    #[test]
+    fn mates_without_their_tail() {
+        // A mate in the tail of the element: its A run would halve the
+        // coverage of the element end.
+        let set = ConsensusSet::load(None).unwrap();
+        let alu = &set.sequences()[0].sequence;
+        let mut sequence = vec![b'A'; 40];
+        sequence.extend_from_slice(&alu[200..260]);
+        assert_eq!(without_runs(&sequence).len(), sequence.len() - 40);
+        assert_ne!(type_sequence(&set, &without_runs(&sequence)), []);
+        assert_eq!(without_runs(b"ACGTAAAAAAAAACGT"), b"ACGTAAAAAAAAACGT");
+    }
+
+    #[test]
+    fn canonical_kmers_of_both_strands() {
+        let sequence = b"ACGTTGCATGCATTGACCAGTA";
+        let reverse = reverse_complement(sequence);
+        let forward: Vec<u64> = canonical_kmers(sequence).collect();
+        let mut backward: Vec<u64> = canonical_kmers(&reverse).collect();
+        backward.reverse();
+        assert_eq!(forward.len(), sequence.len() - LOCAL_K + 1);
+        assert_eq!(forward, backward);
+        assert_eq!(canonical_kmers(b"ACGTNACGTACGTACGTACGTAC").count(), 0);
     }
 
     #[test]
@@ -252,7 +609,8 @@ mod tests {
         assert_eq!(requests[0].1.len(), MAX_CHECKED_MATES);
         assert_eq!(requests[0].1[1].1.anchor_start, candidate.signals[3].start);
 
-        // Few mates: all kept. Not checked: `no_junction`, or untyped.
+        // Few mates: all kept. Not checked: `no_junction`, or untyped
+        // without a tail.
         let mut few = typed(cluster(signals[..10].to_vec(), &unchecked_options()).remove(0));
         sample_mates(&mut few);
         assert_eq!(few.mate_checks.len(), 10);
@@ -260,9 +618,24 @@ mod tests {
             typed(cluster(signals[..10].to_vec(), &ClusterOptions::default()).remove(0));
         sample_mates(&mut no_junction);
         assert_eq!(no_junction.mate_checks, []);
+        // Unless its mates are many for its depth: they may make it an
+        // insertion (#70).
+        no_junction.depth = Some(20);
+        sample_mates(&mut no_junction);
+        assert_eq!(no_junction.mate_checks.len(), 10);
         let mut untyped = cluster(signals[..10].to_vec(), &unchecked_options()).remove(0);
         sample_mates(&mut untyped);
         assert_eq!(untyped.mate_checks, []);
+        // Untyped with a tail clip, even without enough junction clips: its
+        // mates may type it.
+        let mut tailed = signals[..10].to_vec();
+        tailed.push(clip(1_005, Side::Right, "t", Some(b'A')));
+        tailed.sort();
+        let mut tailed = cluster(tailed, &ClusterOptions::default()).remove(0);
+        assert!(tailed.filters.contains(&Filter::NoJunction));
+        sample_mates(&mut tailed);
+        assert_eq!(tailed.mate_checks.len(), 10);
+        assert!(!may_pass(&tailed));
     }
 
     #[test]
@@ -281,28 +654,51 @@ mod tests {
             .map(|read| mate(1_000, Side::Right, read, SignalKind::MateUnmapped))
             .collect();
         let mut candidate = cluster(signals, &unchecked_options()).remove(0);
-        let sequences: [Option<Vec<u8>>; 5] = [
+        let random = b"TGCATGCTAGCTAGGATCGATCGTAGCTAGCTTTAGGCGATCGATTGCATGCTAGCTAGG".to_vec();
+        let checks = |sequences: Vec<Option<Vec<u8>>>| -> Vec<MateCheck> {
+            sequences
+                .into_iter()
+                .enumerate()
+                .map(|(signal, sequence)| MateCheck {
+                    signal,
+                    sequence,
+                    mei: None,
+                    local: false,
+                })
+                .collect()
+        };
+
+        // Untyped, one mate per family: not typed, any family counts.
+        candidate.mate_checks = checks(vec![
             Some(alu[20..96].to_vec()),
-            Some(reverse_complement(&alu[150..226])),
-            Some(b"TGCATGCTAGCTAGGATCGATCGTAGCTAGCTTTAGGCGATCGATTGCATGCTAGCTAGG".to_vec()),
+            Some(random.clone()),
             Some(sva[300..376].to_vec()),
             None,
-        ];
-        candidate.mate_checks = sequences
-            .into_iter()
-            .enumerate()
-            .map(|(signal, sequence)| MateCheck {
-                signal,
-                sequence,
-                mei: None,
-            })
-            .collect();
-
-        // Untyped: any family counts.
+        ]);
         type_mates(&set, &mut candidate);
-        assert_eq!((candidate.checked_mates, candidate.mei_mates), (4, 3));
+        assert_eq!(candidate.typing, None);
+        assert_eq!((candidate.checked_mates, candidate.mei_mates), (3, 2));
 
-        // Typed Alu: the SVA mate does not count.
+        // Untyped, two Alu mates: typed Alu by its mates; the SVA mate does
+        // not count.
+        candidate.mate_checks = checks(vec![
+            Some(alu[20..96].to_vec()),
+            Some(reverse_complement(&alu[150..226])),
+            Some(random),
+            Some(sva[300..376].to_vec()),
+            None,
+        ]);
+        type_mates(&set, &mut candidate);
+        let typing = candidate.typing.clone().unwrap();
+        assert!(typing.by_mates);
+        assert_eq!(
+            (typing.family, typing.subfamily.as_str(), typing.typed_clips),
+            (Family::Alu, "AluY", 0)
+        );
+        assert_eq!((typing.element_start, typing.element_end), (20, 226));
+        assert_eq!((candidate.checked_mates, candidate.mei_mates), (4, 2));
+
+        // Typed Alu by its clips: the SVA mate does not count.
         candidate.typing = Some(alu_typing());
         type_mates(&set, &mut candidate);
         assert_eq!((candidate.checked_mates, candidate.mei_mates), (4, 2));

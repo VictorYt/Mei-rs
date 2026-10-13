@@ -16,8 +16,10 @@ use crate::cluster::{Candidate, Confidence, Filter, cluster, filters, tracts};
 use crate::genotype::{self, AlleleCounts};
 use crate::inputs::Inputs;
 use crate::reader::alleles::Site;
+use crate::reader::breakpoints::BreakpointRequest;
 use crate::reader::extract::ExtractOptions;
 use crate::reader::extract::{Extraction, extract};
+use crate::reader::filter::ReadFilter;
 use crate::reader::junctions::JunctionRequest;
 use crate::reader::signals::{ClipOptions, Signal, SignalKind};
 use crate::reader::{self, alignment::AlignmentFile, depth::local_depths, mates::MateRequest};
@@ -66,11 +68,12 @@ pub fn run(args: &ScanArgs) -> Result<()> {
     let clusters = candidates.len();
     candidates.retain(|c| !c.is_low_support());
 
-    let boundaries: Vec<(String, u64)> = candidates
-        .iter()
-        .map(|c| (contigs[c.contig].clone(), c.breakpoint))
-        .collect();
-    let depths = local_depths(&inputs.alignment, &boundaries, &extract_options.filter)?;
+    set_depths(
+        &mut candidates,
+        &inputs.alignment,
+        &contigs,
+        extract_options.filter,
+    )?;
     if let Some(reference) = &args.reference {
         flag_tandem_repeats(&mut candidates, &header_contigs, reference)?;
     } else {
@@ -86,6 +89,12 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         &consensus,
         args.reference.as_deref(),
     )?;
+    locate_mate_only(
+        &mut candidates,
+        &inputs.alignment,
+        &contigs,
+        extract_options.filter,
+    )?;
     assemble_candidates(
         &mut candidates,
         &inputs.alignment,
@@ -94,8 +103,7 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         &extract_options,
     )?;
     let filter_options = args.filter_options();
-    for (candidate, depth) in candidates.iter_mut().zip(depths) {
-        candidate.depth = Some(depth);
+    for candidate in &mut candidates {
         filters::apply(
             candidate,
             &contigs[candidate.contig],
@@ -114,11 +122,22 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         &extract_options,
     )?;
 
+    report(args, &inputs.sample, &header_contigs, &candidates)
+}
+
+/// Write the candidates in the output format.
+fn report(
+    args: &ScanArgs,
+    sample: &str,
+    header_contigs: &[Contig],
+    candidates: &[Candidate],
+) -> Result<()> {
+    let contigs: Vec<String> = header_contigs.iter().map(|c| c.name.clone()).collect();
     let command = command_line();
     let contig_lengths: Vec<u64> = header_contigs.iter().map(|c| c.length).collect();
     let reference_bases = match (&args.reference, args.format) {
         (Some(reference), OutputFormat::Vcf) => {
-            Some(reference_bases(&candidates, &header_contigs, reference)?)
+            Some(reference_bases(candidates, header_contigs, reference)?)
         }
         _ => None,
     };
@@ -128,13 +147,13 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         .and_then(Path::file_name)
         .map(|n| n.to_string_lossy().into_owned());
     let report = Report {
-        sample: &inputs.sample,
+        sample,
         command: &command,
         contigs: &contigs,
         contig_lengths: &contig_lengths,
         reference: reference_name.as_deref(),
         reference_bases: reference_bases.as_deref(),
-        candidates: &candidates,
+        candidates,
     };
     write_output(&report, args)
 }
@@ -216,6 +235,91 @@ fn type_candidates(candidates: &mut [Candidate], consensus: &ConsensusSet, path:
     );
 }
 
+/// Local depth of each candidate at its breakpoint.
+fn set_depths(
+    candidates: &mut [Candidate],
+    alignment: &AlignmentFile,
+    contigs: &[String],
+    filter: ReadFilter,
+) -> Result<()> {
+    let boundaries: Vec<(String, u64)> = candidates
+        .iter()
+        .map(|c| (contigs[c.contig].clone(), c.breakpoint))
+        .collect();
+    for (candidate, depth) in
+        candidates
+            .iter_mut()
+            .zip(local_depths(alignment, &boundaries, &filter)?)
+    {
+        candidate.depth = Some(depth);
+    }
+    Ok(())
+}
+
+/// Look for the breakpoint of the candidates placed by their mates among
+/// the soft-clips of their reads ([`reader::breakpoints`]), for those with
+/// MEI mates (see [`mates::MIN_TYPED_MATES`]): the others cannot pass. The
+/// depth of the candidates moved is measured again at their breakpoint.
+fn locate_mate_only(
+    candidates: &mut [Candidate],
+    alignment: &AlignmentFile,
+    contigs: &[String],
+    filter: ReadFilter,
+) -> Result<()> {
+    let mut selected: Vec<(usize, BreakpointRequest)> = candidates
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| c.mei_mates >= mates::MIN_TYPED_MATES)
+        .filter_map(|(i, c)| {
+            let (first, last) = c.mate_interval?;
+            Some((
+                i,
+                BreakpointRequest {
+                    contig: contigs[c.contig].clone(),
+                    first,
+                    last,
+                    estimate: c.breakpoint,
+                },
+            ))
+        })
+        .collect();
+    // Sorted by contig and first boundary, as the batches need.
+    selected.sort_by_key(|(i, request)| (candidates[*i].contig, request.first));
+    let requests: Vec<BreakpointRequest> = selected.iter().map(|(_, r)| r.clone()).collect();
+    let found = reader::breakpoints::find_breakpoints(alignment, &requests, &filter)?;
+    let mut moved: Vec<usize> = Vec::new();
+    for ((i, _), breakpoint) in selected.iter().zip(found) {
+        if let Some(breakpoint) = breakpoint {
+            let c = &mut candidates[*i];
+            c.breakpoint = breakpoint.position;
+            c.breakpoint_clips = breakpoint.clips;
+            c.mate_interval = None;
+            moved.push(*i);
+        }
+    }
+    let boundaries: Vec<(String, u64)> = moved
+        .iter()
+        .map(|&i| {
+            (
+                contigs[candidates[i].contig].clone(),
+                candidates[i].breakpoint,
+            )
+        })
+        .collect();
+    for (&i, depth) in moved
+        .iter()
+        .zip(local_depths(alignment, &boundaries, &filter)?)
+    {
+        candidates[i].depth = Some(depth);
+    }
+    info!(
+        "candidates placed by their mates, with MEI mates: {} looked for among the soft-clips of their reads, {} found",
+        selected.len(),
+        moved.len()
+    );
+    Ok(())
+}
+
 /// Check a sample of the mates of each candidate against the consensus
 /// sequences ([`mates`]); mapped mates need the reference.
 fn check_mates(
@@ -247,14 +351,18 @@ fn check_mates(
         .filter(|c| mates::checked(c))
         .for_each(|c| mates::type_mates(consensus, c));
     info!(
-        "mates checked against the consensus sequences{}: {} of {} MEI mates",
+        "mates checked against the consensus sequences{}: {} of {} MEI mates; {} candidates typed by their mates",
         if reference.is_some() {
             ""
         } else {
             " (unmapped ones only: no --reference)"
         },
         candidates.iter().map(|c| c.mei_mates).sum::<usize>(),
-        candidates.iter().map(|c| c.checked_mates).sum::<usize>()
+        candidates.iter().map(|c| c.checked_mates).sum::<usize>(),
+        candidates
+            .iter()
+            .filter(|c| c.typing.as_ref().is_some_and(|t| t.by_mates))
+            .count()
     );
     Ok(())
 }
@@ -337,8 +445,8 @@ fn genotype_candidates(
 /// before the signals.
 const ASSEMBLY_MARGIN: u64 = 300;
 
-/// Assemble the junctions of the candidates that can pass (typed, with
-/// junction soft-clips: those whose mates are checked), in parallel
+/// Assemble the junctions of the candidates that can pass (typed by their
+/// clips or mates, with junction soft-clips: [`mates::may_pass`]), in parallel
 /// ([`assembly`]); it needs the reference.
 fn assemble_candidates(
     candidates: &mut [Candidate],
@@ -360,7 +468,7 @@ fn assemble_candidates(
     for (i, c) in candidates
         .iter()
         .enumerate()
-        .filter(|(_, c)| mates::checked(c))
+        .filter(|(_, c)| mates::may_pass(c))
     {
         let contig = &contigs[c.contig];
         let (start, end) = tracts::window(c, contig.length);

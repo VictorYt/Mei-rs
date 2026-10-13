@@ -183,6 +183,41 @@ fn genotypes() {
     }
 }
 
+#[test]
+fn tail_only_clips_typed_by_mates() {
+    // The junction clips of the Alu of `tailonly` are its poly(A) tail with
+    // too few element bases to be typed (tests/data/README.md): its mates
+    // type it, and it passes with `low` confidence.
+    for (bam, reference, checked) in [
+        ("tests/data/tailonly.bam", None, 16),
+        (
+            "tests/data/tailonly.cram",
+            Some("tests/data/reference.fa"),
+            40,
+        ),
+    ] {
+        let mut args = vec!["--bam", bam, "--bed", "tests/data/targets.bed"];
+        if let Some(reference) = reference {
+            args.extend(["--reference", reference]);
+        }
+        let tsv = scan(&args);
+        let rows = rows(&tsv);
+        assert_eq!(rows.len(), 1, "{tsv}");
+        let row = &rows[0];
+        for (name, value) in [
+            ("filter", "PASS"),
+            ("confidence", "low"),
+            ("family", "ALU"),
+            ("typed_clips", "0"),
+            ("typed_by", "mates"),
+            ("genotype", "0/1"),
+        ] {
+            assert_eq!(column(&tsv, row, name), value, "{name}: {tsv}");
+        }
+        assert_eq!(column(&tsv, row, "checked_mates"), checked.to_string());
+    }
+}
+
 /// Parse a VCF with noodles: header and records.
 fn parse_vcf(
     reader: impl std::io::BufRead,

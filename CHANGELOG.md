@@ -6,6 +6,54 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-13
+
+### Added
+
+- Typing by the mates (#57): untyped candidates with a poly(A/T) tail clip
+  have their mates checked too (on short reads the clips at the tail junction
+  are often the tail alone), and at least 2 mates of one family type them
+  (new column `typed_by`, `clips` or `mates`; VCF `TYPED_BY`). Such a
+  candidate passes `untyped` with at least `--min-typed-clips` tailed clips
+  and MEI mates, the mates matching the consensus with 96% identity, at
+  `low` confidence. New fixture `tailonly`. HGSVC3 exomes: 99 → 111 true,
+  48 → 49 false (precision 0.694, recall 0.299; `--min-qual 2`: 0.852).
+- Position of the candidates placed by their mates (#58): without enough
+  junction soft-clips, at the inner edge of the larger group of mate signals
+  (or between the two groups when they do not overlap), with the interval
+  where the insertion lies (new column `cipos`, VCF `CIPOS`). For those with
+  MEI mates, the interval is read again and the boundary where at least 2
+  reads are soft-clipped by 3 bases or more becomes the position (new column
+  `breakpoint_clips`, VCF `BREAKPOINT_CLIPS`).
+- Insertions without junction soft-clips (#59): the mates of candidates
+  without junction clips (at least 3 mate signals, `signal_ratio` 0.2) are
+  checked and may type them (#57); such a candidate passes `no_junction` and
+  `untyped` (confidence `low`, VCF `IMPRECISE`) when typed by its mates with
+  98% identity, at least 60% and 4 of its checked mates are MEI mates, and
+  reads are soft-clipped by a few bases at its position (#58).
+
+### Changed
+
+- Mate checks (#69): a mapped mate is read from the reference over the span
+  of its alignment (mate CIGAR, `MC` tag; else a read length, as before),
+  and mates are typed without their runs of 10 or more A or T (the poly(A)
+  tail of the element or of the reference copy the mate maps to). A mapped
+  mate found in the reference within 600 bp of its candidate is not an MEI
+  mate: the pair fits the reference (next to a reference copy of an element,
+  the mates of the reads in that copy map with a low MAPQ to other copies).
+  HGSVC3 exomes: 118 → 117 true, 49 → 39 false (precision 0.750;
+  `--min-qual 2`: 0.891, `--min-qual 5`: 0.952); HG002: 16 true, 25 → 23
+  false.
+- Candidates typed by a single clip (#70): the mates of candidates with
+  too few junction clips are checked when typed too, and they pass as
+  mate-only insertions (#59) with the mean identity of their MEI mates and
+  their junction clip as breakpoint evidence; one typed clip without a
+  poly(A/T) tail passes `untyped` with at least 60% and 4 MEI mates matching
+  the consensus with 96% identity; `low_ratio` no longer applies with 5 or
+  more typed junction clips (very deep sites). HGSVC3 exomes: 117 → 121
+  true, 39 false (precision 0.756; `--min-qual 2`: 0.895); within 100 bp of
+  the targets 85 → 89 of 131; HG002 unchanged.
+
 ## [0.2.0] - 2026-10-11
 
 ### Added
@@ -181,7 +229,8 @@ targeted capture and exome data.
   kept in memory (#23); most soft-clips of older data fall below the base
   quality threshold (#25).
 
-[Unreleased]: https://github.com/VictorYt/Mei-rs/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/VictorYt/Mei-rs/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/VictorYt/Mei-rs/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/VictorYt/Mei-rs/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/VictorYt/Mei-rs/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/VictorYt/Mei-rs/releases/tag/v0.1.0

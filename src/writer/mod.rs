@@ -52,7 +52,7 @@ pub fn write(report: &Report<'_>, format: OutputFormat, out: &mut dyn Write) -> 
 }
 
 /// Columns of the TSV output.
-pub const TSV_COLUMNS: [&str; 43] = [
+pub const TSV_COLUMNS: [&str; 46] = [
     "id",
     "contig",
     "position",
@@ -96,6 +96,9 @@ pub const TSV_COLUMNS: [&str; 43] = [
     "gq",
     "alt_reads",
     "ref_reads",
+    "typed_by",
+    "cipos",
+    "breakpoint_clips",
 ];
 
 fn write_tsv(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
@@ -166,6 +169,9 @@ fn write_tsv(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
             genotyped(&|g| g.quality.to_string()),
             genotyped(&|g| g.alternative.to_string()),
             genotyped(&|g| g.reference.to_string()),
+            typed(&|t| typed_by(t).to_owned()),
+            cipos(c).map_or_else(|| ".".to_owned(), |(a, b)| format!("{a},{b}")),
+            c.breakpoint_clips.to_string(),
         ];
         writeln!(out, "{}\t{}", fields.join("\t"), typing_fields.join("\t"))?;
     }
@@ -253,6 +259,22 @@ fn strand(candidate: &Candidate) -> &'static str {
 /// complement of the consensus.
 fn element_strand(typing: &Typing) -> &'static str {
     if typing.reverse { "-" } else { "+" }
+}
+
+/// Interval of the insertion placed by its mates, relative to its position
+/// (as the VCF `CIPOS`).
+fn cipos(candidate: &Candidate) -> Option<(i64, i64)> {
+    #[allow(clippy::cast_possible_wrap)]
+    let offset = |b: u64| b as i64 - candidate.breakpoint as i64;
+    candidate
+        .mate_interval
+        .map(|(first, last)| (offset(first), offset(last)))
+}
+
+/// What typed the element: `clips` (junction soft-clips) or `mates` (no clip
+/// typed).
+fn typed_by(typing: &Typing) -> &'static str {
+    if typing.by_mates { "mates" } else { "clips" }
 }
 
 fn ratio(value: f64) -> f64 {
@@ -345,7 +367,10 @@ struct JsonCandidate {
     element_start: Option<usize>,
     element_end: Option<usize>,
     identity: Option<f64>,
+    typed_by: Option<&'static str>,
     typed_clips: usize,
+    cipos: Option<(i64, i64)>,
+    breakpoint_clips: usize,
     short_typed_clips: usize,
     checked_mates: usize,
     mei_mates: usize,
@@ -397,6 +422,9 @@ impl JsonCandidate {
             element_start: c.typing.as_ref().map(|t| t.element_start + 1),
             element_end: c.typing.as_ref().map(|t| t.element_end),
             identity: c.typing.as_ref().map(|t| ratio(t.identity)),
+            typed_by: c.typing.as_ref().map(typed_by),
+            cipos: cipos(c),
+            breakpoint_clips: c.breakpoint_clips,
             typed_clips: c.typing.as_ref().map_or(0, |t| t.typed_clips),
             short_typed_clips: c.typing.as_ref().map_or(0, |t| t.short_typed_clips),
             checked_mates: c.checked_mates,
@@ -498,7 +526,7 @@ impl JsonSignal {
             SignalKind::MateUnmapped => {}
             SignalKind::MateLowMapq { mapq, .. } => json.mate_mapq = Some(*mapq),
             SignalKind::MateElsewhere { mate } => {
-                json.mate_contig = Some(contigs[mate.contig].clone());
+                json.mate_contig = Some(contigs[mate.contig()].clone());
             }
             SignalKind::LargeInsert { length, .. } => json.insert_length = Some(*length),
         }
@@ -525,6 +553,7 @@ mod tests {
             SignalKind::MateElsewhere {
                 mate: crate::reader::signals::Locus {
                     contig: 1,
+                    span: None,
                     start: 99,
                 },
             },
@@ -544,6 +573,7 @@ mod tests {
             identity: 0.98765,
             typed_clips: 6,
             short_typed_clips: 0,
+            by_mates: false,
         });
         candidates[1].depth = Some(100);
         candidates[1].filters = vec![Filter::ProbeEdge, Filter::LowRatio];
@@ -576,11 +606,11 @@ mod tests {
         assert_eq!(lines[4], format!("#{}", TSV_COLUMNS.join("\t")));
         assert_eq!(
             lines[5],
-            "MEI_1\tchr1\t1000\t1012\t1000\t12\t+\tPASS\thigh\t7\t3\t3\t3\t3\t0\t0\t1\t3\t0\tyes\t3\t40\t0.175\t1000\t1050\tALU\tAluYa5\t+\t1\t281\t0.988\t6\t0\t0\t0\t.\t.\t.\t.\t.\t.\t.\t."
+            "MEI_1\tchr1\t1000\t1012\t1000\t12\t+\tPASS\thigh\t7\t3\t3\t3\t3\t0\t0\t1\t3\t0\tyes\t3\t40\t0.175\t1000\t1050\tALU\tAluYa5\t+\t1\t281\t0.988\t6\t0\t0\t0\t.\t.\t.\t.\t.\t.\t.\t.\tclips\t.\t0"
         );
         assert_eq!(
             lines[6],
-            "MEI_2\tchr1\t5000\t.\t5000\t.\t.\tprobe_edge;low_ratio\t.\t3\t3\t0\t0\t3\t0\t0\t0\t0\t0\tno\t1\t100\t0.030\t5000\t5000\t.\t.\t.\t.\t.\t.\t0\t0\t0\t0\t.\t.\t.\t.\t.\t.\t.\t."
+            "MEI_2\tchr1\t5000\t.\t5000\t.\t.\tprobe_edge;low_ratio\t.\t3\t3\t0\t0\t3\t0\t0\t0\t0\t0\tno\t1\t100\t0.030\t5000\t5000\t.\t.\t.\t.\t.\t.\t0\t0\t0\t0\t.\t.\t.\t.\t.\t.\t.\t.\t.\t.\t0"
         );
         assert_eq!(lines.len(), 7);
         for line in &lines[4..] {

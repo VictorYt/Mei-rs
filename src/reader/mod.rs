@@ -4,6 +4,7 @@
 pub mod alignment;
 pub mod alleles;
 pub mod batch;
+pub mod breakpoints;
 pub mod depth;
 pub mod extract;
 pub mod filter;
