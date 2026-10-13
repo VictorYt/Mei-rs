@@ -206,6 +206,7 @@ Same seven exomes, PASS calls:
 | #57 typing by the mates | 163 | 111 | 0.694 | 0.299 | 12 / 13 |
 | #58, #59 insertions without junction clips | 170 | 118 | 0.707 | 0.318 | 12 / 13 |
 | #69 mate checks | 159 | 117 | 0.750 | 0.315 | 13 / 14 |
+| #70 single typed clips | 163 | 121 | 0.756 | 0.326 | 13 / 14 |
 
 #57 types untyped candidates with a poly(A/T) tail clip by their mates
 (junction clips that are the tail alone): 12 more true calls, 1 more false
@@ -239,6 +240,13 @@ of the poly(A) tail and 30 to 45 bases of the element end, too few to be
 typed. Not counting untyped mates with a long A/T run raised recall (124
 true) but added false calls next to reference Alus (53 false); set aside in
 #71.
+
+#70 checks the mates of candidates typed by a single clip without enough
+junction clips and lets them pass as mate-only insertions (#59), lets one
+typed clip without a tail pass with mostly young MEI mates, and lifts
+`low_ratio` with 5 or more typed junction clips: 4 more true calls, no false
+one (`--min-qual 2`: 119 true / 14 false, precision 0.895); within 100 bp of
+the targets, 89 of 131 truth MEIs are PASS. HG002 unchanged.
 
 Before typing, most false positives were poly(A) length variants of reference
 Alus (`high`) and background unmapped mates of the deep samples (`medium`):
