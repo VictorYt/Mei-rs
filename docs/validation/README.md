@@ -75,6 +75,28 @@ python3 docs/validation/evaluate.py \
 
 ## Results
 
+v0.3.0 (`develop` after #70), default options with `--reference`: seven
+exomes 121 true / 39 false PASS (precision 0.756, recall 0.326, recall of any
+candidate 0.437; 377 truth MEIs in the padded targets of any sample, 371 in
+these seven); HG002 (held out) 16 true / 23 false (0.410 / 0.327). Per sample:
+
+| Sample | Truth MEIs | PASS | True PASS | Precision | Recall (PASS) |
+|---|---|---|---|---|---|
+| HG00512 | 49 | 28 | 20 | 0.741 | 0.408 |
+| HG00513 | 45 | 27 | 20 | 0.741 | 0.444 |
+| HG00731 | 45 | 11 | 9 | 0.818 | 0.200 |
+| HG00733 | 45 | 15 | 11 | 0.786 | 0.244 |
+| NA19238 | 59 | 36 | 30 | 0.833 | 0.508 |
+| NA19239 | 60 | 23 | 16 | 0.727 | 0.267 |
+| NA19240 | 68 | 23 | 15 | 0.652 | 0.221 |
+
+By confidence: `high` 13 of 14, `medium` 34 of 37, `low` 74 of 112. Recall
+(PASS) by distance to the target: inside 28 / 36, 1-100 bp 61 / 95, 101-300 bp
+32 / 240; by family: Alu 103 / 325, L1 15 / 32, SVA 3 / 14. Genotypes of the
+true PASS calls: 90 of 119 right. `--min-qual 2`: 119 / 14 (0.895; HG002
+15 / 12), `--min-qual 5`: 103 / 5 (0.954; HG002 13 / 8). The numbers below
+are those of v0.2.0.
+
 v0.2.0 (`develop` after #56), default options with `--reference`.
 
 | Sample | Truth MEIs | PASS | True PASS | Precision | Recall (PASS) | Recall (any) |
