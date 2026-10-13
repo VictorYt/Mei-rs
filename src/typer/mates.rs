@@ -11,7 +11,13 @@
 //! - mapped mates (low MAPQ, another contig, large insert): the mate aligned
 //!   at its locus, so the reference there stands for its sequence; it is read
 //!   from `--reference`, one query per mate ([`fetch_mapped_mates`]; without
-//!   a reference, mapped mates are not checked).
+//!   a reference, mapped mates are not checked). Only the aligned part of the
+//!   mate stands for it: mates near the 3' end of the element are often
+//!   clipped (`34M42S`), their clipped part being the poly(A) tail or the
+//!   insertion flank, not the reference after the copy. The reference is
+//!   read over the span of the mate alignment, from its CIGAR (`MC` tag);
+//!   without it, over a read length, and an alignment of at least
+//!   [`MIN_MATE_ALIGNED`] bases types it.
 //!
 //! A mate is an MEI mate when its best alignment ([`super::type_sequence`])
 //! is in the family of the candidate, or in any family for an untyped one.
@@ -34,10 +40,10 @@ use std::path::Path;
 use noodles::core::{Position, Region};
 use noodles::fasta;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::consensus::{ConsensusSet, Family};
-use super::{ClipHit, Typing, type_sequence};
+use super::{ClipHit, Typing, type_part};
 use crate::cluster::{Candidate, Filter};
 use crate::reader::mates::{MateRequest, name_hash};
 use crate::reader::signals::{Locus, SignalKind};
@@ -51,6 +57,11 @@ pub const MAX_CHECKED_MATES: usize = 40;
 /// Bases of reference read at the locus of a mapped mate when the length of
 /// the anchored read is shorter.
 pub const MIN_MATE_LENGTH: u64 = 50;
+
+/// Minimum bases of a mapped mate without its alignment span (no `MC` tag)
+/// aligned to a consensus to be typed: the reference read for it then
+/// extends over its clipped part (see the module documentation).
+pub const MIN_MATE_ALIGNED: usize = 30;
 
 /// Minimum number of mates of one family to type a candidate whose clips are
 /// not typed.
@@ -74,6 +85,9 @@ pub struct MateCheck {
     pub sequence: Option<Vec<u8>>,
     /// Whether it is a mobile element of the candidate family, once checked.
     pub mei: Option<bool>,
+    /// Minimum aligned bases to type the sequence, instead of the usual
+    /// coverage (mapped mates without their alignment span).
+    pub min_aligned: Option<usize>,
 }
 
 /// Whether the mates of a candidate are checked: it is typed and has enough
@@ -130,6 +144,7 @@ pub fn sample_mates(candidate: &mut Candidate) {
             signal,
             sequence: None,
             mei: None,
+            min_aligned: None,
         })
         .collect();
 }
@@ -166,8 +181,8 @@ pub fn unmapped_requests(candidates: &[Candidate]) -> Vec<(usize, Vec<(usize, Ma
 }
 
 /// Read the reference at the locus of the sampled mapped mates, as their
-/// sequence (a read length from the mate start, the length of the anchored
-/// alignment).
+/// sequence: over the span of the mate alignment (`MC` tag), else a read
+/// length from the mate start (the length of the anchored alignment).
 ///
 /// # Errors
 ///
@@ -187,10 +202,13 @@ pub fn fetch_mapped_mates(
             let Some(locus) = signal.kind.mate_locus() else {
                 continue;
             };
-            let Some(length) = contigs.get(locus.contig).map(|c| c.length) else {
+            let Some(length) = contigs.get(locus.contig()).map(|c| c.length) else {
                 continue;
             };
-            let read_length = (signal.end - signal.start).max(MIN_MATE_LENGTH);
+            let read_length = locus.span.map_or_else(
+                || (signal.end - signal.start).max(MIN_MATE_LENGTH),
+                |span| u64::from(span.get()),
+            );
             let end = (locus.start + read_length).min(length);
             if locus.start < end {
                 loci.push((c, k, locus, end));
@@ -209,13 +227,136 @@ pub fn fetch_mapped_mates(
         ) else {
             continue;
         };
-        let region = Region::new(contigs[locus.contig].name.as_str(), first..=last);
+        let region = Region::new(contigs[locus.contig()].name.as_str(), first..=last);
         let record = reader.query(&region)?;
         let mut sequence = record.sequence().as_ref().to_vec();
         sequence.make_ascii_uppercase();
-        candidates[c].mate_checks[k].sequence = Some(sequence);
+        let check = &mut candidates[c].mate_checks[k];
+        check.sequence = Some(sequence);
+        check.min_aligned = Some(MIN_MATE_ALIGNED);
+    }
+    if std::env::var_os("MEI_NO_LOCAL").is_none() { // EXPERIMENT
+    drop_local_mates(candidates, contigs, &mut reader)?;
     }
     Ok(())
+}
+
+/// Bases of reference read on each side of the anchored reads of a
+/// candidate, where a mate of a pair without insertion lies (fragment
+/// length).
+pub const LOCAL_WINDOW: u64 = 600;
+
+/// Run of A or T, in bases, that makes an untyped mate a mate in the
+/// poly(A) tail of the element, not checked: it has too few element bases to
+/// be typed.
+pub const TAIL_MATE_RUN: usize = 20;
+
+/// The sequence without its runs of at least 10 A or T (EXPERIMENT).
+fn strip_runs(sequence: &[u8]) -> Vec<u8> {
+    sequence
+        .chunk_by(|a, b| a == b)
+        .filter(|run| !(matches!(run[0], b'A' | b'T') && run.len() >= 10))
+        .flatten()
+        .copied()
+        .collect()
+}
+
+/// Longest run of A or of T in a sequence.
+fn longest_run(sequence: &[u8]) -> usize {
+    sequence
+        .chunk_by(|a, b| a == b)
+        .filter(|run| matches!(run[0], b'A' | b'T'))
+        .map(<[u8]>::len)
+        .max()
+        .unwrap_or(0)
+}
+
+/// Length of the k-mers compared between a mapped mate and the reference
+/// next to the candidate.
+pub const LOCAL_K: usize = 20;
+
+/// Fraction of the k-mers of a mapped mate found next to the candidate for
+/// it to be local.
+pub const LOCAL_MIN_SHARED: f64 = 0.5;
+
+/// Drop the mapped mates found in the reference next to their candidate
+/// (within [`LOCAL_WINDOW`]): the pair fits the reference without an
+/// insertion. Next to a reference copy of an element, the mates of the reads
+/// in that copy map with a low MAPQ to other copies, and these pairs look
+/// like mates in an inserted element. Such a mate is not checked.
+fn drop_local_mates(
+    candidates: &mut [Candidate],
+    contigs: &[Contig],
+    reader: &mut fasta::io::IndexedReader<fasta::io::BufReader<std::fs::File>>,
+) -> io::Result<()> {
+    for candidate in candidates.iter_mut() {
+        let mapped: Vec<usize> = candidate
+            .mate_checks
+            .iter()
+            .enumerate()
+            .filter(|(_, check)| {
+                check.sequence.is_some()
+                    && candidate.signals[check.signal].kind.mate_locus().is_some()
+            })
+            .map(|(k, _)| k)
+            .collect();
+        let Some(first) = mapped.first() else {
+            continue;
+        };
+        let contig = candidate.signals[candidate.mate_checks[*first].signal].contig;
+        let Some(contig) = contigs.get(contig) else {
+            continue;
+        };
+        let start = candidate.signals.iter().map(|s| s.start).min().unwrap_or(0);
+        let end = candidate.signals.iter().map(|s| s.end).max().unwrap_or(0);
+        let (Some(first), Some(last)) = (
+            usize::try_from(start.saturating_sub(LOCAL_WINDOW) + 1)
+                .ok()
+                .and_then(|p| Position::try_from(p).ok()),
+            usize::try_from((end + LOCAL_WINDOW).min(contig.length))
+                .ok()
+                .and_then(|p| Position::try_from(p).ok()),
+        ) else {
+            continue;
+        };
+        let record = reader.query(&Region::new(contig.name.as_str(), first..=last))?;
+        let window: HashSet<u64> = canonical_kmers(record.sequence().as_ref()).collect();
+        for k in mapped {
+            let check = &mut candidate.mate_checks[k];
+            let Some(sequence) = check.sequence.as_deref() else {
+                continue;
+            };
+            let (shared, total) = canonical_kmers(sequence)
+                .fold((0usize, 0usize), |(s, t), kmer| {
+                    (s + usize::from(window.contains(&kmer)), t + 1)
+                });
+            #[allow(clippy::cast_precision_loss)]
+            if total > 0 && shared as f64 >= LOCAL_MIN_SHARED * total as f64 {
+                check.sequence = None;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The [`LOCAL_K`]-mers of a sequence, each as the smaller code of its two
+/// strands; k-mers with other bases than ACGT are skipped.
+fn canonical_kmers(sequence: &[u8]) -> impl Iterator<Item = u64> + '_ {
+    sequence.windows(LOCAL_K).filter_map(|kmer| {
+        let (mut forward, mut reverse) = (0u64, 0u64);
+        for (i, &b) in kmer.iter().enumerate() {
+            let bits = match b.to_ascii_uppercase() {
+                b'A' => 0,
+                b'C' => 1,
+                b'G' => 2,
+                b'T' => 3,
+                _ => return None,
+            };
+            forward = (forward << 2) | bits;
+            reverse |= (3 - bits) << (2 * i);
+        }
+        Some(forward.min(reverse))
+    })
 }
 
 /// Type the sampled mates of a candidate with a sequence: `checked_mates` and
@@ -229,7 +370,15 @@ pub fn type_mates(set: &ConsensusSet, candidate: &mut Candidate) {
             check
                 .sequence
                 .as_deref()
-                .map(|sequence| type_sequence(set, sequence).first().copied())
+                .map(|sequence| {
+                    if std::env::var_os("MEI_STRIP").is_some() { // EXPERIMENT
+                        let stripped = strip_runs(sequence);
+                        return type_part(set, &stripped, None).first().copied();
+                    }
+                    type_part(set, sequence, check.min_aligned)
+                        .first()
+                        .copied()
+                })
         })
         .collect();
     if candidate.typing.is_none() {
@@ -242,6 +391,16 @@ pub fn type_mates(set: &ConsensusSet, candidate: &mut Candidate) {
         let Some(hit) = hit else {
             continue;
         };
+        // A mate in the tail of the element: no family to type.
+        if hit.is_none()
+            && std::env::var_os("MEI_NO_TAILMATE").is_none() // EXPERIMENT
+            && check
+                .sequence
+                .as_deref()
+                .is_some_and(|s| longest_run(s) >= TAIL_MATE_RUN)
+        {
+            continue;
+        }
         checked += 1;
         let best = hit.map(|hit| set.sequences()[hit.consensus].family);
         let is_mei = best.is_some_and(|f| family.is_none_or(|family| f == family));
@@ -331,6 +490,77 @@ mod tests {
     }
 
     #[test]
+    fn local_mates_are_dropped() {
+        // Two mapped mates of a candidate at chr1:5000 of the fixture
+        // reference: one maps next to it (chr1:5300, the pair fits the
+        // reference), one on chr2.
+        let reference = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/data/reference.fa");
+        let contigs = [
+            Contig {
+                name: "chr1".to_owned(),
+                length: 20_000,
+            },
+            Contig {
+                name: "chr2".to_owned(),
+                length: 10_000,
+            },
+        ];
+        let locus = |contig, start| Locus {
+            contig,
+            span: std::num::NonZeroU32::new(60),
+            start,
+        };
+        let signals = vec![
+            mate(
+                5_000,
+                Side::Right,
+                "near",
+                SignalKind::MateLowMapq {
+                    mapq: 0,
+                    mate: Some(locus(0, 5_300)),
+                },
+            ),
+            mate(
+                5_010,
+                Side::Right,
+                "far",
+                SignalKind::MateElsewhere {
+                    mate: locus(1, 3_000),
+                },
+            ),
+        ];
+        let mut candidates = cluster(signals, &unchecked_options());
+        candidates[0].mate_checks = (0..2)
+            .map(|signal| MateCheck {
+                signal,
+                sequence: None,
+                mei: None,
+                min_aligned: None,
+            })
+            .collect();
+        fetch_mapped_mates(&mut candidates, &contigs, &reference).unwrap();
+        let checks = &candidates[0].mate_checks;
+        let near = checks.iter().find(|c| candidates[0].signals[c.signal].read == "near");
+        let far = checks.iter().find(|c| candidates[0].signals[c.signal].read == "far");
+        assert_eq!(near.unwrap().sequence, None);
+        assert_eq!(far.unwrap().sequence.as_ref().map(Vec::len), Some(60));
+        assert_eq!(far.unwrap().min_aligned, Some(MIN_MATE_ALIGNED));
+    }
+
+    #[test]
+    fn canonical_kmers_of_both_strands() {
+        let sequence = b"ACGTTGCATGCATTGACCAGTA";
+        let reverse = reverse_complement(sequence);
+        let forward: Vec<u64> = canonical_kmers(sequence).collect();
+        let mut backward: Vec<u64> = canonical_kmers(&reverse).collect();
+        backward.reverse();
+        assert_eq!(forward.len(), sequence.len() - LOCAL_K + 1);
+        assert_eq!(forward, backward);
+        assert_eq!(canonical_kmers(b"ACGTNACGTACGTACGTACGTAC").count(), 0);
+    }
+
+    #[test]
     fn sampling() {
         let signals: Vec<_> = (0..100)
             .map(|i| {
@@ -406,6 +636,7 @@ mod tests {
                     signal,
                     sequence,
                     mei: None,
+                    min_aligned: None,
                 })
                 .collect()
         };

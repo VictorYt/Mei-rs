@@ -93,6 +93,14 @@ pub struct Typing {
 /// best score first.
 #[must_use]
 pub fn type_sequence(set: &ConsensusSet, sequence: &[u8]) -> Vec<ClipHit> {
+    type_part(set, sequence, None)
+}
+
+/// [`type_sequence`], with alignments of at least `min_aligned` bases of the
+/// sequence accepted instead of [`MIN_COVERAGE`] when given: for a sequence
+/// of which only a part is expected to be the element.
+#[must_use]
+pub fn type_part(set: &ConsensusSet, sequence: &[u8], min_aligned: Option<usize>) -> Vec<ClipHit> {
     if sequence.len() < MIN_TYPED_LENGTH.max(K) {
         return Vec::new();
     }
@@ -128,10 +136,13 @@ pub fn type_sequence(set: &ConsensusSet, sequence: &[u8]) -> Vec<ClipHit> {
             let lo = usize::try_from((first - margin).max(0)).unwrap_or(0);
             let hi = usize::try_from((last + length + margin).min(strand_length)).unwrap_or(0);
             let alignment = align::local(sequence, strand.get(lo..hi)?)?;
+            let aligned = alignment.query_end - alignment.query_start;
             #[allow(clippy::cast_precision_loss)]
-            let coverage =
-                (alignment.query_end - alignment.query_start) as f64 / sequence.len() as f64;
-            if coverage < MIN_COVERAGE || alignment.identity() < MIN_IDENTITY {
+            let covered = min_aligned.map_or_else(
+                || aligned as f64 / sequence.len() as f64 >= MIN_COVERAGE,
+                |min| aligned >= min,
+            );
+            if !covered || alignment.identity() < MIN_IDENTITY {
                 return None;
             }
             let (start, end) = (lo + alignment.target_start, lo + alignment.target_end);
@@ -426,6 +437,19 @@ mod tests {
         // Too short, or only a tail.
         assert_eq!(type_sequence(&set, &consensus(&set, "AluY")[30..42]), []);
         assert_eq!(type_sequence(&set, &[b'A'; 40]), []);
+    }
+
+    #[test]
+    fn partly_aligned_sequence() {
+        // A mate aligned in part to a reference Alu: the reference read over
+        // a read length is 34 Alu bases, then unrelated sequence.
+        let set = set();
+        let mut sequence = consensus(&set, "AluY")[240..274].to_vec();
+        sequence.extend_from_slice(b"TGCATGCTAGCTAGGATCGATCGTAGCTAGCTTTAGGCGA");
+        assert_eq!(type_sequence(&set, &sequence), []);
+        let hits = type_part(&set, &sequence, Some(30));
+        assert_eq!(set.sequences()[hits[0].consensus].family, Family::Alu);
+        assert_eq!(type_part(&set, &sequence, Some(40)), []);
     }
 
     #[test]
