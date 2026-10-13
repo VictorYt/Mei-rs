@@ -127,7 +127,8 @@ skipped with a warning.
    element and the part of the consensus covered. Then up to 40 mates per
    typed candidate are checked the same way: unmapped mates by their read (placed
    at the anchor, it is read with it), mapped ones (low MAPQ, another contig,
-   large insert) by the reference at their position, with `--reference`.
+   large insert) by the reference over their aligned part (mate CIGAR, `MC`
+   tag), with `--reference`.
    Untyped candidates with a poly(A/T) tail clip, and candidates without
    junction clips but with enough mate signals for their depth, have their
    mates checked too: on short reads the clips at the tail junction are

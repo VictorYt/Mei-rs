@@ -244,7 +244,7 @@
       "breakpoint_clips": 0,
       "short_typed_clips": 2,
       "checked_mates": 40,
-      "mei_mates": 39,
+      "mei_mates": 40,
       "qual": 20,
       "genotype": "0/1",
       "gq": 99,
@@ -2564,7 +2564,7 @@
           "read_start": 6075,
           "read_end": 6174,
           "mapq": 60,
-          "mei_mate": false
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",
@@ -5528,7 +5528,7 @@
       "breakpoint_clips": 0,
       "short_typed_clips": 2,
       "checked_mates": 40,
-      "mei_mates": 39,
+      "mei_mates": 40,
       "qual": 20,
       "genotype": "0/1",
       "gq": 99,
@@ -5579,7 +5579,7 @@
           "read_start": 14805,
           "read_end": 14904,
           "mapq": 60,
-          "mei_mate": false
+          "mei_mate": true
         },
         {
           "kind": "mate_unmapped",

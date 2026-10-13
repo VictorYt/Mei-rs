@@ -205,6 +205,7 @@ Same seven exomes, PASS calls:
 | #56 LINE-1 ORF2 (v0.2.0) | 150 | 99 | 0.673 | 0.267 | 12 / 13 |
 | #57 typing by the mates | 163 | 111 | 0.694 | 0.299 | 12 / 13 |
 | #58, #59 insertions without junction clips | 170 | 118 | 0.707 | 0.318 | 12 / 13 |
+| #69 mate checks | 159 | 117 | 0.750 | 0.315 | 13 / 14 |
 
 #57 types untyped candidates with a poly(A/T) tail clip by their mates
 (junction clips that are the tail alone): 12 more true calls, 1 more false
@@ -224,6 +225,20 @@ true calls, no false one (`--min-qual 2`: 116 true / 19 false, precision
 0.859); within 100 bp of the targets, 85 of 131 truth MEIs are PASS. HG002
 unchanged. Looser thresholds (96% identity, without the clips) added 11
 true and 14 false candidates.
+
+#69 changes how mates are checked: mapped mates are read over the span of
+their alignment (`MC` tag) and typed without their A/T runs, and mapped
+mates found in the reference within 600 bp of their candidate are not MEI
+mates (next to a reference copy of an element, the mates of the reads in
+that copy map with a low MAPQ to other copies). 1 fewer true call, 10 fewer
+false (`--min-qual 2`: 115 true / 14 false, precision 0.891; `--min-qual 5`:
+100 / 5, 0.952); within 100 bp of the targets, 85 of 131 truth MEIs are PASS.
+HG002: 16 true / 23 false (`--min-qual 2`: 15 / 12). It was meant to raise
+recall: the mates of several missed MEIs (`non_mei_mates`) carry 30 to 50 A
+of the poly(A) tail and 30 to 45 bases of the element end, too few to be
+typed. Not counting untyped mates with a long A/T run raised recall (124
+true) but added false calls next to reference Alus (53 false); set aside in
+#71.
 
 Before typing, most false positives were poly(A) length variants of reference
 Alus (`high`) and background unmapped mates of the deep samples (`medium`):
