@@ -367,6 +367,7 @@ class Writer:
         tags = [f"RG:Z:{self.sample}"]
         if mate.mapped:
             tags.append(f"MQ:i:{mate.mapq}")
+            tags.append(f"MC:Z:{mate.cigar}")
         fields = [name, flag, rname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual]
         self.out.write("\t".join(map(str, fields + tags)) + "\n")
 

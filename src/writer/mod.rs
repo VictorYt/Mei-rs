@@ -526,7 +526,7 @@ impl JsonSignal {
             SignalKind::MateUnmapped => {}
             SignalKind::MateLowMapq { mapq, .. } => json.mate_mapq = Some(*mapq),
             SignalKind::MateElsewhere { mate } => {
-                json.mate_contig = Some(contigs[mate.contig].clone());
+                json.mate_contig = Some(contigs[mate.contig()].clone());
             }
             SignalKind::LargeInsert { length, .. } => json.insert_length = Some(*length),
         }
@@ -553,6 +553,7 @@ mod tests {
             SignalKind::MateElsewhere {
                 mate: crate::reader::signals::Locus {
                     contig: 1,
+                    span: None,
                     start: 99,
                 },
             },

@@ -30,6 +30,19 @@ project follows [Semantic Versioning](https://semver.org/).
   98% identity, at least 60% and 4 of its checked mates are MEI mates, and
   reads are soft-clipped by a few bases at its position (#58).
 
+### Changed
+
+- Mate checks (#69): a mapped mate is read from the reference over the span
+  of its alignment (mate CIGAR, `MC` tag; else a read length, as before),
+  and mates are typed without their runs of 10 or more A or T (the poly(A)
+  tail of the element or of the reference copy the mate maps to). A mapped
+  mate found in the reference within 600 bp of its candidate is not an MEI
+  mate: the pair fits the reference (next to a reference copy of an element,
+  the mates of the reads in that copy map with a low MAPQ to other copies).
+  HGSVC3 exomes: 118 → 117 true, 49 → 39 false (precision 0.750;
+  `--min-qual 2`: 0.891, `--min-qual 5`: 0.952); HG002: 16 true, 25 → 23
+  false.
+
 ## [0.2.0] - 2026-10-11
 
 ### Added
