@@ -262,7 +262,8 @@ pub const MIN_MATE_RUN: usize = 10;
 /// or T: the poly(A) tail of the element, or that of the reference copy a
 /// mate maps to, does not align to the consensus and would lower its
 /// coverage.
-fn without_runs(sequence: &[u8]) -> Vec<u8> {
+#[must_use]
+pub fn without_runs(sequence: &[u8]) -> Vec<u8> {
     sequence
         .chunk_by(|a, b| a == b)
         .filter(|run| !(matches!(run[0], b'A' | b'T') && run.len() >= MIN_MATE_RUN))

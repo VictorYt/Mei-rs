@@ -104,6 +104,7 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         &inputs.alignment,
         &header_contigs,
         args.reference.as_deref(),
+        &consensus,
         &extract_options,
     )?;
     let filter_options = args.filter_options();
@@ -450,13 +451,21 @@ fn genotype_candidates(
 const ASSEMBLY_MARGIN: u64 = 300;
 
 /// Assemble the junctions of the candidates that can pass (typed by their
-/// clips or mates, with junction soft-clips: [`mates::may_pass`]), in parallel
-/// ([`assembly`]); it needs the reference.
+/// clips or mates, with junction soft-clips: [`mates::may_pass`]; or placed by
+/// their mates and an insertion all the same:
+/// [`filters::mate_only_insertion`], #66), in parallel ([`assembly`]); it
+/// needs the reference.
+///
+/// A candidate placed by its mates has no junction: its breakpoint (a
+/// boundary where reads are clipped by a few bases) is tried as the left and
+/// as the right junction, and the sides whose contig is an element of its
+/// family are kept ([`assemble_at_breakpoint`]).
 fn assemble_candidates(
     candidates: &mut [Candidate],
     alignment: &AlignmentFile,
     contigs: &[Contig],
     reference: Option<&Path>,
+    consensus: &ConsensusSet,
     options: &ExtractOptions,
 ) -> Result<()> {
     let Some(reference) = reference else {
@@ -469,18 +478,17 @@ fn assemble_candidates(
     // Candidates are sorted by contig and start, as the batches need.
     let mut selected: Vec<(usize, u64, Vec<u8>)> = Vec::new();
     let mut requests: Vec<JunctionRequest> = Vec::new();
-    for (i, c) in candidates
-        .iter()
-        .enumerate()
-        .filter(|(_, c)| mates::may_pass(c))
-    {
+    for (i, c) in candidates.iter().enumerate().filter(|(_, c)| {
+        mates::may_pass(c) || (c.assembly.is_none() && filters::mate_only_insertion(c))
+    }) {
         let contig = &contigs[c.contig];
         let (start, end) = tracts::window(c, contig.length);
         let Some(sequence) = reference_window(&mut reader, reference, &contig.name, start, end)?
         else {
             continue;
         };
-        let junctions = [c.left_junction, c.right_junction];
+        let (left, right) = junctions_to_assemble(c);
+        let junctions = [left, right];
         let first = junctions.iter().flatten().fold(c.start, |a, &j| a.min(j));
         let last = junctions.iter().flatten().fold(c.end, |a, &j| a.max(j));
         requests.push(JunctionRequest {
@@ -489,8 +497,8 @@ fn assemble_candidates(
                 start: first.saturating_sub(ASSEMBLY_MARGIN),
                 end: (last + ASSEMBLY_MARGIN).min(contig.length),
             },
-            left: c.left_junction,
-            right: c.right_junction,
+            left,
+            right,
         });
         selected.push((i, start, sequence));
     }
@@ -500,16 +508,31 @@ fn assemble_candidates(
         .zip(reads.par_iter())
         .map(|((i, start, sequence), reads)| {
             let c = &candidates[*i];
-            assembly::assemble(
-                reads,
-                &tracts::ReferenceWindow {
-                    start: *start,
-                    sequence,
-                },
-                c.left_junction,
-                c.right_junction,
-                &options.clip,
-            )
+            let window = tracts::ReferenceWindow {
+                start: *start,
+                sequence,
+            };
+            if mates::may_pass(c) {
+                assembly::assemble(
+                    reads,
+                    &window,
+                    c.left_junction,
+                    c.right_junction,
+                    &options.clip,
+                )
+            } else {
+                match c.typing.as_ref() {
+                    Some(typing) => assembly::assemble_at_breakpoint(
+                        reads,
+                        &window,
+                        c.breakpoint,
+                        typing.family,
+                        consensus,
+                        &options.clip,
+                    ),
+                    None => Assembly::default(),
+                }
+            }
         })
         .collect();
     let mut counts = [0usize; 3];
@@ -525,6 +548,21 @@ fn assemble_candidates(
         counts[0]
     );
     Ok(())
+}
+
+/// The junctions to assemble: those of the clips, or, for a candidate placed
+/// by its mates without any, its breakpoint on both sides.
+fn junctions_to_assemble(candidate: &Candidate) -> (Option<u64>, Option<u64>) {
+    if mates::may_pass(candidate)
+        || candidate
+            .left_junction
+            .or(candidate.right_junction)
+            .is_some()
+    {
+        (candidate.left_junction, candidate.right_junction)
+    } else {
+        (Some(candidate.breakpoint), Some(candidate.breakpoint))
+    }
 }
 
 /// Reference bases of a 0-based half-open interval, upper case; `None` if
