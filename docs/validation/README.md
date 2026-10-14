@@ -75,6 +75,30 @@ python3 docs/validation/evaluate.py \
 
 ## Results
 
+v0.4.0 (`develop` after #67), default options with `--reference`: seven
+exomes 126 true / 40 false PASS (precision 0.759, recall 0.337, recall of any
+candidate 0.437); HG002 (held out) 17 true / 24 false (0.415 / 0.347). Per
+sample:
+
+| Sample | Truth MEIs | PASS | True PASS | Precision | Recall (PASS) |
+|---|---|---|---|---|---|
+| HG00512 | 49 | 27 | 19 | 0.731 | 0.388 |
+| HG00513 | 45 | 28 | 22 | 0.786 | 0.467 |
+| HG00731 | 45 | 11 | 9 | 0.818 | 0.200 |
+| HG00733 | 45 | 15 | 11 | 0.786 | 0.244 |
+| NA19238 | 59 | 38 | 31 | 0.816 | 0.525 |
+| NA19239 | 60 | 26 | 18 | 0.720 | 0.300 |
+| NA19240 | 68 | 24 | 16 | 0.667 | 0.235 |
+
+By confidence: `high` 13 true of 14, `medium` 35 of 38, `low` 78 of 117. Recall
+(PASS) by distance to the target: inside 27 / 36, 1-100 bp 62 / 95, 101-300 bp
+36 / 240; by family: Alu 106 / 325, L1 16 / 32, SVA 3 / 14. Genotypes of the
+true PASS calls: 91 of 123 right. `--min-qual 2`: 125 / 15 (0.893; HG002
+17 / 13), `--min-qual 5`: 114 / 6 (0.950; HG002 15 / 11). The quality score
+was refit on these calls (#67): AUC 0.928 leaving one sample out, 0.787 on
+HG002. NA12878 (GRCh38, 12 cores): 23 PASS, BAM 120 s and 1.4 GB; HG00731:
+170 s and 2.5 GB. The numbers below are those of v0.3.0 and v0.2.0.
+
 v0.3.0 (`develop` after #70), default options with `--reference`: seven
 exomes 121 true / 39 false PASS (precision 0.756, recall 0.326, recall of any
 candidate 0.437; 377 truth MEIs in the padded targets of any sample, 371 in
@@ -208,9 +232,39 @@ htslib 1.13, R 4.1, Biostrings 2.62) without `rBLAST`, which only deletion
 calling needs; `cluster_identifier` gives the same clusters as the bioconda
 amd64 build on a test region.
 
-Not compared yet: MELT (download requires a licence registration) and xTea
-(packaged for amd64 only, with scikit-learn 0.18; under emulation its run time
-would not be comparable).
+## Comparison with MELT and xTea
+
+Same seven exomes and truth set (371 MEIs in the padded targets), PASS calls
+of each tool (`evaluate.py` reads their VCF; `mei-rs` is v0.4.0, Scramble is
+the v0.2.0 run above):
+
+| | PASS | True | False | Precision | Recall (PASS) | Alu | L1 | SVA |
+|---|---|---|---|---|---|---|---|---|
+| `mei-rs` v0.4.0 | 169 | 126 | 40 | 0.759 | 0.337 | 106 / 325 | 16 / 32 | 3 / 14 |
+| MELT 2.2.2 | 110 | 96 | 11 | 0.897 | 0.259 | 79 / 325 | 14 / 32 | 3 / 14 |
+| xTea 0.1.9, default | 27 | 23 | 4 | 0.852 | 0.062 | 21 / 325 | 2 / 32 | 0 / 14 |
+| xTea 0.1.9, exome cutoffs | 43 | 33 | 10 | 0.767 | 0.089 | 30 / 325 | 3 / 32 | 0 / 14 |
+| Scramble 1.0.2 | 84 | 57 | 26 | 0.687 | 0.154 | 45 / 325 | 10 / 32 | 2 / 14 |
+
+HG002 (49 MEIs, GRCh37): MELT 5 true / 1 false (precision 0.833, recall
+0.102), xTea default 2 / 0 (recall 0.041), xTea exome cutoffs 3 / 0 (0.061),
+against 17 / 24 for `mei-rs` v0.4.0. For xTea on GRCh37 the `xtea_hg19` entry
+point, its hg19 library and GENCODE v19 were used, with the `chr` prefix
+removed from the annotation files (the hs37d5 contigs are `1`..`22`).
+
+* MELT 2.2.2 (`Single -exome`, one run per element: ALU, LINE1, SVA; `-c 100`,
+  `-r` the read length, human gene annotation of its distribution; the BAM is
+  linked into the working directory because MELT writes next to it). MELT is
+  the most precise caller on these exomes, `mei-rs` finds more of the MEIs.
+* xTea 0.1.9 (`-f 5907 -y 7`, one pipeline per element, repeat library and
+  GENCODE v46 added). Its automatic cutoffs (clip 3, discordant 6 from a
+  coverage of about 40x) leave 3 to 5 calls per exome. "Exome cutoffs" are
+  `-U --nclip 2 --cr 1 --nd 2 --nfclip 2 --nfdisc 2`: more candidates survive
+  the first steps (573 against 137 on HG00512, Alu) but its later filters
+  remove almost all of them, so recall barely changes.
+* Run time and memory are not compared: both tools only run as linux/amd64
+  images, emulated on this arm64 machine (and while other jobs were running),
+  so their wall time says nothing about the tools.
 
 ## History
 
@@ -228,7 +282,8 @@ Same seven exomes, PASS calls:
 | #57 typing by the mates | 163 | 111 | 0.694 | 0.299 | 12 / 13 |
 | #58, #59 insertions without junction clips | 170 | 118 | 0.707 | 0.318 | 12 / 13 |
 | #69 mate checks | 159 | 117 | 0.750 | 0.315 | 13 / 14 |
-| #70 single typed clips | 163 | 121 | 0.756 | 0.326 | 13 / 14 |
+| #70 single typed clips (v0.3.0) | 163 | 121 | 0.756 | 0.326 | 13 / 14 |
+| #71 tail mates and reference copies, #66, #67 (v0.4.0) | 169 | 126 | 0.759 | 0.337 | 13 / 14 |
 
 #57 types untyped candidates with a poly(A/T) tail clip by their mates
 (junction clips that are the tail alone): 12 more true calls, 1 more false

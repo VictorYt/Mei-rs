@@ -6,6 +6,37 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-15
+
+### Changed
+
+- Quality score (#67): the prior and the likelihood ratios of the seven pieces
+  of evidence are refit on the `PASS` calls of the seven HGSVC3 exomes (129
+  true, 40 false). Leaving one sample out, AUC 0.913 to 0.928; HG002 (held
+  out) 0.728 to 0.787. `--min-qual 5`: 107 to 114 true, 6 false (precision
+  0.950); `--min-qual 2`: 125 true, 15 false (0.893). Evidence of the
+  candidates placed by their mates does not raise the AUC and is not used.
+- Assembly of candidates placed by their mates (#66): those that pass as
+  insertions without junction clips (#59, #70) have their breakpoint tried as
+  the left and as the right junction, and the sides whose inserted bases hold
+  a poly(A/T) tail or are an element of the family are kept; an assembled
+  junction replaces the estimate and drops `IMPRECISE`. Needs `--reference`.
+  HGSVC3 exomes: 2 of the 13 mate-only PASS (all true) get an assembled
+  junction, one at the position of the MELT call; the calls are unchanged
+  (126 true, 40 false). The others have too few reads clipped by 10 bases or
+  more to extend a contig.
+- Mates in the poly(A) tail and reference copies (#71): a checked mate that
+  is untyped and holds a run of 20 or more A or T is a mate in the tail of the
+  element, with too few element bases to be typed, and is left out of the
+  checked mates, unless a reference copy of the family of the candidate lies
+  within 600 bp of its site (the mates of the reads in the tail of that copy
+  look like it). Candidates typed by their mates or without enough junction
+  clips (`no_junction`) with such a copy do not use their mate evidence
+  (`mate_only` pass and typing by mates). Needs `--reference`. HGSVC3
+  exomes: 121 → 126 true, 39 → 40 false (precision 0.759; `--min-qual 2`:
+  0.892, `--min-qual 5`: 0.947); HG002: 16 → 17 true, 23 → 24 false;
+  NA12878: 20 → 23 PASS.
+
 ## [0.3.0] - 2026-10-13
 
 ### Added
@@ -229,7 +260,8 @@ targeted capture and exome data.
   kept in memory (#23); most soft-clips of older data fall below the base
   quality threshold (#25).
 
-[Unreleased]: https://github.com/VictorYt/Mei-rs/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/VictorYt/Mei-rs/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/VictorYt/Mei-rs/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/VictorYt/Mei-rs/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/VictorYt/Mei-rs/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/VictorYt/Mei-rs/compare/v0.1.0...v0.1.1
