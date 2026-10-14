@@ -6,6 +6,8 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-15
+
 ### Changed
 
 - Quality score (#67): the prior and the likelihood ratios of the seven pieces
@@ -258,7 +260,8 @@ targeted capture and exome data.
   kept in memory (#23); most soft-clips of older data fall below the base
   quality threshold (#25).
 
-[Unreleased]: https://github.com/VictorYt/Mei-rs/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/VictorYt/Mei-rs/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/VictorYt/Mei-rs/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/VictorYt/Mei-rs/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/VictorYt/Mei-rs/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/VictorYt/Mei-rs/compare/v0.1.0...v0.1.1

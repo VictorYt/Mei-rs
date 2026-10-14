@@ -10,7 +10,7 @@ inserted element against Alu, LINE-1 and SVA consensus sequences, and removes
 the artefacts specific to capture data, such as soft-clips that stop at the
 probe edges.
 
-> **Status: v0.3.0.** `mei-rs scan` finds candidate insertion
+> **Status: v0.4.0.** `mei-rs scan` finds candidate insertion
 > sites, types the element (family, subfamily, strand), assembles the
 > junctions (TSD, poly(A) tail), genotypes and scores the candidates, and
 > writes TSV, BED, JSON or VCF. Precision and recall on real exomes are in
@@ -201,15 +201,15 @@ Genomes exomes and on HG002 (held out), with the method and commands in
 
 | | Precision | Recall (`PASS`) |
 |---|---|---|
-| Seven 1000 Genomes exomes, 371 MEIs | 0.756 | 0.326 |
-| Same, `--min-qual 5` | 0.954 | 0.278 |
-| HG002 (GRCh37), 49 MEIs | 0.410 | 0.327 |
+| Seven 1000 Genomes exomes, 371 MEIs | 0.759 | 0.337 |
+| Same, `--min-qual 5` | 0.950 | 0.305 |
+| HG002 (GRCh37), 49 MEIs | 0.415 | 0.347 |
 | Scramble 1.0.2, seven exomes | 0.687 | 0.154 |
 
-Recall counts every MEI within 300 bp of a target: 28 of the 36 MEIs inside
-the targets are called `PASS` (28 of 36), against 32 of the 240 at 101-300 bp
-from them. `high` and `medium` candidates (with a tail) are the most reliable
-(47 true of 51); most false positives are `low` (no tail): use `--min-qual` (0 by default)
+Recall counts every MEI within 300 bp of a target: 27 of the 36 MEIs inside
+the targets are called `PASS`, against 36 of the 240 at 101-300 bp from them.
+`high` and `medium` candidates (with a tail) are the most reliable (48 true of
+52); most false positives are `low` (no tail): use `--min-qual` (0 by default)
 to trade recall for precision.
 
 Other limitations:
@@ -219,12 +219,14 @@ Other limitations:
   often not told apart; LINE-1 typed by the ORF2 model (#56) are reported as
   `L1P1_orf2`, with coordinates in that model.
 - Candidates without junction clips are placed and typed by their mates
-  (#57-#59, #70): the position is imprecise (`CIPOS`), and a truth MEI whose
-  mates are only poly(A) tail stays missed.
+  (#57-#59, #70): the position is imprecise (`CIPOS`) unless the junction is
+  assembled (#66, 2 of 13 on the HGSVC3 exomes: short exome clips rarely
+  extend a contig), and a truth MEI whose mates are only poly(A) tail stays
+  missed.
 - Assembly needs `--reference`, and few exome candidates have both junctions
   assembled; otherwise the TSD comes from the soft-clip junctions.
 - The genotype under-counts insertion reads (clips of 15 good bases): it
-  assumes 30% of them at a heterozygous site; 90 of 119 true calls are right.
+  assumes 30% of them at a heterozygous site; 91 of 123 true calls are right.
 - Candidates closer than `--window` are merged into one.
 - On older data, most soft-clips fall below `--min-clip-quality` (read ends
   masked by the base caller); the log reports how many are set aside (#25).
