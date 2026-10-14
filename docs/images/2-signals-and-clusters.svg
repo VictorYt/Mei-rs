@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900">
+<defs><marker id="h" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1e1e1e"/></marker></defs>
+<rect x="0" y="0" width="1200" height="900" fill="#ffffff"/>
+<text x="250" y="34.7" font-size="26" fill="#1e1e1e" text-anchor="start" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="bold"><tspan x="250" dy="0">Detail 1: from reads to candidate sites (phases 1 and 2)</tspan></text>
+<rect x="20" y="55" width="1160" height="190" rx="12" fill="#dbe4ff" fill-opacity="0.4" stroke="#8b5cf6" stroke-width="1"/>
+<text x="35" y="79.1" font-size="18" fill="#1d4ed8" text-anchor="start" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="35" dy="0">Phase 1: Reader (probes + padding only, ~95% of reads discarded)</tspan></text>
+<rect x="40" y="100" width="360" height="130" rx="12" fill="#a5d8ff" fill-opacity="1.0" stroke="#4a9eed" stroke-width="2"/>
+<text x="220.0" y="140.2" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="220.0" dy="0">Soft-clipped reads</tspan><tspan x="220.0" dy="20.0">clip of 15 bases or more at an end;</tspan><tspan x="220.0" dy="20.0">poly(A/T) tail or element sequence;</tspan><tspan x="220.0" dy="20.0">low-quality ends masked</tspan></text>
+<rect x="420" y="100" width="360" height="130" rx="12" fill="#a5d8ff" fill-opacity="1.0" stroke="#4a9eed" stroke-width="2"/>
+<text x="600.0" y="140.2" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="600.0" dy="0">Discordant mates</tspan><tspan x="600.0" dy="20.0">anchor in a target, mate with MAPQ 0,</tspan><tspan x="600.0" dy="20.0">on another contig or too far away:</tspan><tspan x="600.0" dy="20.0">the mate may lie in the insertion</tspan></text>
+<rect x="800" y="100" width="360" height="130" rx="12" fill="#a5d8ff" fill-opacity="1.0" stroke="#4a9eed" stroke-width="2"/>
+<text x="980.0" y="140.2" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="980.0" dy="0">Unmapped mates</tspan><tspan x="980.0" dy="20.0">anchor mapped in a target,</tspan><tspan x="980.0" dy="20.0">its mate is unmapped:</tspan><tspan x="980.0" dy="20.0">likely inside the inserted element</tspan></text>
+<line x1="600" y1="245" x2="600" y2="280" stroke="#1e1e1e" stroke-width="2" marker-end="url(#h)"/>
+<rect x="20" y="285" width="1160" height="200" rx="12" fill="#e5dbff" fill-opacity="0.4" stroke="#8b5cf6" stroke-width="1"/>
+<text x="35" y="309.1" font-size="18" fill="#6d28d9" text-anchor="start" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="35" dy="0">Phase 2: Cluster</tspan></text>
+<rect x="40" y="335" width="330" height="130" rx="12" fill="#d0bfff" fill-opacity="1.0" stroke="#8b5cf6" stroke-width="2"/>
+<text x="205.0" y="385.2" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="205.0" dy="0">Group the signals</tspan><tspan x="205.0" dy="20.0">same contig, within a window;</tspan><tspan x="205.0" dy="20.0">one site = one cluster</tspan></text>
+<line x1="370" y1="400" x2="410" y2="400" stroke="#1e1e1e" stroke-width="2" marker-end="url(#h)"/>
+<rect x="410" y="335" width="370" height="130" rx="12" fill="#d0bfff" fill-opacity="1.0" stroke="#8b5cf6" stroke-width="2"/>
+<text x="595.0" y="375.2" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="595.0" dy="0">Find the breakpoint</tspan><tspan x="595.0" dy="20.0">most supported clip junction;</tspan><tspan x="595.0" dy="20.0">without clips: edge of the mate</tspan><tspan x="595.0" dy="20.0">groups, refined among short clips</tspan></text>
+<line x1="780" y1="400" x2="820" y2="400" stroke="#1e1e1e" stroke-width="2" marker-end="url(#h)"/>
+<rect x="820" y="335" width="340" height="130" rx="12" fill="#d0bfff" fill-opacity="1.0" stroke="#8b5cf6" stroke-width="2"/>
+<text x="990.0" y="375.2" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="990.0" dy="0">Candidate site</tspan><tspan x="990.0" dy="20.0">left / right junction, tail,</tspan><tspan x="990.0" dy="20.0">TSD estimate, support,</tspan><tspan x="990.0" dy="20.0">local depth and signal ratio</tspan></text>
+<line x1="600" y1="500" x2="600" y2="535" stroke="#1e1e1e" stroke-width="2" marker-end="url(#h)"/>
+<rect x="20" y="540" width="1160" height="280" rx="12" fill="#ffd8a8" fill-opacity="0.35" stroke="#f59e0b" stroke-width="1"/>
+<text x="35" y="564.1" font-size="18" fill="#b45309" text-anchor="start" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="35" dy="0">Filters set at this stage (snake_case names, same in every output)</tspan></text>
+<rect x="40" y="585" width="360" height="100" rx="12" fill="#fff3bf" fill-opacity="1.0" stroke="#f59e0b" stroke-width="2"/>
+<text x="220.0" y="620.2" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="220.0" dy="0">low_support</tspan><tspan x="220.0" dy="20.0">fewer than --min-support reads:</tspan><tspan x="220.0" dy="20.0">never written</tspan></text>
+<rect x="420" y="585" width="360" height="100" rx="12" fill="#fff3bf" fill-opacity="1.0" stroke="#f59e0b" stroke-width="2"/>
+<text x="600.0" y="620.2" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="600.0" dy="0">no_junction</tspan><tspan x="600.0" dy="20.0">fewer than --min-clips clips at the</tspan><tspan x="600.0" dy="20.0">junctions: not resolved to the base</tspan></text>
+<rect x="800" y="585" width="360" height="100" rx="12" fill="#fff3bf" fill-opacity="1.0" stroke="#f59e0b" stroke-width="2"/>
+<text x="980.0" y="620.2" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="980.0" dy="0">low_ratio</tspan><tspan x="980.0" dy="20.0">supporting reads too few</tspan><tspan x="980.0" dy="20.0">for the local depth</tspan></text>
+<rect x="40" y="700" width="560" height="100" rx="12" fill="#fff3bf" fill-opacity="1.0" stroke="#f59e0b" stroke-width="2"/>
+<text x="320.0" y="735.2" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="320.0" dy="0">probe_edge</tspan><tspan x="320.0" dy="20.0">all clips stop at a probe boundary (+/- 2 bp), no tail,</tspan><tspan x="320.0" dy="20.0">no typed clip, no TSD: capture artefact</tspan></text>
+<rect x="620" y="700" width="540" height="100" rx="12" fill="#fff3bf" fill-opacity="1.0" stroke="#f59e0b" stroke-width="2"/>
+<text x="890.0" y="735.2" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="890.0" dy="0">tandem_repeat (needs --reference)</tspan><tspan x="890.0" dy="20.0">clips are a length variant of a reference</tspan><tspan x="890.0" dy="20.0">poly(A) tract or tandem repeat</tspan></text>
+<line x1="600" y1="825" x2="600" y2="860" stroke="#1e1e1e" stroke-width="2" marker-end="url(#h)"/>
+<text x="400" y="882.1" font-size="18" fill="#374151" text-anchor="start" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="400" dy="0">candidates go on to the Typer (phase 3)</tspan></text>
+</svg>
