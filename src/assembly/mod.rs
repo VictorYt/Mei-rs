@@ -33,6 +33,9 @@ pub mod graph;
 use crate::cluster::tracts::ReferenceWindow;
 use crate::reader::junctions::JunctionReads;
 use crate::reader::signals::{ClipOptions, PolyTail, poly_tail};
+use crate::typer::consensus::{ConsensusSet, Family};
+use crate::typer::mates::without_runs;
+use crate::typer::type_sequence;
 use graph::{Graph, K, MIN_COUNT, reverse_complement};
 
 /// Minimum number of inserted bases in a contig for its junction to count.
@@ -173,6 +176,46 @@ pub fn assemble(
         right,
         tsd,
         tail,
+    }
+}
+
+/// Assemble a candidate placed by its mates, which has no junction from its
+/// clips (#66): the breakpoint (a boundary where reads are clipped by a few
+/// bases) does not say which flank the clipped reads leave, so it is tried as
+/// the left and as the right junction, each alone. A side is kept if its
+/// inserted bases hold a poly(A/T) tail next to the junction or are an
+/// element of the `family` of the candidate (short exome clips often reach
+/// only the tail and a few bases of the element); the sides kept are then
+/// assembled together (TSD).
+#[must_use]
+pub fn assemble_at_breakpoint(
+    reads: &JunctionReads,
+    reference: &ReferenceWindow<'_>,
+    breakpoint: u64,
+    family: Family,
+    set: &ConsensusSet,
+    clip: &ClipOptions,
+) -> Assembly {
+    let is_element = |insert: &[u8]| {
+        type_sequence(set, &without_runs(insert))
+            .iter()
+            .any(|hit| set.sequences()[hit.consensus].family == family)
+    };
+    let from_left = assemble(reads, reference, Some(breakpoint), None, clip);
+    let from_right = assemble(reads, reference, None, Some(breakpoint), clip);
+    let keep_left = from_left
+        .left
+        .as_ref()
+        .is_some_and(|l| from_left.tail.is_some() || is_element(l.left_insert()));
+    let keep_right = from_right
+        .right
+        .as_ref()
+        .is_some_and(|r| from_right.tail.is_some() || is_element(r.right_insert()));
+    match (keep_left, keep_right) {
+        (true, true) => assemble(reads, reference, Some(breakpoint), Some(breakpoint), clip),
+        (true, false) => from_left,
+        (false, true) => from_right,
+        (false, false) => Assembly::default(),
     }
 }
 
@@ -346,6 +389,26 @@ mod tests {
         );
         assert!(a.left.is_some() && a.right.is_none());
         assert_eq!((a.tsd.as_deref(), a.assembled()), (None, "left"));
+    }
+
+    #[test]
+    fn breakpoint_without_clip_junctions() {
+        // Only the reads of the left junction exist; the breakpoint is tried
+        // on both sides and the left contig is an Alu.
+        let (reference, mut reads) = insertion(ELEMENT, 12);
+        reads.right.clear();
+        let window = ReferenceWindow {
+            start: 1_000,
+            sequence: &reference,
+        };
+        let set = ConsensusSet::load(None).unwrap();
+        let clip = ClipOptions::default();
+        let a = assemble_at_breakpoint(&reads, &window, 1_200, Family::Alu, &set, &clip);
+        assert_eq!(a.assembled(), "left");
+        assert_eq!(a.left.as_ref().map(|l| l.junction), Some(1_200));
+        // Not an element of another family (and no tail): no contig kept.
+        let a = assemble_at_breakpoint(&reads, &window, 1_200, Family::Line1, &set, &clip);
+        assert_eq!(a.assembled(), "none");
     }
 
     #[test]

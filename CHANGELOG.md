@@ -8,6 +8,15 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Assembly of candidates placed by their mates (#66): those that pass as
+  insertions without junction clips (#59, #70) have their breakpoint tried as
+  the left and as the right junction, and the sides whose inserted bases hold
+  a poly(A/T) tail or are an element of the family are kept; an assembled
+  junction replaces the estimate and drops `IMPRECISE`. Needs `--reference`.
+  HGSVC3 exomes: 2 of the 13 mate-only PASS (all true) get an assembled
+  junction, one at the position of the MELT call; the calls are unchanged
+  (126 true, 40 false). The others have too few reads clipped by 10 bases or
+  more to extend a contig.
 - Mates in the poly(A) tail and reference copies (#71): a checked mate that
   is untyped and holds a run of 20 or more A or T is a mate in the tail of the
   element, with too few element bases to be typed, and is left out of the
