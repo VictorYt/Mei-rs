@@ -95,6 +95,10 @@ pub fn run(args: &ScanArgs) -> Result<()> {
         &contigs,
         extract_options.filter,
     )?;
+    if let Some(reference) = &args.reference {
+        mates::flag_reference_copies(&mut candidates, &header_contigs, reference, &consensus)
+            .with_context(|| format!("cannot read {}", reference.display()))?;
+    }
     assemble_candidates(
         &mut candidates,
         &inputs.alignment,
