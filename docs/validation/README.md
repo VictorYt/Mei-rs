@@ -208,9 +208,36 @@ htslib 1.13, R 4.1, Biostrings 2.62) without `rBLAST`, which only deletion
 calling needs; `cluster_identifier` gives the same clusters as the bioconda
 amd64 build on a test region.
 
-Not compared yet: MELT (download requires a licence registration) and xTea
-(packaged for amd64 only, with scikit-learn 0.18; under emulation its run time
-would not be comparable).
+## Comparison with MELT and xTea
+
+Same seven exomes and truth set (371 MEIs in the padded targets), PASS calls
+of each tool (`evaluate.py` reads their VCF; `mei-rs` is v0.3.0, Scramble is
+the v0.2.0 run above):
+
+| | PASS | True | False | Precision | Recall (PASS) | Alu | L1 | SVA |
+|---|---|---|---|---|---|---|---|---|
+| `mei-rs` v0.3.0 | 163 | 121 | 39 | 0.756 | 0.326 | 103 / 325 | 15 / 32 | 3 / 14 |
+| MELT 2.2.2 | 110 | 96 | 11 | 0.897 | 0.259 | 79 / 325 | 14 / 32 | 3 / 14 |
+| xTea 0.1.9, default | 27 | 23 | 4 | 0.852 | 0.062 | 21 / 325 | 2 / 32 | 0 / 14 |
+| xTea 0.1.9, exome cutoffs | 43 | 33 | 10 | 0.767 | 0.089 | 30 / 325 | 3 / 32 | 0 / 14 |
+| Scramble 1.0.2 | 84 | 57 | 26 | 0.687 | 0.154 | 45 / 325 | 10 / 32 | 2 / 14 |
+
+HG002 (49 MEIs, GRCh37): MELT 5 true / 1 false (precision 0.833, recall
+0.102), against 16 / 23 for `mei-rs` v0.3.0. xTea was not run on HG002.
+
+* MELT 2.2.2 (`Single -exome`, one run per element: ALU, LINE1, SVA; `-c 100`,
+  `-r` the read length, human gene annotation of its distribution; the BAM is
+  linked into the working directory because MELT writes next to it). MELT is
+  the most precise caller on these exomes, `mei-rs` finds more of the MEIs.
+* xTea 0.1.9 (`-f 5907 -y 7`, one pipeline per element, repeat library and
+  GENCODE v46 added). Its automatic cutoffs (clip 3, discordant 6 from a
+  coverage of about 40x) leave 3 to 5 calls per exome. "Exome cutoffs" are
+  `-U --nclip 2 --cr 1 --nd 2 --nfclip 2 --nfdisc 2`: more candidates survive
+  the first steps (573 against 137 on HG00512, Alu) but its later filters
+  remove almost all of them, so recall barely changes.
+* Run time and memory are not compared: both tools only run as linux/amd64
+  images, emulated on this arm64 machine (and while other jobs were running),
+  so their wall time says nothing about the tools.
 
 ## History
 
