@@ -202,6 +202,12 @@ pub struct Candidate {
     pub mei_mates: usize,
     /// Mean identity of the MEI mates to the consensus, once checked.
     pub mate_identity: Option<f64>,
+    /// A reference copy of the family of the candidate lies near its site:
+    /// its mate evidence is not used ([`crate::typer::mates::flag_reference_copies`], #71).
+    pub reference_copy: bool,
+    /// Checked mates in the poly(A) tail of the element (untyped, a run of A or T), counted in
+    /// [`Self::checked_mates`] until [`crate::typer::mates::discount_tail_mates`] (#71).
+    pub tail_mates: usize,
     /// Local assembly of the junctions, once done (see [`crate::assembly`]).
     pub assembly: Option<crate::assembly::Assembly>,
     /// Genotype, once the reads of each allele are counted at the junctions
@@ -297,6 +303,8 @@ impl Candidate {
             checked_mates: 0,
             mei_mates: 0,
             mate_identity: None,
+            reference_copy: false,
+            tail_mates: 0,
             assembly: None,
             genotype: None,
             qual: None,

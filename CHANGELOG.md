@@ -6,6 +6,20 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Mates in the poly(A) tail and reference copies (#71): a checked mate that
+  is untyped and holds a run of 20 or more A or T is a mate in the tail of the
+  element, with too few element bases to be typed, and is left out of the
+  checked mates, unless a reference copy of the family of the candidate lies
+  within 600 bp of its site (the mates of the reads in the tail of that copy
+  look like it). Candidates typed by their mates or without enough junction
+  clips (`no_junction`) with such a copy do not use their mate evidence
+  (`mate_only` pass and typing by mates). Needs `--reference`. HGSVC3
+  exomes: 121 → 126 true, 39 → 40 false (precision 0.759; `--min-qual 2`:
+  0.892, `--min-qual 5`: 0.947); HG002: 16 → 17 true, 23 → 24 false;
+  NA12878: 20 → 23 PASS.
+
 ## [0.3.0] - 2026-10-13
 
 ### Added

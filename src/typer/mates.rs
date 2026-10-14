@@ -29,6 +29,13 @@
 //! poly(A) tail does not align to the consensus sequences, and A-rich
 //! sequences would align to the A-rich parts of the consensus.
 //!
+//! A mate in the poly(A) tail of the element has too few element bases to be
+//! typed: an untyped mate with a run of [`TAIL_MATE_RUN`] A or T is not
+//! counted, as an MEI mate or as another (#71).
+//!
+//! A reference copy of the family of the candidate near the site
+//! ([`flag_reference_copies`]) makes its mate evidence unreliable (#71).
+//!
 //! A mate is an MEI mate when its best alignment ([`super::type_sequence`])
 //! is in the family of the candidate, or in any family for an untyped one.
 //!
@@ -264,6 +271,21 @@ fn without_runs(sequence: &[u8]) -> Vec<u8> {
         .collect()
 }
 
+/// Run of A or T, in bases, that makes an untyped mate a mate in the poly(A)
+/// tail of the element: with too few element bases to be typed, it is not
+/// counted (#71).
+pub const TAIL_MATE_RUN: usize = 20;
+
+/// Longest run of A or of T in a sequence.
+fn longest_run(sequence: &[u8]) -> usize {
+    sequence
+        .chunk_by(|a, b| a == b)
+        .filter(|run| matches!(run[0], b'A' | b'T'))
+        .map(<[u8]>::len)
+        .max()
+        .unwrap_or(0)
+}
+
 /// Length of the k-mers compared between a mapped mate and the reference
 /// next to the candidate.
 pub const LOCAL_K: usize = 20;
@@ -351,6 +373,92 @@ fn canonical_kmers(sequence: &[u8]) -> impl Iterator<Item = u64> + '_ {
     })
 }
 
+/// Bases of reference read on each side of a candidate to look for a copy of
+/// its family (one fragment length; HGSVC3 exomes: 300 bp gave 128 true and
+/// 42 false PASS, 600 bp 126 and 40, the fraction of true ones with a copy
+/// near being small).
+pub const COPY_WINDOW: u64 = 600;
+
+/// Length of the pieces of the reference typed to find a copy, and their
+/// step.
+const COPY_PIECE: usize = 100;
+const COPY_STEP: usize = 50;
+
+/// Flag the candidates with a reference copy of their family near the site
+/// ([`Candidate::reference_copy`]): the mates of the reads in that copy map
+/// with a low MAPQ to other copies, and those not caught by the local check
+/// ([`MateCheck::local`], diverged copies) look like mates in an inserted
+/// element. Only candidates typed and placed by mate evidence, or with mates
+/// in the poly(A) tail, are looked at: those typed by their mates, those
+/// without enough junction clips (`no_junction`) and those with
+/// [`Candidate::tail_mates`]; the mates in the tail are then discounted
+/// ([`discount_tail_mates`]).
+///
+/// # Errors
+///
+/// Fails if the reference cannot be opened or read.
+pub fn flag_reference_copies(
+    candidates: &mut [Candidate],
+    contigs: &[Contig],
+    reference: &Path,
+    set: &ConsensusSet,
+) -> io::Result<()> {
+    let mut reader = fasta::io::indexed_reader::Builder::default().build_from_path(reference)?;
+    for candidate in candidates.iter_mut() {
+        let Some(typing) = candidate.typing.as_ref() else {
+            continue;
+        };
+        if !(typing.by_mates
+            || candidate.filters.contains(&Filter::NoJunction)
+            || candidate.tail_mates > 0)
+        {
+            continue;
+        }
+        let Some(contig) = contigs.get(candidate.contig) else {
+            continue;
+        };
+        let family = typing.family;
+        let start = candidate.breakpoint.saturating_sub(COPY_WINDOW);
+        let end = (candidate.breakpoint + COPY_WINDOW).min(contig.length);
+        let (Some(first), Some(last)) = (
+            usize::try_from(start + 1)
+                .ok()
+                .and_then(|p| Position::try_from(p).ok()),
+            usize::try_from(end)
+                .ok()
+                .and_then(|p| Position::try_from(p).ok()),
+        ) else {
+            continue;
+        };
+        if first > last {
+            continue;
+        }
+        let record = reader.query(&Region::new(contig.name.as_str(), first..=last))?;
+        let mut window = record.sequence().as_ref().to_vec();
+        window.make_ascii_uppercase();
+        candidate.reference_copy = (0..window.len().saturating_sub(COPY_PIECE - 1))
+            .step_by(COPY_STEP)
+            .any(|at| {
+                type_sequence(set, &window[at..at + COPY_PIECE])
+                    .iter()
+                    .any(|hit| set.sequences()[hit.consensus].family == family)
+            });
+    }
+    candidates.iter_mut().for_each(discount_tail_mates);
+    Ok(())
+}
+
+/// Leave the mates in the poly(A) tail of the element out of the checked
+/// mates ([`Candidate::tail_mates`], #71), unless a reference copy of the
+/// family lies near the site: the mates of the reads in the poly(A) tail of
+/// that copy look like them.
+pub fn discount_tail_mates(candidate: &mut Candidate) {
+    if !candidate.reference_copy {
+        candidate.checked_mates -= candidate.tail_mates;
+        candidate.tail_mates = 0;
+    }
+}
+
 /// Type the sampled mates of a candidate with a sequence: `checked_mates` and
 /// `mei_mates` (typed to its family, or to any family if it is untyped). An
 /// untyped candidate is first typed by its mates (see the module documentation).
@@ -372,11 +480,21 @@ pub fn type_mates(set: &ConsensusSet, candidate: &mut Candidate) {
         candidate.typing = mate_typing(set, candidate, &typed);
     }
     let family = candidate.typing.as_ref().map(|t| t.family);
-    let (mut checked, mut mei, mut identity) = (0, 0, 0.0);
+    let (mut checked, mut mei, mut identity, mut tail) = (0, 0, 0.0, 0);
     for (check, hit) in candidate.mate_checks.iter_mut().zip(hits) {
         let Some(hit) = hit else {
             continue;
         };
+        // A mate in the tail of the element: no family to type; counted as a
+        // non-MEI mate until [`discount_tail_mates`].
+        if hit.is_none()
+            && check
+                .sequence
+                .as_deref()
+                .is_some_and(|sequence| longest_run(sequence) >= TAIL_MATE_RUN)
+        {
+            tail += 1;
+        }
         checked += 1;
         let mei_hit =
             hit.filter(|hit| family.is_none_or(|f| set.sequences()[hit.consensus].family == f));
@@ -387,6 +505,7 @@ pub fn type_mates(set: &ConsensusSet, candidate: &mut Candidate) {
         }
     }
     candidate.checked_mates = checked;
+    candidate.tail_mates = tail;
     candidate.mei_mates = mei;
     #[allow(clippy::cast_precision_loss)]
     let mean = (mei > 0).then(|| identity / mei as f64);
@@ -555,6 +674,78 @@ mod tests {
         type_mates(&set, &mut candidate);
         assert_eq!((candidate.checked_mates, candidate.mei_mates), (3, 2));
         assert_eq!(candidate.mate_checks[2].mei, Some(false));
+    }
+
+    #[test]
+    fn tail_mates_are_discounted_without_a_reference_copy() {
+        let set = ConsensusSet::load(None).unwrap();
+        let alu = set.sequences()[0].sequence.clone();
+        let signals: Vec<_> = ["a", "b", "c", "d"]
+            .iter()
+            .map(|read| mate(1_000, Side::Right, read, SignalKind::MateUnmapped))
+            .collect();
+        let mut candidate = cluster(signals, &unchecked_options()).remove(0);
+        candidate.typing = Some(alu_typing());
+        // Three MEI mates and one mate in the poly(A) tail (untyped).
+        candidate.mate_checks = (0..4)
+            .map(|signal| MateCheck {
+                signal,
+                sequence: Some(if signal < 3 {
+                    alu[20..96].to_vec()
+                } else {
+                    vec![b'A'; 60]
+                }),
+                mei: None,
+                local: false,
+            })
+            .collect();
+        type_mates(&set, &mut candidate);
+        assert_eq!(
+            (
+                candidate.checked_mates,
+                candidate.mei_mates,
+                candidate.tail_mates
+            ),
+            (4, 3, 1)
+        );
+        // A reference copy of the family nearby: the tail mate stays counted.
+        let mut near_copy = candidate.clone();
+        near_copy.reference_copy = true;
+        discount_tail_mates(&mut near_copy);
+        assert_eq!(near_copy.checked_mates, 4);
+        discount_tail_mates(&mut candidate);
+        assert_eq!((candidate.checked_mates, candidate.tail_mates), (3, 0));
+    }
+
+    #[test]
+    fn reference_copies_are_flagged() {
+        // chr2:7001-7281 of the fixture reference is a copy of the Alu.
+        let reference =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data/reference.fa");
+        let contigs = [
+            Contig {
+                name: "chr1".to_owned(),
+                length: 20_000,
+            },
+            Contig {
+                name: "chr2".to_owned(),
+                length: 10_000,
+            },
+        ];
+        let set = ConsensusSet::load(None).unwrap();
+        let candidate_at = |contig: usize, position: u64| {
+            let mut signal = mate(position, Side::Right, "m", SignalKind::MateUnmapped);
+            signal.contig = contig;
+            let mut candidate = cluster(vec![signal], &unchecked_options()).remove(0);
+            candidate.typing = Some(alu_typing());
+            candidate.filters.push(Filter::NoJunction);
+            candidate
+        };
+        // 100 bp before the copy, and on chr1 far from any copy.
+        let mut candidates = [candidate_at(1, 6_900), candidate_at(0, 5_000)];
+        flag_reference_copies(&mut candidates, &contigs, &reference, &set).unwrap();
+        assert!(candidates[0].reference_copy);
+        assert!(!candidates[1].reference_copy);
     }
 
     #[test]

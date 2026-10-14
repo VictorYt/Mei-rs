@@ -52,6 +52,7 @@ pub fn mate_only_insertion(candidate: &Candidate) -> bool {
     };
     let junction_clips = candidate.left_junction_clips + candidate.right_junction_clips;
     candidate.filters.contains(&Filter::NoJunction)
+        && !candidate.reference_copy
         && candidate.breakpoint_clips + junction_clips > 0
         && mostly_mei_mates(candidate)
         && identity.is_some_and(|identity| identity >= MATE_ONLY_MIN_IDENTITY)
@@ -181,6 +182,7 @@ pub fn apply(
             .is_some_and(|identity| identity >= MIN_MATE_IDENTITY);
     let typed_by_mates = candidate.typing.as_ref().is_some_and(|t| {
         t.by_mates
+            && !candidate.reference_copy
             && t.identity >= MIN_MATE_IDENTITY
             && candidate.polya_clips + candidate.polyt_clips >= options.min_typed_clips
             && candidate.mei_mates >= options.min_typed_clips
