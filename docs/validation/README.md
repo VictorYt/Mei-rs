@@ -223,7 +223,10 @@ the v0.2.0 run above):
 | Scramble 1.0.2 | 84 | 57 | 26 | 0.687 | 0.154 | 45 / 325 | 10 / 32 | 2 / 14 |
 
 HG002 (49 MEIs, GRCh37): MELT 5 true / 1 false (precision 0.833, recall
-0.102), against 16 / 23 for `mei-rs` v0.3.0. xTea was not run on HG002.
+0.102), xTea default 2 / 0 (recall 0.041), xTea exome cutoffs 3 / 0 (0.061),
+against 16 / 23 for `mei-rs` v0.3.0. For xTea on GRCh37 the `xtea_hg19` entry
+point, its hg19 library and GENCODE v19 were used, with the `chr` prefix
+removed from the annotation files (the hs37d5 contigs are `1`..`22`).
 
 * MELT 2.2.2 (`Single -exome`, one run per element: ALU, LINE1, SVA; `-c 100`,
   `-r` the read length, human gene annotation of its distribution; the BAM is
