@@ -8,6 +8,12 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Quality score (#67): the prior and the likelihood ratios of the seven pieces
+  of evidence are refit on the `PASS` calls of the seven HGSVC3 exomes (129
+  true, 40 false). Leaving one sample out, AUC 0.913 to 0.928; HG002 (held
+  out) 0.728 to 0.787. `--min-qual 5`: 107 to 114 true, 6 false (precision
+  0.950); `--min-qual 2`: 125 true, 15 false (0.893). Evidence of the
+  candidates placed by their mates does not raise the AUC and is not used.
 - Assembly of candidates placed by their mates (#66): those that pass as
   insertions without junction clips (#59, #70) have their breakpoint tried as
   the left and as the right junction, and the sides whose inserted bases hold
