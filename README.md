@@ -100,6 +100,89 @@ skipped with a warning.
 
 ### How it works
 
+The pipeline has five phases (below, then the detail of each step). Editable
+Excalidraw sources and SVG exports of the schemes are in
+[`docs/images`](docs/images).
+
+```mermaid
+flowchart TD
+    subgraph IN["Inputs"]
+        A["BAM / CRAM + index"]
+        B["BED: capture targets"]
+        C["MEI consensus, built in"]
+        D["Reference genome FASTA"]
+    end
+    IN --> P1["1. Reader<br/>signal extraction"]
+    P1 -->|signals| P2["2. Cluster<br/>candidate sites"]
+    P2 -->|candidates| P3["3. Typer<br/>which element?"]
+    P3 -->|typed candidates| P4["4. Assembly<br/>exact junctions"]
+    P4 -->|"contigs, TSD, tail"| P5["5. Genotype + filters<br/>score and output"]
+    P5 --> OUT["VCF 4.2, or TSV / BED / JSON"]
+```
+
+<details>
+<summary>Detailed schemes (phases 1 to 5)</summary>
+
+Phases 1 and 2, from reads to candidate sites
+([SVG](docs/images/2-signals-and-clusters.svg)):
+
+```mermaid
+flowchart TD
+    subgraph R["Phase 1: Reader, probes + padding only"]
+        S1["Soft-clipped reads<br/>clip of 15 bases or more"]
+        S2["Discordant mates<br/>MAPQ 0, other contig, too far"]
+        S3["Unmapped mates<br/>anchor mapped in a target"]
+    end
+    subgraph C["Phase 2: Cluster"]
+        K1["Group the signals<br/>same contig, within a window"] --> K2["Find the breakpoint<br/>clip junction, or edge of the mate groups"]
+        K2 --> K3["Candidate site<br/>junctions, tail, TSD estimate, depth, signal ratio"]
+    end
+    S1 & S2 & S3 --> K1
+    K3 --> F["Filters: low_support, no_junction, low_ratio,<br/>probe_edge, tandem_repeat"]
+    F --> N["Typer, phase 3"]
+```
+
+Phase 3, typing the element
+([SVG](docs/images/3-typing.svg)):
+
+```mermaid
+flowchart TD
+    subgraph A["A. Typing by the junction clips"]
+        A1["Junction soft-clips<br/>without their poly(A/T) run"] --> A2["k-mer seeds, k = 11, both strands<br/>against the Dfam consensus"]
+        A2 --> A3["Smith-Waterman<br/>on the 8 best strands"]
+        A3 --> A4["Typed at 70% coverage and 0.9 identity"]
+        A4 --> A5["family, subfamily, strand,<br/>element coordinates"]
+    end
+    subgraph B["B. Checking the mates, up to 40 per candidate"]
+        B1["Get the mate sequence<br/>unmapped: re-read at the anchor<br/>mapped: reference at its locus"] --> B2["Type it without A/T runs of 10 or more<br/>MEI mate = same family"]
+        B2 --> B3["Not MEI mates: found in the reference within 600 bp,<br/>tail mate next to a reference copy"]
+        B3 --> B4["checked mates, MEI mates, mean identity"]
+        B4 --> B5["2+ MEI mates of one family<br/>type an untyped candidate"]
+    end
+    A5 & B5 --> F["Filters: untyped, non_mei_mates<br/>mate-only insertions pass with an imprecise position"]
+```
+
+Phases 4 and 5, assembly, genotype, score and output
+([SVG](docs/images/4-assembly-genotype-output.svg)):
+
+```mermaid
+flowchart TD
+    subgraph P4["Phase 4: local assembly, needs --reference"]
+        D1["Gather the reads clipped within 5 bp of each junction<br/>+ the unmapped reads placed near the site"] --> D2["de Bruijn graph, k = 21<br/>seeded from the reference flank"]
+        D2 --> D3["The contig leaves the reference<br/>= the junction"]
+        D3 --> D4["TSD = reference between the junctions<br/>poly(A) tail = pure run<br/>mates only: breakpoint tried on both sides"]
+    end
+    subgraph P5["Phase 5: genotype, score, confidence"]
+        E1["Genotype<br/>alt reads clipped at a junction<br/>against ref reads over the site<br/>0/0, 0/1, 1/1"]
+        E2["QUAL score, naive Bayes<br/>tail, both sides, TSD, identity,<br/>distinct starts, MEI mates, depth ratio"]
+        E3["Confidence<br/>high: tail + TSD<br/>medium: tail<br/>low: otherwise"]
+    end
+    D4 --> E1 & E2 & E3
+    E1 & E2 & E3 --> O["VCF 4.2: symbolic ALT INS:ME, MEINFO, TSD,<br/>CIPOS, GT:GQ:AD:DP"]
+```
+
+</details>
+
 1. **Signal extraction**, in parallel over the padded targets: reads that are
    primary, mapped, not duplicates and above `--min-mapq` can anchor a signal.
    - **Soft-clips** of at least `--min-clip-len` bases: the junction gives the

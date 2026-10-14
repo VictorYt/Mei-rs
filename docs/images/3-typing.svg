@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="1200" height="900">
+<defs><marker id="h" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1e1e1e"/></marker></defs>
+<rect x="0" y="0" width="1200" height="900" fill="#ffffff"/>
+<text x="270" y="34.7" font-size="26" fill="#1e1e1e" text-anchor="start" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="bold"><tspan x="270" dy="0">Detail 2: typing the element (phase 3)</tspan></text>
+<rect x="20" y="55" width="560" height="590" rx="12" fill="#fff3bf" fill-opacity="0.35" stroke="#f59e0b" stroke-width="1"/>
+<text x="35" y="81.0" font-size="20" fill="#b45309" text-anchor="start" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="35" dy="0">A. Typing by the junction clips</tspan></text>
+<rect x="50" y="105" width="500" height="80" rx="12" fill="#fff3bf" fill-opacity="1.0" stroke="#f59e0b" stroke-width="2"/>
+<text x="300.0" y="140.2" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="300.0" dy="0">Junction soft-clips</tspan><tspan x="300.0" dy="20.0">without their pure poly(A/T) run</tspan></text>
+<line x1="300" y1="185" x2="300" y2="215" stroke="#1e1e1e" stroke-width="2" marker-end="url(#h)"/>
+<rect x="50" y="215" width="500" height="90" rx="12" fill="#fff3bf" fill-opacity="1.0" stroke="#f59e0b" stroke-width="2"/>
+<text x="300.0" y="245.2" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="300.0" dy="0">k-mer seeds (k = 11, both strands)</tspan><tspan x="300.0" dy="20.0">against the built-in Dfam consensus</tspan><tspan x="300.0" dy="20.0">sequences (Alu, LINE-1, SVA)</tspan></text>
+<line x1="300" y1="305" x2="300" y2="335" stroke="#1e1e1e" stroke-width="2" marker-end="url(#h)"/>
+<rect x="50" y="335" width="500" height="90" rx="12" fill="#fff3bf" fill-opacity="1.0" stroke="#f59e0b" stroke-width="2"/>
+<text x="300.0" y="375.2" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="300.0" dy="0">Smith-Waterman on the 8 best strands</tspan><tspan x="300.0" dy="20.0">(20 bp diagonal band)</tspan></text>
+<line x1="300" y1="425" x2="300" y2="455" stroke="#1e1e1e" stroke-width="2" marker-end="url(#h)"/>
+<rect x="50" y="455" width="500" height="80" rx="12" fill="#fff3bf" fill-opacity="1.0" stroke="#f59e0b" stroke-width="2"/>
+<text x="300.0" y="490.2" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="300.0" dy="0">A clip is typed at 70% coverage or more</tspan><tspan x="300.0" dy="20.0">and 0.9 identity or more</tspan></text>
+<line x1="300" y1="535" x2="300" y2="565" stroke="#1e1e1e" stroke-width="2" marker-end="url(#h)"/>
+<rect x="50" y="565" width="500" height="65" rx="12" fill="#b2f2bb" fill-opacity="1.0" stroke="#22c55e" stroke-width="2"/>
+<text x="300.0" y="602.7" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="300.0" dy="0">family, subfamily, strand, element coordinates</tspan></text>
+<rect x="620" y="55" width="560" height="590" rx="12" fill="#d0bfff" fill-opacity="0.3" stroke="#8b5cf6" stroke-width="1"/>
+<text x="635" y="81.0" font-size="20" fill="#6d28d9" text-anchor="start" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="635" dy="0">B. Checking the mates (up to 40 per candidate)</tspan></text>
+<rect x="650" y="105" width="500" height="95" rx="12" fill="#d0bfff" fill-opacity="1.0" stroke="#8b5cf6" stroke-width="2"/>
+<text x="900.0" y="137.7" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="900.0" dy="0">Get the mate sequence</tspan><tspan x="900.0" dy="20.0">unmapped: re-read at the anchor;</tspan><tspan x="900.0" dy="20.0">mapped: reference at its locus (--reference)</tspan></text>
+<line x1="900" y1="200" x2="900" y2="230" stroke="#1e1e1e" stroke-width="2" marker-end="url(#h)"/>
+<rect x="650" y="230" width="500" height="95" rx="12" fill="#d0bfff" fill-opacity="1.0" stroke="#8b5cf6" stroke-width="2"/>
+<text x="900.0" y="272.7" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="900.0" dy="0">Type it without its A/T runs (10 or more);</tspan><tspan x="900.0" dy="20.0">MEI mate = same family as the candidate</tspan></text>
+<line x1="900" y1="325" x2="900" y2="355" stroke="#1e1e1e" stroke-width="2" marker-end="url(#h)"/>
+<rect x="650" y="355" width="500" height="105" rx="12" fill="#ffc9c9" fill-opacity="1.0" stroke="#ef4444" stroke-width="2"/>
+<text x="900.0" y="382.7" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="900.0" dy="0">Not MEI mates: a mate found in the reference</tspan><tspan x="900.0" dy="20.0">within 600 bp (the pair fits the reference);</tspan><tspan x="900.0" dy="20.0">a tail mate (A/T run of 20+) next to a reference</tspan><tspan x="900.0" dy="20.0">copy of the family</tspan></text>
+<line x1="900" y1="460" x2="900" y2="490" stroke="#1e1e1e" stroke-width="2" marker-end="url(#h)"/>
+<rect x="650" y="490" width="500" height="65" rx="12" fill="#d0bfff" fill-opacity="1.0" stroke="#8b5cf6" stroke-width="2"/>
+<text x="900.0" y="527.7" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="900.0" dy="0">checked mates, MEI mates, mean identity</tspan></text>
+<line x1="900" y1="555" x2="900" y2="585" stroke="#1e1e1e" stroke-width="2" marker-end="url(#h)"/>
+<rect x="650" y="585" width="500" height="50" rx="12" fill="#b2f2bb" fill-opacity="1.0" stroke="#22c55e" stroke-width="2"/>
+<text x="900.0" y="615.2" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="900.0" dy="0">2+ MEI mates of one family type an untyped candidate</tspan></text>
+<line x1="300" y1="645" x2="450" y2="700" stroke="#1e1e1e" stroke-width="2" marker-end="url(#h)"/>
+<line x1="900" y1="645" x2="750" y2="700" stroke="#1e1e1e" stroke-width="2" marker-end="url(#h)"/>
+<rect x="20" y="705" width="1160" height="165" rx="12" fill="#fff3bf" fill-opacity="1.0" stroke="#f59e0b" stroke-width="2"/>
+<text x="600.0" y="732.7" font-size="16" fill="#1e1e1e" text-anchor="middle" font-family="'Segoe UI', Helvetica, Arial, sans-serif" font-weight="normal"><tspan x="600.0" dy="0">Filters decided on the evidence</tspan><tspan x="600.0" dy="20.0">&#160;</tspan><tspan x="600.0" dy="20.0">untyped: fewer than 2 junction clips typed to an element (unless one typed clip + tail + MEI mates,</tspan><tspan x="600.0" dy="20.0">or typed by the mates with tail clips)</tspan><tspan x="600.0" dy="20.0">non_mei_mates: MEI mates below 30% of the checked mates</tspan><tspan x="600.0" dy="20.0">Candidates without junction clips but mostly MEI mates (4+, 60%+, 0.98 identity) and reads clipped</tspan><tspan x="600.0" dy="20.0">at the breakpoint pass as insertions (imprecise position)</tspan></text>
+</svg>
