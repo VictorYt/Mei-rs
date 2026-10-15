@@ -55,6 +55,7 @@ true / 40 false `PASS`, HG002 17 / 24, NA12878 23 `PASS`).
 ### Fixed
 
 - Container image: the `Dockerfile` copies `benches/`, which `Cargo.toml` declares (#84).
+- Release workflow: the image name is lowercase (`ghcr.io/victoryt/mei-rs`), as registries require (#84).
 
 ## [0.4.0] - 2026-10-15
 
