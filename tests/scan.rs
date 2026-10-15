@@ -218,6 +218,57 @@ fn tail_only_clips_typed_by_mates() {
     }
 }
 
+#[test]
+fn mate_only_insertion_placed_by_short_clips() {
+    // The junction reads of the Alu of `mateonly` have clips of at most 10
+    // bases (below the 15 of an extracted clip) or are unmapped
+    // (tests/data/README.md): its mates, inside the element, type it
+    // (#57), its short clips at the breakpoint place it (#58), it passes as a
+    // mate-only insertion (#59) and one junction is assembled (#66). It
+    // needs `--reference` to check the mapped mates.
+    for bam in ["tests/data/mateonly.bam", "tests/data/mateonly.cram"] {
+        let args = [
+            "--bam",
+            bam,
+            "--bed",
+            "tests/data/targets.bed",
+            "--reference",
+            "tests/data/reference.fa",
+        ];
+        let tsv = scan(&args);
+        let rows = rows(&tsv);
+        assert_eq!(rows.len(), 1, "{tsv}");
+        let row = &rows[0];
+        for (name, value) in [
+            ("filter", "PASS"),
+            ("confidence", "low"),
+            ("family", "ALU"),
+            ("subfamily", "AluY"),
+            ("typed_clips", "0"),
+            ("left_junction_clips", "0"),
+            ("right_junction_clips", "0"),
+            ("typed_by", "mates"),
+            ("assembled", "left"),
+            ("position", "10012"),
+            ("left_junction", "10012"),
+        ] {
+            assert_eq!(column(&tsv, row, name), value, "{name}: {tsv}");
+        }
+        let clips: u32 = column(&tsv, row, "breakpoint_clips").parse().unwrap();
+        assert!(clips >= 5, "breakpoint clips: {tsv}");
+        let mei: u32 = column(&tsv, row, "mei_mates").parse().unwrap();
+        assert!(mei >= 4, "MEI mates: {tsv}");
+    }
+    // Without the reference, its mapped mates are not checked: it does not pass.
+    let tsv = scan(&[
+        "--bam",
+        "tests/data/mateonly.bam",
+        "--bed",
+        "tests/data/targets.bed",
+    ]);
+    assert!(rows(&tsv).is_empty(), "{tsv}");
+}
+
 /// Parse a VCF with noodles: header and records.
 fn parse_vcf(
     reader: impl std::io::BufRead,

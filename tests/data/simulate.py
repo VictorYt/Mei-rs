@@ -15,6 +15,11 @@ Writes, into the directory given as the only argument:
 - tailonly.sam: the Alu insertion (heterozygous, in its target only) whose
   junction soft-clips are its poly(A) tail with at most TAIL_ONLY_ELEMENT
   bases of the element: too few to type them, so only the mates type it;
+- mateonly.sam: the Alu insertion (heterozygous, in its target only) whose
+  junction reads are aligned with short soft-clips of at most MATE_ONLY_CLIP
+  bases (below the 15 bases of an extracted clip) or left unmapped: no
+  junction clip is extracted, and the insertion is found by its mates (inside
+  the element) and placed at the breakpoint by the short clips (#58, #59, #66);
 - truth.tsv: the simulated insertions.
 
 The elements are Dfam consensus sequences (data/consensus/mei_consensus.fa,
@@ -248,6 +253,27 @@ class TailOnlyHaplotype(Haplotype):
         if clip > len(POLYA) + TAIL_ONLY_ELEMENT:
             return Mapping()
         return mapping
+
+
+# Longest soft-clip, in bases, of the junction reads of `mateonly`.
+MATE_ONLY_CLIP = 10
+
+
+class MateOnlyHaplotype(Haplotype):
+    """A haplotype with an insertion whose junction reads are aligned with a
+    short soft-clip (at most MATE_ONLY_CLIP bases of the other side of the
+    junction); reads with more of it are left unmapped, as a short-read aligner
+    does not clip them neatly. The mate of an unmapped read is anchored next
+    to the insertion, or inside the element."""
+
+    def align(self, start, end):
+        mapping = super().align(start, end)
+        if not mapping.mapped or "S" not in mapping.cigar:
+            return mapping
+        # `{n}M{m}S` (clip after the anchor) or `{n}S{m}M` (clip before it).
+        digits = "".join(c if c.isdigit() else " " for c in mapping.cigar).split()
+        clip = int(digits[1] if mapping.cigar.endswith("S") else digits[0])
+        return mapping if clip <= MATE_ONLY_CLIP else Mapping()
 
 
 class TractHaplotype:
@@ -519,6 +545,14 @@ def main(out_dir):
     writer = Writer(os.path.join(out_dir, "tailonly.sam"), "tailonly", rng)
     fragments(rng, Haplotype(contig, reference[contig]), TARGETS[0], writer)
     fragments(rng, TailOnlyHaplotype(contig, reference[contig], INSERTIONS[0]), TARGETS[0], writer)
+    writer.close()
+
+    # The Alu insertion found by its mates and its short clips, heterozygous,
+    # in target_insertion, with its own random generator.
+    rng = Rng(SEED + 5)
+    writer = Writer(os.path.join(out_dir, "mateonly.sam"), "mateonly", rng)
+    fragments(rng, Haplotype(contig, reference[contig]), TARGETS[0], writer)
+    fragments(rng, MateOnlyHaplotype(contig, reference[contig], INSERTIONS[0]), TARGETS[0], writer)
     writer.close()
 
 

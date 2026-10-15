@@ -390,7 +390,9 @@ All the thresholds of the pipeline, with how each was set, are listed in
 
 ```bash
 cargo build --release
-cargo test                  # unit and end-to-end tests on synthetic fixtures
+cargo test                  # unit, property and end-to-end tests on synthetic fixtures
+cargo bench                 # criterion benchmarks (extraction, clustering, typing)
+fuzz/run.sh 30              # cargo-fuzz targets, 30 s each (nightly toolchain, cargo-fuzz)
 tests/data/generate.sh      # regenerate the fixtures (python3, samtools, perl)
 UPDATE_EXPECTED=1 cargo test --test scan   # update the expected outputs
 ```
