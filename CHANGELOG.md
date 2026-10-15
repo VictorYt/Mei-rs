@@ -6,6 +6,10 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Container image: the `Dockerfile` copies `benches/`, which `Cargo.toml` declares (#84).
+
 ### Changed
 
 - README (#86): the speed claim is the measured one (faster in wall time,
