@@ -6,6 +6,16 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Versioned evaluation (#83): `docs/validation/` has `fetch-data.sh`,
+  `build-targets.sh` (exome targets lifted to GRCh38, checksummed),
+  `run.sh` (scan, evaluate, refit), `refit.py` (the quality score of
+  `genotype::score`, with the AUC leaving one sample out and on a held-out
+  sample) and `MANIFEST.md` (URLs and checksums of the public inputs).
+  `evaluate.py` gives 95% bootstrap intervals over the samples and writes the
+  true PASS calls (`--tp-out`).
+
 ## [0.4.0] - 2026-10-15
 
 ### Changed
