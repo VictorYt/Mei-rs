@@ -52,6 +52,10 @@ true / 40 false `PASS`, HG002 17 / 24, NA12878 23 `PASS`).
   `evaluate.py` gives 95% bootstrap intervals over the samples and writes the
   true PASS calls (`--tp-out`).
 
+### Fixed
+
+- Container image: the `Dockerfile` copies `benches/`, which `Cargo.toml` declares (#84).
+
 ## [0.4.0] - 2026-10-15
 
 ### Changed
