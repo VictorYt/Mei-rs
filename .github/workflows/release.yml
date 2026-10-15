@@ -6,13 +6,16 @@
 # Linux binaries are not musl builds: with musl's allocator `scan` took 40 s
 # on a chromosome that takes 1 to 2 s with glibc (#84). Manual runs
 # (workflow_dispatch) build everything and keep the binaries as artifacts, and
-# push nothing.
+# push nothing. So do the release pull requests into `main`, which check the
+# builds before the tag exists.
 
 name: Release
 
 on:
   release:
     types: [published]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
