@@ -23,6 +23,24 @@ probe edges.
 
 ## Installation
 
+From a release binary (Linux x86_64 and aarch64 with glibc 2.17 or later,
+macOS arm64 and x86_64), with its checksum, on the
+[releases page](https://github.com/VictorYt/Mei-rs/releases):
+
+```bash
+tar xzf mei-rs-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz
+sha256sum -c mei-rs-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz.sha256
+mei-rs-vX.Y.Z-x86_64-unknown-linux-gnu/mei-rs --version
+```
+
+From the container image (Linux x86_64 and aarch64):
+
+```bash
+docker run --rm -v "$PWD":/data -w /data ghcr.io/victoryt/mei-rs:latest \
+  scan --bam sample.bam --bed targets.bed --reference genome.fa -o sample.tsv
+# or build it from a clone: docker build -t mei-rs .
+```
+
 From source, with Rust 1.91 or later:
 
 ```bash
