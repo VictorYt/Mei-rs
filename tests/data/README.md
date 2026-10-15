@@ -123,3 +123,11 @@ The junction is typed (Alu clips) and has enough clips for its mates to be
 checked against the MEI consensus sequences, and none is a mobile element:
 `non_mei_mates`, 6 checked mates, 0 MEI mates. A chimeric read with a piece
 of Alu looks like this.
+
+## VCF tools
+
+`tests/vcf_tools.sh` writes the VCF of every fixture (BAM and CRAM, plain and
+bgzipped) and reads it with bcftools, tabix and `vcf-validator` (vcftools): no
+warning, the same records plain and bgzipped, REF alleles equal to the
+reference, and the `.tbi` we write returns the same records as the one tabix
+builds. It runs in CI (`vcf` job) and needs those three tools.

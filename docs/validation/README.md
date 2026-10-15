@@ -300,6 +300,25 @@ removed from the annotation files (the hs37d5 contigs are `1`..`22`).
   images, emulated on this arm64 machine (and while other jobs were running),
   so their wall time says nothing about the tools.
 
+## VCF with bcftools, tabix and VEP (#85)
+
+* Fixtures: `tests/vcf_tools.sh` (CI job `vcf`) writes the VCF of every
+  fixture (BAM and CRAM, plain and bgzipped) and reads it with bcftools 1.21,
+  tabix and `vcf-validator` (vcftools): no warning, the same records plain and
+  bgzipped, the REF alleles equal to the reference (`bcftools norm
+  --check-ref e`), and the `.tbi` we write returns the same records as the one
+  tabix builds, on every record and contig. The validator reports an
+  undeclared INFO field, so it does check the header.
+* NA12878 (23 `PASS` records, `--format vcf`): Ensembl VEP 116.3 (database
+  mode, GRCh38) reads all 23 records without warning and annotates them with
+  the alleles `Alu_insertion` and `LINE1_insertion` (the symbolic ALTs
+  `<INS:ME:ALU>` and `<INS:ME:LINE1>` are recognised): 559 lines of
+  transcript consequences, mostly intron variants. VEP spans each insertion
+  over `SVLEN` reference bases (`chr1:28571787-28572087` for an insertion of
+  301 bp, with or without an `END` INFO field), so a long element is annotated
+  against every transcript of a window as long as the element, not at one
+  point. AnnotSV was not tried.
+
 ## History
 
 Same seven exomes, PASS calls:
