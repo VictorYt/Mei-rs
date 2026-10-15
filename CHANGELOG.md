@@ -16,6 +16,14 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Release binaries and container image (#84): a `Release` workflow, run when a
+  release is published, builds Linux (x86_64, aarch64; glibc 2.17 or later,
+  linked with cargo-zigbuild) and macOS (arm64, x86_64) binaries, attaches
+  them to the release with their SHA-256 checksums, and publishes the image
+  (`Dockerfile`) to `ghcr.io/victoryt/mei-rs` for linux/amd64 and linux/arm64.
+  musl builds were tried and rejected: the same exome region took 40 s
+  against 1 to 2 s, because of musl's allocator.
+
 - VCF checks (#85): `tests/vcf_tools.sh` (CI job `vcf`) reads the VCF of every
   fixture with bcftools, tabix and the VCF validator; VEP reads the NA12878
   VCF (23 records) without warning. No change to the VCF was needed.

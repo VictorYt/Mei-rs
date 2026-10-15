@@ -1,0 +1,189 @@
+# Binaries and container image of a release.
+#
+# Runs when a GitHub release is published (`gh release create vX.Y.Z`): builds
+# Linux (glibc 2.17 or later) and macOS binaries, attaches them to the release
+# with their checksums, and publishes the container image to ghcr.io. The
+# Linux binaries are not musl builds: with musl's allocator `scan` took 40 s
+# on a chromosome that takes 1 to 2 s with glibc (#84). Manual runs
+# (workflow_dispatch) build everything and keep the binaries as artifacts, and
+# push nothing. So do the release pull requests into `main`, which check the
+# builds before the tag exists.
+
+name: Release
+
+on:
+  release:
+    types: [published]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  binaries:
+    name: Binary (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu }
+          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu }
+          - { os: macos-latest, target: aarch64-apple-darwin }
+          - { os: macos-latest, target: x86_64-apple-darwin }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install cargo-zigbuild (links against glibc 2.17)
+        if: contains(matrix.target, 'linux')
+        run: |
+          python3 -m pip install --user --break-system-packages cargo-zigbuild ziglang
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Build
+        run: |
+          if [ "${{ runner.os }}" = Linux ]; then
+            cargo zigbuild --release --locked --target ${{ matrix.target }}.2.17
+          else
+            cargo build --release --locked --target ${{ matrix.target }}
+          fi
+      - name: Check that the binary runs
+        run: |
+          bin=target/${{ matrix.target }}/release/mei-rs
+          if [ "${{ matrix.target }}" = x86_64-apple-darwin ]; then
+            # Built on an arm64 runner: runs under Rosetta when it is installed.
+            file "$bin"
+            arch -x86_64 "$bin" --version || echo "Rosetta is not available on this runner"
+          else
+            "$bin" --version
+          fi
+      - name: Check the glibc the Linux binary needs
+        if: contains(matrix.target, 'linux')
+        run: |
+          file target/${{ matrix.target }}/release/mei-rs
+          newest=$(objdump -T target/${{ matrix.target }}/release/mei-rs | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)
+          echo "needs $newest"
+          [ "$newest" = GLIBC_2.17 ] || { echo "expected glibc 2.17 at most" >&2; exit 1; }
+      - name: Package
+        id: package
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')
+          name=mei-rs-v$version-${{ matrix.target }}
+          mkdir "$name"
+          cp target/${{ matrix.target }}/release/mei-rs LICENSE README.md CHANGELOG.md "$name"/
+          tar czf "$name.tar.gz" "$name"
+          shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: |
+            ${{ steps.package.outputs.name }}.tar.gz
+            ${{ steps.package.outputs.name }}.tar.gz.sha256
+
+  attach:
+    name: Attach to the release
+    needs: binaries
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat dist/*.sha256 > dist/SHA256SUMS
+          gh release upload "${{ github.event.release.tag_name }}" dist/* \
+            --repo "${{ github.repository }}" --clobber
+
+  image:
+    name: Image (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, platform: linux/amd64 }
+          - { os: ubuntu-24.04-arm, platform: linux/arm64 }
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: github.event_name == 'release'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build, and push by digest on a release
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/mei-rs,push-by-digest=true,name-canonical=true,push=${{ github.event_name == 'release' }}
+      - name: Keep the digest
+        if: github.event_name == 'release'
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'release'
+        with:
+          name: digests-${{ strategy.job-index }}
+          path: /tmp/digests/*
+
+  image-manifest:
+    name: Publish the image
+    needs: image
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Tag the multi-platform image
+        working-directory: /tmp/digests
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/mei-rs
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version=${TAG#v}
+          # shellcheck disable=SC2046
+          docker buildx imagetools create \
+            -t "$IMAGE:$version" -t "$IMAGE:latest" \
+            $(printf "$IMAGE@sha256:%s " *)
+      - name: Check
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/mei-rs
+          TAG: ${{ github.event.release.tag_name }}
+        run: docker run --rm "$IMAGE:${TAG#v}" --version
