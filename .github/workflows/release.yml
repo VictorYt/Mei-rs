@@ -137,7 +137,7 @@ jobs:
         with:
           context: .
           platforms: ${{ matrix.platform }}
-          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/mei-rs,push-by-digest=true,name-canonical=true,push=${{ github.event_name == 'release' }}
+          outputs: type=image,name=ghcr.io/victoryt/mei-rs,push-by-digest=true,name-canonical=true,push=${{ github.event_name == 'release' }}
       - name: Keep the digest
         if: github.event_name == 'release'
         run: |
@@ -174,7 +174,7 @@ jobs:
       - name: Tag the multi-platform image
         working-directory: /tmp/digests
         env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/mei-rs
+          IMAGE: ghcr.io/victoryt/mei-rs
           TAG: ${{ github.event.release.tag_name }}
         run: |
           version=${TAG#v}
@@ -184,6 +184,6 @@ jobs:
             $(printf "$IMAGE@sha256:%s " *)
       - name: Check
         env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/mei-rs
+          IMAGE: ghcr.io/victoryt/mei-rs
           TAG: ${{ github.event.release.tag_name }}
         run: docker run --rm "$IMAGE:${TAG#v}" --version
