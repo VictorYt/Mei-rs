@@ -6,6 +6,15 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- Genotype (#91): a candidate that passed is genotyped `0/1` or `1/1`, never
+  `0/0`, with a prior of 0.77 for the heterozygous genotype (`0/0` stays
+  possible for filtered candidates, `--keep-filtered`). HGSVC3 exomes: 107 of
+  123 genotypes of the true calls right (91 before), HG002 11 of 17 (9); the
+  calls are unchanged. `evaluate.py --tp-out` gives the truth genotype of each
+  call.
+
 ### Fixed
 
 - Release workflow: the upload job downloads only the binary artifacts (it failed on the image digests still being written, #84); the v0.4.1 binaries were attached by hand from the same run.
