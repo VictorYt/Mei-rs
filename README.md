@@ -1,7 +1,12 @@
 # Mei-rs
 
-An ultra-fast, memory-efficient Rust tool for detecting mobile element
-insertions (Alu, LINE-1, SVA) in targeted capture and exome sequencing data.
+A Rust tool for detecting mobile element insertions (Alu, LINE-1, SVA) in
+targeted capture and exome sequencing data. One exome takes 30 s to 4 min and
+0.5 to 2.5 GB on 12 to 18 cores; against Scramble it is faster in wall time
+(1 to 5 times, from using every core) but uses 1.5 to 9 times more CPU time
+([measured](docs/validation/README.md#comparison-with-scramble)). It is a
+research tool, not validated for clinical use (see
+[Accuracy and limitations](#accuracy-and-limitations)).
 
 Mei-rs reads only the capture targets of an indexed BAM or CRAM file, collects
 the reads that betray an insertion (soft-clipped reads, discordant pairs,
@@ -284,10 +289,38 @@ Genomes exomes and on HG002 (held out), with the method and commands in
 
 | | Precision | Recall (`PASS`) |
 |---|---|---|
-| Seven 1000 Genomes exomes, 371 MEIs | 0.759 | 0.337 |
+| Seven 1000 Genomes exomes, 371 MEIs | 0.759 (0.717 to 0.799) | 0.337 (0.256 to 0.423) |
 | Same, `--min-qual 5` | 0.950 | 0.305 |
 | HG002 (GRCh37), 49 MEIs | 0.415 | 0.347 |
+| MELT 2.2.2, seven exomes | 0.897 | 0.259 |
 | Scramble 1.0.2, seven exomes | 0.687 | 0.154 |
+| xTea 0.1.9, seven exomes (default / exome cutoffs) | 0.852 / 0.767 | 0.062 / 0.089 |
+
+The intervals in brackets are 95% bootstrap intervals over the seven samples.
+On the same seven exomes Mei-rs finds more of the insertions than MELT,
+Scramble and xTea (recall 0.337 against 0.259, 0.154 and at most 0.089) and is
+less precise than MELT (0.759 against 0.897). Its precision on HG002, held out
+(0.415), is far below that on the seven exomes: the quality score and several
+thresholds were fitted on those seven exomes ([thresholds](docs/thresholds.md)),
+so their numbers are optimistic for a new sample. The comparison with MELT,
+Scramble and xTea is in [docs/validation](docs/validation/README.md#comparison-with-melt-and-xtea).
+
+### Which `--min-qual`
+
+The threshold trades recall for precision; the default (0) keeps every `PASS`
+call. Measured on the seven exomes (HG002 in brackets):
+
+| Use | `--min-qual` | Precision | Recall (`PASS`) |
+|---|---|---|---|
+| Discovery, nothing missed, confirm afterwards | 0 (default) | 0.759 (0.415) | 0.337 (0.347) |
+| Screening, little cost in recall | 2 | 0.893 (0.567) | 0.334 (0.347) |
+| Short list to confirm | 5 | 0.950 (0.577) | 0.305 (0.306) |
+| Very short list | 10 | 0.968 | 0.245 |
+
+The quality score ranks the calls better than it estimates a probability (AUC
+0.928 leaving one sample out, 0.787 on HG002). Whatever the threshold,
+insertions close to a reference copy of the same family and very deep samples
+produce false calls (the `low` confidence tier).
 
 Recall counts every MEI within 300 bp of a target: 27 of the 36 MEIs inside
 the targets are called `PASS`, against 36 of the 240 at 101-300 bp from them.
@@ -317,8 +350,23 @@ Other limitations:
   (NA12878 on 12 cores, same output: BAM 66 s and 1.2 GB, CRAM 124 s). On
   macOS, the allocator keeps the freed reference sequences in memory.
 
-Calls are research results: confirm them with an orthogonal method before any
-clinical use.
+### Scope and licence
+
+Mei-rs is a research tool. It has not been validated for clinical use: it was
+evaluated on 7 exomes of one resource (plus HG002), with long-read assembly
+calls as truth, and no panel data. Confirm its calls with an orthogonal
+method before any clinical use.
+
+Mei-rs is licensed under the AGPL-3.0-or-later. Running the binary on your
+data, inside a pipeline or a workflow engine, does not subject the rest of the
+pipeline to the licence. Modifying Mei-rs and offering the result to users over
+a network (a hosted service) requires offering them the modified source, and a
+program that embeds its code is a derivative work under the licence. This is
+a summary, not legal advice: ask your legal department before integrating it
+in a product.
+
+All the thresholds of the pipeline, with how each was set, are listed in
+[docs/thresholds.md](docs/thresholds.md).
 
 ## Development
 

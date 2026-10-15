@@ -6,8 +6,18 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- README (#86): the speed claim is the measured one (faster in wall time,
+  1.5 to 9 times more CPU time than Scramble), the positioning against MELT,
+  Scramble and xTea and the held-out precision (HG002) are stated, a usage
+  guide gives the precision and recall of `--min-qual` 0, 2, 5 and 10, and the
+  scope (research tool) and the AGPL implications are spelled out.
+
 ### Added
 
+- `docs/thresholds.md` (#86): every threshold of the pipeline with its value
+  and how it was set (design, chosen or fitted on the seven HGSVC3 exomes).
 - Versioned evaluation (#83): `docs/validation/` has `fetch-data.sh`,
   `build-targets.sh` (exome targets lifted to GRCh38, checksummed),
   `run.sh` (scan, evaluate, refit), `refit.py` (the quality score of
