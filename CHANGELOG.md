@@ -6,6 +6,11 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-15
+
+Reproducibility and distribution: no change in the calls (HGSVC3 exomes 126
+true / 40 false `PASS`, HG002 17 / 24, NA12878 23 `PASS`).
+
 ### Changed
 
 - README (#86): the speed claim is the measured one (faster in wall time,
