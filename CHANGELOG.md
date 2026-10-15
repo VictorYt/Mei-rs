@@ -16,6 +16,10 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- VCF checks (#85): `tests/vcf_tools.sh` (CI job `vcf`) reads the VCF of every
+  fixture with bcftools, tabix and the VCF validator; VEP reads the NA12878
+  VCF (23 records) without warning. No change to the VCF was needed.
+
 - `docs/thresholds.md` (#86): every threshold of the pipeline with its value
   and how it was set (design, chosen or fitted on the seven HGSVC3 exomes).
 - Versioned evaluation (#83): `docs/validation/` has `fetch-data.sh`,
