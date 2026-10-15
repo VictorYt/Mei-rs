@@ -360,7 +360,11 @@ Other limitations:
 - Assembly needs `--reference`, and few exome candidates have both junctions
   assembled; otherwise the TSD comes from the soft-clip junctions.
 - The genotype under-counts insertion reads (clips of 15 good bases): it
-  assumes 30% of them at a heterozygous site; 91 of 123 true calls are right.
+  assumes 30% of them at a heterozygous site. A `PASS` call is genotyped
+  `0/1` or `1/1` (never `0/0`): 107 of 123 true calls are right on the seven
+  exomes, 11 of 17 on HG002. Most errors are heterozygous insertions called
+  `1/1` with no reference read over the site (next to a probe edge, where the
+  reads upstream are missing).
 - Candidates closer than `--window` are merged into one.
 - On older data, most soft-clips fall below `--min-clip-quality` (read ends
   masked by the base caller); the log reports how many are set aside (#25).

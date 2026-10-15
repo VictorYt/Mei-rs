@@ -120,7 +120,8 @@ sample:
 By confidence: `high` 13 true of 14, `medium` 35 of 38, `low` 78 of 117. Recall
 (PASS) by distance to the target: inside 27 / 36, 1-100 bp 62 / 95, 101-300 bp
 36 / 240; by family: Alu 106 / 325, L1 16 / 32, SVA 3 / 14. Genotypes of the
-true PASS calls: 91 of 123 right. `--min-qual 2`: 125 / 15 (0.893; HG002
+true PASS calls: 91 of 123 right (107 of 123 once a PASS call is no longer
+genotyped `0/0`, #91; HG002 9 of 17 then 11 of 17). `--min-qual 2`: 125 / 15 (0.893; HG002
 17 / 13), `--min-qual 5`: 114 / 6 (0.950; HG002 15 / 11). The quality score
 was refit on these calls (#67): AUC 0.928 leaving one sample out, 0.787 on
 HG002. NA12878 (GRCh38, 12 cores): 23 PASS, BAM 120 s and 1.4 GB; HG00731:
@@ -299,6 +300,22 @@ removed from the annotation files (the hs37d5 contigs are `1`..`22`).
 * Run time and memory are not compared: both tools only run as linux/amd64
   images, emulated on this arm64 machine (and while other jobs were running),
   so their wall time says nothing about the tools.
+
+## Genotypes (#91)
+
+Of the 123 true PASS calls with reads at the site (v0.4.0), 14 heterozygous
+insertions were called `0/0` and 15 `1/1`. A candidate that passed is an
+insertion: `0/0` is no longer a choice for it, and the heterozygous genotype
+has a prior of 0.77 (the share of heterozygous genotypes among the HGSVC3
+insertions of the seven exomes). Result on the same calls (unchanged): 107 of
+123 right on the seven exomes, 11 of 17 on HG002 (9 of 17 before). Six
+heterozygous insertions of HG002 and 13 of the seven exomes are still called
+`1/1`: their sites have no reference read (a probe edge, where the reads
+upstream are missing; the alternative reads start at the target start), which
+no count of the alternative allele corrects. Fitting the heterozygous fraction
+by candidate type, or a beta-binomial model, gave the same 105 of 123 in a
+leave-one-sample-out check (before the prior): the remaining errors are in the
+counts, not in the model.
 
 ## VCF with bcftools, tabix and VEP (#85)
 
