@@ -9,6 +9,7 @@ FROM rust:1-trixie AS build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
+COPY benches ./benches
 COPY data ./data
 COPY README.md LICENSE ./
 RUN cargo build --release --locked
