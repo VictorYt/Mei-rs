@@ -42,6 +42,7 @@ import bisect
 import collections
 import csv
 import gzip
+import random
 import sys
 
 FAMILIES = {
@@ -353,6 +354,18 @@ def main():
     )
     parser.add_argument("--fp-out", help="write the PASS false positives to this TSV")
     parser.add_argument(
+        "--tp-out",
+        help="write the PASS calls that are not false positives to this TSV, with a "
+        "`status` column: tp, other_sample (near an MEI of another sample) or "
+        "unknown (a truth MEI nearby is not genotyped in the sample)",
+    )
+    parser.add_argument(
+        "--bootstrap",
+        type=int,
+        default=2000,
+        help="resamples of the samples for the confidence intervals; 0 to skip [2000]",
+    )
+    parser.add_argument(
         "runs",
         nargs="+",
         metavar="SAMPLE=FILE",
@@ -382,7 +395,8 @@ def main():
     family_found = collections.Counter()
     genotypes = collections.Counter()
     by_qual = collections.Counter()
-    fn_rows, fp_rows = [], []
+    fn_rows, fp_rows, tp_rows = [], [], []
+    per_sample = []
     lifted = f"; {unlifted} not lifted" if chain is not None else ""
     print(
         f"# truth MEIs in the padded targets (any HGSVC3 sample): {len(truth)}; "
@@ -439,6 +453,8 @@ def main():
         for c, s, _ in passing:
             if s == "fp" and args.fp_out:
                 fp_rows.append((sample, c))
+            if s != "fp" and args.tp_out:
+                tp_rows.append((sample, s, c))
         values = {
             "truth": len(carried),
             "found_any": len(found_any),
@@ -450,12 +466,23 @@ def main():
             "unknown": status["unknown"],
         }
         total.update(values)
+        quals = {
+            q: (
+                sum(c["pass"] and c["qual"] is not None and c["qual"] >= q and s == "tp" for c, s, _ in rows),
+                sum(c["pass"] and c["qual"] is not None and c["qual"] >= q and s == "fp" for c, s, _ in rows),
+                len(found(rows, lambda c, q=q: c["pass"] and c["qual"] is not None and c["qual"] >= q)),
+            )
+            for q in thresholds
+        }
+        per_sample.append((values, quals))
         print(format_row(sample, values, per_tier))
     print(
         format_row(
             "all", total, [f"{total[f'tp_{t}']}/{total[f'n_{t}']}" for t in TIERS]
         )
     )
+    if args.bootstrap and len(per_sample) > 1:
+        print_intervals(per_sample, thresholds, args.bootstrap)
     print("\n# recall by distance to the target\tfound_any\tfound_pass")
     for _, _, name in strata:
         if strata_total[name]:
@@ -490,12 +517,62 @@ def main():
             out.write("sample\ttruth_id\tfamily\tcall_tiers\n")
             for row in fn_rows:
                 out.write("\t".join(row) + "\n")
+    if args.tp_out:
+        with open(args.tp_out, "w") as out:
+            keys = list(tp_rows[0][2]["row"]) if tp_rows else []
+            out.write("sample\tstatus\t" + "\t".join(keys) + "\n")
+            for sample, status, c in tp_rows:
+                out.write(f"{sample}\t{status}\t" + "\t".join(c["row"].get(k, ".") for k in keys) + "\n")
     if args.fp_out:
         with open(args.fp_out, "w") as out:
             keys = list(fp_rows[0][1]["row"]) if fp_rows else []
             out.write("sample\t" + "\t".join(keys) + "\n")
             for sample, c in fp_rows:
                 out.write(sample + "\t" + "\t".join(c["row"].get(k, ".") for k in keys) + "\n")
+
+
+def print_intervals(per_sample, thresholds, resamples):
+    """95% bootstrap intervals of precision and recall, resampling the samples.
+
+    The samples are the unit (calls of one sample are not independent: depth,
+    library and ancestry are shared), so the intervals are wide when few
+    samples are evaluated. The seed is fixed: the same input gives the same
+    intervals.
+    """
+    rng = random.Random(1)
+    n = len(per_sample)
+
+    def interval(stat):
+        draws = []
+        for _ in range(resamples):
+            pick = [per_sample[rng.randrange(n)] for _ in range(n)]
+            value = stat(pick)
+            if value is not None:
+                draws.append(value)
+        draws.sort()
+        if not draws:
+            return ".", ".", "."
+        return (
+            f"{draws[int(0.025 * len(draws))]:.3f}",
+            f"{draws[min(int(0.975 * len(draws)), len(draws) - 1)]:.3f}",
+            f"{len(draws)}",
+        )
+
+    def ratio(num, den):
+        return None if den == 0 else num / den
+
+    print(f"\n# 95% bootstrap intervals over {n} samples ({resamples} resamples)")
+    print("# level\tmetric\tlow\thigh")
+    stats = [
+        ("PASS", "precision", lambda p: ratio(sum(v["tp"] for v, _ in p), sum(v["tp"] + v["fp"] for v, _ in p))),
+        ("PASS", "recall", lambda p: ratio(sum(v["found_pass"] for v, _ in p), sum(v["truth"] for v, _ in p))),
+    ]
+    for q in thresholds:
+        stats.append((f"QUAL>={q:g}", "precision", lambda p, q=q: ratio(sum(x[q][0] for _, x in p), sum(x[q][0] + x[q][1] for _, x in p))))
+        stats.append((f"QUAL>={q:g}", "recall", lambda p, q=q: ratio(sum(x[q][2] for _, x in p), sum(v["truth"] for v, _ in p))))
+    for level, metric, stat in stats:
+        low, high, _ = interval(stat)
+        print(f"{level}\t{metric}\t{low}\t{high}")
 
 
 def format_row(name, v, per_tier):
