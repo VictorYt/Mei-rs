@@ -83,6 +83,19 @@ jobs:
       - name: Release build
         run: cargo build --release --locked
 
+  # The VCF of the fixtures read by the tools users run on it.
+  vcf:
+    name: VCF tools
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install bcftools, tabix and the VCF validator
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends bcftools tabix vcftools
+      - run: tests/vcf_tools.sh
+
   msrv:
     name: MSRV (1.91)
     needs: lint

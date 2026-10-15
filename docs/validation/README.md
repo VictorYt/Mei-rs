@@ -35,6 +35,19 @@ exomes, keeping the targets mapped in one piece (99.4%).
 
 ## Method
 
+The whole evaluation is scripted and versioned here; `MANIFEST.md` lists every
+public input with its checksum.
+
+```bash
+docs/validation/fetch-data.sh data/       # truth, references, 7 CRAMs + HG002, targets (~70 GB)
+cargo build --release
+docs/validation/run.sh data/ out/         # scan, evaluate, refit
+```
+
+`run.sh` runs `mei-rs scan --keep-filtered --reference` on each exome (the
+GRCh38 targets for the 1000 Genomes exomes, the GRCh37 targets and `hs37d5` for
+HG002), then `evaluate.py` and `refit.py`. By hand, for one sample:
+
 ```bash
 mei-rs scan --bam SAMPLE.exome.bam --bed exome_targets.hg38.bed \
   --reference GRCh38_full_analysis_set_plus_decoy_hla.fa --keep-filtered -o SAMPLE.tsv
@@ -44,11 +57,18 @@ python3 docs/validation/evaluate.py \
   HG00512=HG00512.tsv HG00513=HG00513.tsv ...
 
 # HG002 (GRCh37): lift the truth set with a UCSC chain file
-curl -O https://hgdownload.soe.ucsc.edu/goldenPath/hg38/liftOver/hg38ToHg19.over.chain.gz
 python3 docs/validation/evaluate.py \
   --truth MEI_Callset_GRCh38.ALL.20241211.csv.gz --bed exome_targets.GRCh37.bed \
   --chain hg38ToHg19.over.chain.gz NA24385=HG002.tsv
 ```
+
+`refit.py` refits the quality score of `genotype::score` (prior and likelihood
+ratios of the seven pieces of evidence, one call added to each count) on the
+labelled PASS calls: `evaluate.py --fp-out` and `--tp-out` give the labels. It
+prints the values for `src/genotype/score.rs`, the AUC leaving one sample out
+and in sample, the true and false calls kept at each QUAL, and the AUC on a
+held-out sample (HG002). On the v0.4.0 calls it gives the constants of the
+release (prior 0.501, AUC 0.928 and 0.787).
 
 `evaluate.py` (Python standard library only; `--help` for the options):
 
@@ -71,7 +91,14 @@ python3 docs/validation/evaluate.py \
   unpadded target and by family;
 * genotype concordance of the true PASS calls, and precision and recall of the
   PASS calls above each `--min-qual` threshold;
-* `--fp-out` and `--fn-out` list the PASS false positives and the missed MEIs.
+* 95% bootstrap intervals of precision and recall (PASS and each `--min-qual`)
+  resampling the samples (`--bootstrap`, 2000 resamples, fixed seed): the
+  samples are the unit, since the calls of one sample share depth, library and
+  ancestry; HG002 alone has no interval;
+* `--fp-out`, `--tp-out` (true positives, with calls near an MEI of another
+  sample or of a sample not genotyped there under their own status) and
+  `--fn-out` list the PASS false positives, the PASS calls that are not, and
+  the missed MEIs.
 
 ## Results
 
@@ -98,6 +125,13 @@ true PASS calls: 91 of 123 right. `--min-qual 2`: 125 / 15 (0.893; HG002
 was refit on these calls (#67): AUC 0.928 leaving one sample out, 0.787 on
 HG002. NA12878 (GRCh38, 12 cores): 23 PASS, BAM 120 s and 1.4 GB; HG00731:
 170 s and 2.5 GB. The numbers below are those of v0.3.0 and v0.2.0.
+
+95% bootstrap intervals over the seven exomes (`evaluate.py`; rerun with the
+scripts above, #83): precision 0.717 to 0.799, recall 0.256 to 0.423;
+`--min-qual 2` precision 0.871 to 0.919, `--min-qual 5` precision 0.920 to
+0.984 and recall 0.216 to 0.394. The intervals say how much the seven samples
+vary, not how a new cohort would: HG002 alone (precision 0.415) lies far
+below the interval.
 
 v0.3.0 (`develop` after #70), default options with `--reference`: seven
 exomes 121 true / 39 false PASS (precision 0.756, recall 0.326, recall of any
@@ -265,6 +299,25 @@ removed from the annotation files (the hs37d5 contigs are `1`..`22`).
 * Run time and memory are not compared: both tools only run as linux/amd64
   images, emulated on this arm64 machine (and while other jobs were running),
   so their wall time says nothing about the tools.
+
+## VCF with bcftools, tabix and VEP (#85)
+
+* Fixtures: `tests/vcf_tools.sh` (CI job `vcf`) writes the VCF of every
+  fixture (BAM and CRAM, plain and bgzipped) and reads it with bcftools 1.21,
+  tabix and `vcf-validator` (vcftools): no warning, the same records plain and
+  bgzipped, the REF alleles equal to the reference (`bcftools norm
+  --check-ref e`), and the `.tbi` we write returns the same records as the one
+  tabix builds, on every record and contig. The validator reports an
+  undeclared INFO field, so it does check the header.
+* NA12878 (23 `PASS` records, `--format vcf`): Ensembl VEP 116.3 (database
+  mode, GRCh38) reads all 23 records without warning and annotates them with
+  the alleles `Alu_insertion` and `LINE1_insertion` (the symbolic ALTs
+  `<INS:ME:ALU>` and `<INS:ME:LINE1>` are recognised): 559 lines of
+  transcript consequences, mostly intron variants. VEP spans each insertion
+  over `SVLEN` reference bases (`chr1:28571787-28572087` for an insertion of
+  301 bp, with or without an `END` INFO field), so a long element is annotated
+  against every transcript of a window as long as the element, not at one
+  point. AnnotSV was not tried.
 
 ## History
 

@@ -6,6 +6,57 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-15
+
+Reproducibility and distribution: no change in the calls (HGSVC3 exomes 126
+true / 40 false `PASS`, HG002 17 / 24, NA12878 23 `PASS`).
+
+### Changed
+
+- README (#86): the speed claim is the measured one (faster in wall time,
+  1.5 to 9 times more CPU time than Scramble), the positioning against MELT,
+  Scramble and xTea and the held-out precision (HG002) are stated, a usage
+  guide gives the precision and recall of `--min-qual` 0, 2, 5 and 10, and the
+  scope (research tool) and the AGPL implications are spelled out.
+
+### Added
+
+- Tests and benchmarks (#87): property tests (`tests/properties.rs`, proptest)
+  of the BED parser, the CIGAR clip lengths, the poly(A/T) tail detection,
+  k-mers, the local alignment and the typing; `cargo fuzz` targets for the same
+  routines (`fuzz/`, `fuzz/run.sh`); `cargo bench` (criterion) of extraction,
+  clustering and typing on the fixtures and of the routines they use; a
+  fixture of a mate-only insertion (`mateonly`: short clips at the breakpoint,
+  mates in the element) and its test. `reader::signals::clip_lengths` and
+  `poly_tail` are public for them.
+
+- Release binaries and container image (#84): a `Release` workflow, run when a
+  release is published, builds Linux (x86_64, aarch64; glibc 2.17 or later,
+  linked with cargo-zigbuild) and macOS (arm64, x86_64) binaries, attaches
+  them to the release with their SHA-256 checksums, and publishes the image
+  (`Dockerfile`) to `ghcr.io/victoryt/mei-rs` for linux/amd64 and linux/arm64.
+  musl builds were tried and rejected: the same exome region took 40 s
+  against 1 to 2 s, because of musl's allocator.
+
+- VCF checks (#85): `tests/vcf_tools.sh` (CI job `vcf`) reads the VCF of every
+  fixture with bcftools, tabix and the VCF validator; VEP reads the NA12878
+  VCF (23 records) without warning. No change to the VCF was needed.
+
+- `docs/thresholds.md` (#86): every threshold of the pipeline with its value
+  and how it was set (design, chosen or fitted on the seven HGSVC3 exomes).
+- Versioned evaluation (#83): `docs/validation/` has `fetch-data.sh`,
+  `build-targets.sh` (exome targets lifted to GRCh38, checksummed),
+  `run.sh` (scan, evaluate, refit), `refit.py` (the quality score of
+  `genotype::score`, with the AUC leaving one sample out and on a held-out
+  sample) and `MANIFEST.md` (URLs and checksums of the public inputs).
+  `evaluate.py` gives 95% bootstrap intervals over the samples and writes the
+  true PASS calls (`--tp-out`).
+
+### Fixed
+
+- Container image: the `Dockerfile` copies `benches/`, which `Cargo.toml` declares (#84).
+- Release workflow: the image name is lowercase (`ghcr.io/victoryt/mei-rs`), as registries require (#84).
+
 ## [0.4.0] - 2026-10-15
 
 ### Changed

@@ -23,6 +23,7 @@ simulation and regenerate.
 | `negative.bam`, `.bai`, `.cram`, `.crai` | Same targets without the insertions; same probe-edge artefact. |
 | `homozygous.bam`, `.bai`, `.cram`, `.crai` | The Alu insertion on both haplotypes (`1/1`), in its target only. |
 | `tailonly.bam`, `.bai`, `.cram`, `.crai` | The Alu insertion (`0/1`), in its target only, aligned so that its junction soft-clips are the poly(A) tail and at most 2 element bases (too few to type): reads crossing the 5' junction and longer clips are unmapped. Only its mates type it. |
+| `mateonly.bam`, `.bai`, `.cram`, `.crai` | The Alu insertion (`0/1`), in its target only, whose junction reads are aligned with soft-clips of at most 10 bases (below the 15 of an extracted clip) or left unmapped: no junction clip is extracted, the insertion is found by its mates (inside the element) and placed at the breakpoint by the short clips (#58, #59, #66). Its genotype is called `0/0`: the clips are too short to count as alternative reads (#91). |
 | `truth.tsv` | The simulated insertions, machine-readable. |
 
 BAM and CRAM hold the same records (samtools adds `MD`/`NM` when decoding the
@@ -123,3 +124,11 @@ The junction is typed (Alu clips) and has enough clips for its mates to be
 checked against the MEI consensus sequences, and none is a mobile element:
 `non_mei_mates`, 6 checked mates, 0 MEI mates. A chimeric read with a piece
 of Alu looks like this.
+
+## VCF tools
+
+`tests/vcf_tools.sh` writes the VCF of every fixture (BAM and CRAM, plain and
+bgzipped) and reads it with bcftools, tabix and `vcf-validator` (vcftools): no
+warning, the same records plain and bgzipped, REF alleles equal to the
+reference, and the `.tbi` we write returns the same records as the one tabix
+builds. It runs in CI (`vcf` job) and needs those three tools.

@@ -1,7 +1,12 @@
 # Mei-rs
 
-An ultra-fast, memory-efficient Rust tool for detecting mobile element
-insertions (Alu, LINE-1, SVA) in targeted capture and exome sequencing data.
+A Rust tool for detecting mobile element insertions (Alu, LINE-1, SVA) in
+targeted capture and exome sequencing data. One exome takes 30 s to 4 min and
+0.5 to 2.5 GB on 12 to 18 cores; against Scramble it is faster in wall time
+(1 to 5 times, from using every core) but uses 1.5 to 9 times more CPU time
+([measured](docs/validation/README.md#comparison-with-scramble)). It is a
+research tool, not validated for clinical use (see
+[Accuracy and limitations](#accuracy-and-limitations)).
 
 Mei-rs reads only the capture targets of an indexed BAM or CRAM file, collects
 the reads that betray an insertion (soft-clipped reads, discordant pairs,
@@ -10,13 +15,31 @@ inserted element against Alu, LINE-1 and SVA consensus sequences, and removes
 the artefacts specific to capture data, such as soft-clips that stop at the
 probe edges.
 
-> **Status: v0.4.0.** `mei-rs scan` finds candidate insertion
+> **Status: v0.4.1.** `mei-rs scan` finds candidate insertion
 > sites, types the element (family, subfamily, strand), assembles the
 > junctions (TSD, poly(A) tail), genotypes and scores the candidates, and
 > writes TSV, BED, JSON or VCF. Precision and recall on real exomes are in
 > [Accuracy and limitations](#accuracy-and-limitations).
 
 ## Installation
+
+From a release binary (Linux x86_64 and aarch64 with glibc 2.17 or later,
+macOS arm64 and x86_64), with its checksum, on the
+[releases page](https://github.com/VictorYt/Mei-rs/releases):
+
+```bash
+tar xzf mei-rs-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz
+sha256sum -c mei-rs-vX.Y.Z-x86_64-unknown-linux-gnu.tar.gz.sha256
+mei-rs-vX.Y.Z-x86_64-unknown-linux-gnu/mei-rs --version
+```
+
+From the container image (Linux x86_64 and aarch64):
+
+```bash
+docker run --rm -v "$PWD":/data -w /data ghcr.io/victoryt/mei-rs:latest \
+  scan --bam sample.bam --bed targets.bed --reference genome.fa -o sample.tsv
+# or build it from a clone: docker build -t mei-rs .
+```
 
 From source, with Rust 1.91 or later:
 
@@ -99,6 +122,89 @@ skipped with a warning.
 | `-v`, `-q` | | more (`-v`, `-vv`) or fewer (`-q`) logs; `RUST_LOG` takes precedence |
 
 ### How it works
+
+The pipeline has five phases (below, then the detail of each step). Editable
+Excalidraw sources and SVG exports of the schemes are in
+[`docs/images`](docs/images).
+
+```mermaid
+flowchart TD
+    subgraph IN["Inputs"]
+        A["BAM / CRAM + index"]
+        B["BED: capture targets"]
+        C["MEI consensus, built in"]
+        D["Reference genome FASTA"]
+    end
+    IN --> P1["1. Reader<br/>signal extraction"]
+    P1 -->|signals| P2["2. Cluster<br/>candidate sites"]
+    P2 -->|candidates| P3["3. Typer<br/>which element?"]
+    P3 -->|typed candidates| P4["4. Assembly<br/>exact junctions"]
+    P4 -->|"contigs, TSD, tail"| P5["5. Genotype + filters<br/>score and output"]
+    P5 --> OUT["VCF 4.2, or TSV / BED / JSON"]
+```
+
+<details>
+<summary>Detailed schemes (phases 1 to 5)</summary>
+
+Phases 1 and 2, from reads to candidate sites
+([SVG](docs/images/2-signals-and-clusters.svg)):
+
+```mermaid
+flowchart TD
+    subgraph R["Phase 1: Reader, probes + padding only"]
+        S1["Soft-clipped reads<br/>clip of 15 bases or more"]
+        S2["Discordant mates<br/>MAPQ 0, other contig, too far"]
+        S3["Unmapped mates<br/>anchor mapped in a target"]
+    end
+    subgraph C["Phase 2: Cluster"]
+        K1["Group the signals<br/>same contig, within a window"] --> K2["Find the breakpoint<br/>clip junction, or edge of the mate groups"]
+        K2 --> K3["Candidate site<br/>junctions, tail, TSD estimate, depth, signal ratio"]
+    end
+    S1 & S2 & S3 --> K1
+    K3 --> F["Filters: low_support, no_junction, low_ratio,<br/>probe_edge, tandem_repeat"]
+    F --> N["Typer, phase 3"]
+```
+
+Phase 3, typing the element
+([SVG](docs/images/3-typing.svg)):
+
+```mermaid
+flowchart TD
+    subgraph A["A. Typing by the junction clips"]
+        A1["Junction soft-clips<br/>without their poly(A/T) run"] --> A2["k-mer seeds, k = 11, both strands<br/>against the Dfam consensus"]
+        A2 --> A3["Smith-Waterman<br/>on the 8 best strands"]
+        A3 --> A4["Typed at 70% coverage and 0.9 identity"]
+        A4 --> A5["family, subfamily, strand,<br/>element coordinates"]
+    end
+    subgraph B["B. Checking the mates, up to 40 per candidate"]
+        B1["Get the mate sequence<br/>unmapped: re-read at the anchor<br/>mapped: reference at its locus"] --> B2["Type it without A/T runs of 10 or more<br/>MEI mate = same family"]
+        B2 --> B3["Not MEI mates: found in the reference within 600 bp,<br/>tail mate next to a reference copy"]
+        B3 --> B4["checked mates, MEI mates, mean identity"]
+        B4 --> B5["2+ MEI mates of one family<br/>type an untyped candidate"]
+    end
+    A5 & B5 --> F["Filters: untyped, non_mei_mates<br/>mate-only insertions pass with an imprecise position"]
+```
+
+Phases 4 and 5, assembly, genotype, score and output
+([SVG](docs/images/4-assembly-genotype-output.svg)):
+
+```mermaid
+flowchart TD
+    subgraph P4["Phase 4: local assembly, needs --reference"]
+        D1["Gather the reads clipped within 5 bp of each junction<br/>+ the unmapped reads placed near the site"] --> D2["de Bruijn graph, k = 21<br/>seeded from the reference flank"]
+        D2 --> D3["The contig leaves the reference<br/>= the junction"]
+        D3 --> D4["TSD = reference between the junctions<br/>poly(A) tail = pure run<br/>mates only: breakpoint tried on both sides"]
+    end
+    subgraph P5["Phase 5: genotype, score, confidence"]
+        E1["Genotype<br/>alt reads clipped at a junction<br/>against ref reads over the site<br/>0/0, 0/1, 1/1"]
+        E2["QUAL score, naive Bayes<br/>tail, both sides, TSD, identity,<br/>distinct starts, MEI mates, depth ratio"]
+        E3["Confidence<br/>high: tail + TSD<br/>medium: tail<br/>low: otherwise"]
+    end
+    D4 --> E1 & E2 & E3
+    E1 & E2 & E3 --> O["VCF 4.2: symbolic ALT INS:ME, MEINFO, TSD,<br/>CIPOS, GT:GQ:AD:DP"]
+```
+
+</details>
 
 1. **Signal extraction**, in parallel over the padded targets: reads that are
    primary, mapped, not duplicates and above `--min-mapq` can anchor a signal.
@@ -201,10 +307,38 @@ Genomes exomes and on HG002 (held out), with the method and commands in
 
 | | Precision | Recall (`PASS`) |
 |---|---|---|
-| Seven 1000 Genomes exomes, 371 MEIs | 0.759 | 0.337 |
+| Seven 1000 Genomes exomes, 371 MEIs | 0.759 (0.717 to 0.799) | 0.337 (0.256 to 0.423) |
 | Same, `--min-qual 5` | 0.950 | 0.305 |
 | HG002 (GRCh37), 49 MEIs | 0.415 | 0.347 |
+| MELT 2.2.2, seven exomes | 0.897 | 0.259 |
 | Scramble 1.0.2, seven exomes | 0.687 | 0.154 |
+| xTea 0.1.9, seven exomes (default / exome cutoffs) | 0.852 / 0.767 | 0.062 / 0.089 |
+
+The intervals in brackets are 95% bootstrap intervals over the seven samples.
+On the same seven exomes Mei-rs finds more of the insertions than MELT,
+Scramble and xTea (recall 0.337 against 0.259, 0.154 and at most 0.089) and is
+less precise than MELT (0.759 against 0.897). Its precision on HG002, held out
+(0.415), is far below that on the seven exomes: the quality score and several
+thresholds were fitted on those seven exomes ([thresholds](docs/thresholds.md)),
+so their numbers are optimistic for a new sample. The comparison with MELT,
+Scramble and xTea is in [docs/validation](docs/validation/README.md#comparison-with-melt-and-xtea).
+
+### Which `--min-qual`
+
+The threshold trades recall for precision; the default (0) keeps every `PASS`
+call. Measured on the seven exomes (HG002 in brackets):
+
+| Use | `--min-qual` | Precision | Recall (`PASS`) |
+|---|---|---|---|
+| Discovery, nothing missed, confirm afterwards | 0 (default) | 0.759 (0.415) | 0.337 (0.347) |
+| Screening, little cost in recall | 2 | 0.893 (0.567) | 0.334 (0.347) |
+| Short list to confirm | 5 | 0.950 (0.577) | 0.305 (0.306) |
+| Very short list | 10 | 0.968 | 0.245 |
+
+The quality score ranks the calls better than it estimates a probability (AUC
+0.928 leaving one sample out, 0.787 on HG002). Whatever the threshold,
+insertions close to a reference copy of the same family and very deep samples
+produce false calls (the `low` confidence tier).
 
 Recall counts every MEI within 300 bp of a target: 27 of the 36 MEIs inside
 the targets are called `PASS`, against 36 of the 240 at 101-300 bp from them.
@@ -234,14 +368,31 @@ Other limitations:
   (NA12878 on 12 cores, same output: BAM 66 s and 1.2 GB, CRAM 124 s). On
   macOS, the allocator keeps the freed reference sequences in memory.
 
-Calls are research results: confirm them with an orthogonal method before any
-clinical use.
+### Scope and licence
+
+Mei-rs is a research tool. It has not been validated for clinical use: it was
+evaluated on 7 exomes of one resource (plus HG002), with long-read assembly
+calls as truth, and no panel data. Confirm its calls with an orthogonal
+method before any clinical use.
+
+Mei-rs is licensed under the AGPL-3.0-or-later. Running the binary on your
+data, inside a pipeline or a workflow engine, does not subject the rest of the
+pipeline to the licence. Modifying Mei-rs and offering the result to users over
+a network (a hosted service) requires offering them the modified source, and a
+program that embeds its code is a derivative work under the licence. This is
+a summary, not legal advice: ask your legal department before integrating it
+in a product.
+
+All the thresholds of the pipeline, with how each was set, are listed in
+[docs/thresholds.md](docs/thresholds.md).
 
 ## Development
 
 ```bash
 cargo build --release
-cargo test                  # unit and end-to-end tests on synthetic fixtures
+cargo test                  # unit, property and end-to-end tests on synthetic fixtures
+cargo bench                 # criterion benchmarks (extraction, clustering, typing)
+fuzz/run.sh 30              # cargo-fuzz targets, 30 s each (nightly toolchain, cargo-fuzz)
 tests/data/generate.sh      # regenerate the fixtures (python3, samtools, perl)
 UPDATE_EXPECTED=1 cargo test --test scan   # update the expected outputs
 ```
