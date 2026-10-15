@@ -71,7 +71,7 @@ check() {
     done < <(grep -v '^#' "$base.vcf" | cut -f1,2)
 }
 
-for sample in positive negative homozygous tailonly; do
+for sample in positive negative homozygous tailonly mateonly; do
     for ext in bam cram; do
         check "$sample" "$data/$sample.$ext" $data/targets.bed "$ext"
     done

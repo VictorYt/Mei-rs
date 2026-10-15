@@ -1,0 +1,58 @@
+[package]
+name = "mei-rs-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+mei-rs = { path = ".." }
+noodles = { version = "0.117", features = ["sam"] }
+
+# Not part of the workspace of the crate: fuzzing needs a nightly toolchain.
+[workspace]
+
+[[bin]]
+name = "bed_parse"
+path = "fuzz_targets/bed_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "consensus_parse"
+path = "fuzz_targets/consensus_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "type_sequence"
+path = "fuzz_targets/type_sequence.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "align_local"
+path = "fuzz_targets/align_local.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "poly_tail"
+path = "fuzz_targets/poly_tail.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "clip_lengths"
+path = "fuzz_targets/clip_lengths.rs"
+test = false
+doc = false
+bench = false

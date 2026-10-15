@@ -16,6 +16,15 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Tests and benchmarks (#87): property tests (`tests/properties.rs`, proptest)
+  of the BED parser, the CIGAR clip lengths, the poly(A/T) tail detection,
+  k-mers, the local alignment and the typing; `cargo fuzz` targets for the same
+  routines (`fuzz/`, `fuzz/run.sh`); `cargo bench` (criterion) of extraction,
+  clustering and typing on the fixtures and of the routines they use; a
+  fixture of a mate-only insertion (`mateonly`: short clips at the breakpoint,
+  mates in the element) and its test. `reader::signals::clip_lengths` and
+  `poly_tail` are public for them.
+
 - Release binaries and container image (#84): a `Release` workflow, run when a
   release is published, builds Linux (x86_64, aarch64; glibc 2.17 or later,
   linked with cargo-zigbuild) and macOS (arm64, x86_64) binaries, attaches

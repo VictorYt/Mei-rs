@@ -12,7 +12,7 @@ python3 -I simulate.py "$tmp"
 mv "$tmp/reference.fa" "$tmp/targets.bed" "$tmp/targets_tiled.bed" "$tmp/targets_tract.bed" "$tmp/truth.tsv" .
 samtools faidx reference.fa
 
-for sample in positive negative homozygous tailonly; do
+for sample in positive negative homozygous tailonly mateonly; do
     samtools sort --no-PG -O bam -o "$sample.bam" "$tmp/$sample.sam"
     samtools index "$sample.bam"
     samtools view --no-PG -C -T reference.fa -o "$tmp/$sample.cram" "$sample.bam"
