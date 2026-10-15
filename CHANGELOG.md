@@ -6,6 +6,10 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Release workflow: the upload job downloads only the binary artifacts (it failed on the image digests still being written, #84); the v0.4.1 binaries were attached by hand from the same run.
+
 ## [0.4.1] - 2026-10-15
 
 Reproducibility and distribution: no change in the calls (HGSVC3 exomes 126
