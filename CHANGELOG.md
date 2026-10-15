@@ -8,6 +8,10 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Release workflow: the image name is lowercase (`ghcr.io/victoryt/mei-rs`), as registries require (#84).
+
+### Fixed
+
 - Container image: the `Dockerfile` copies `benches/`, which `Cargo.toml` declares (#84).
 
 ### Changed
