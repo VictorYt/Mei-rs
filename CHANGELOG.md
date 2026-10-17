@@ -8,6 +8,12 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Default output** (#90): `--profile exome` (default) sets `--min-qual 10`,
+  so `PASS` calls of lower quality are now flagged `low_qual`; `--profile
+  discovery` (or `--min-qual 0`) gives the previous output. The threshold was
+  chosen on 18 tuning exomes for a precision of 0.95 there; on 18 held-out
+  exomes it gives precision 0.911 (0.873 to 0.946) and recall 0.192 (0.249
+  without it); HG002 0.636 / 0.286 (0.415 / 0.347).
 - Genotype (#91): a candidate that passed is genotyped `0/1` or `1/1`, never
   `0/0`, with a prior of 0.77 for the heterozygous genotype (`0/0` stays
   possible for filtered candidates, `--keep-filtered`). HGSVC3 exomes: 107 of
