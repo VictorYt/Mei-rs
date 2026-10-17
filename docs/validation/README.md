@@ -375,6 +375,29 @@ The `exome` profile uses QUAL 10, the lowest with a tuning precision of 0.95,
 which keeps 0.9 on the test set. HG002 at QUAL 10: 14 true / 8 false (0.636,
 recall 0.286).
 
+### Refit on the tuning set and mate-only rule (#82)
+
+The seven weights of the score refitted on the 358 `PASS` calls of the 18
+tuning exomes (previously 169 calls of seven) rank the 350 test calls as the
+current weights do: AUC 0.889 against 0.891 (HG002: 0.797 against 0.786;
+leaving one tuning sample out: 0.913). At QUAL 5 and 10 the refit keeps 226 /
+35 and 185 / 17 true / false test calls, the current score 212 / 36 and
+185 / 18; the difference is within the sampling noise of 18 samples, and the
+QUAL values would no longer mean what #90 chose, so the weights are kept.
+
+The evidence of the calls typed by their mates (typed by mates, reads clipped
+at the breakpoint, imprecise position, junction clips) does not raise the test
+AUC either (0.879-0.890 against 0.889); 8 or more MEI mates gives 0.901 on the
+test set but not on the tuning set (0.922 against 0.924). Among the 109 `PASS`
+calls typed by their mates (87 true), the false ones have a median of 3 MEI
+mates and a fraction of 0.4 (true: 13 and 0.8). Raising the thresholds of
+that rule (at least 4 MEI mates, fraction 0.5-0.6, identity 0.98) removes 5 of
+the 80 false calls of the tuning set for 1-4 true ones, and at QUAL 10, 2 of
+the 18 false calls of the test set for 3 true ones: the QUAL threshold already
+removes most of them, so the rule is kept. (The identity used is the one of
+the `identity` column; the mean mate identity of each candidate is not in the
+output.)
+
 ## Genotypes (#91)
 
 Of the 123 true PASS calls with reads at the site (v0.4.0), 14 heterozygous
