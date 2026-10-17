@@ -6,6 +6,11 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-17
+
+Independent validation: thresholds are now chosen on a tuning set and reported on
+held-out exomes. The default output changes (`--profile exome`).
+
 ### Changed
 
 - **Default output** (#90): `--profile exome` (default) sets `--min-qual 10`,
@@ -20,6 +25,18 @@ project follows [Semantic Versioning](https://semver.org/).
   123 genotypes of the true calls right (91 before), HG002 11 of 17 (9); the
   calls are unchanged. `evaluate.py --tp-out` gives the truth genotype of each
   call.
+
+### Added
+
+- `docs/validation/split.tsv` (#88): the 36 HGSVC3 samples that have a 1000
+  Genomes exome, split in 18 tuning and 18 test samples (by super-population
+  and depth). v0.4.1 on the 29 exomes never used before: precision 0.714
+  (95% CI 0.649 to 0.765), recall 0.238 (0.194 to 0.285), against 0.759 and
+  0.337 on the seven tuned exomes; genotypes 310 of 372 right.
+- Documented in `docs/validation` (#89, #82): a logistic regression and a
+  refit of the score weights on the tuning set do not rank the test calls
+  better than the current score (AUC 0.887 and 0.889 against 0.891), nor does
+  mate-only evidence; the score and the mate-only rule are unchanged.
 
 ### Fixed
 
@@ -330,7 +347,9 @@ targeted capture and exome data.
   kept in memory (#23); most soft-clips of older data fall below the base
   quality threshold (#25).
 
-[Unreleased]: https://github.com/VictorYt/Mei-rs/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/VictorYt/Mei-rs/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/VictorYt/Mei-rs/compare/v0.4.1...v0.5.0
+[0.4.1]: https://github.com/VictorYt/Mei-rs/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/VictorYt/Mei-rs/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/VictorYt/Mei-rs/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/VictorYt/Mei-rs/compare/v0.1.1...v0.2.0
