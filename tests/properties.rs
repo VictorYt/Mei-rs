@@ -190,6 +190,10 @@ proptest! {
         let hi = (lo + length).min(consensus.sequence.len());
         prop_assume!(hi - lo >= 40);
         let mut piece = consensus.sequence[lo..hi].to_vec();
+        // A piece that is mostly poly(A) (the tail of the consensus) is not
+        // typed by design: a tail carries no information on the element.
+        let most_common = b"ACGT".iter().map(|b| piece.iter().filter(|p| *p == b).count()).max().unwrap();
+        prop_assume!(most_common * 10 < piece.len() * 6);
         if reverse {
             piece = reverse_complement(&piece);
         }
