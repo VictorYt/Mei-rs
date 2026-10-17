@@ -301,6 +301,46 @@ removed from the annotation files (the hs37d5 contigs are `1`..`22`).
   images, emulated on this arm64 machine (and while other jobs were running),
   so their wall time says nothing about the tools.
 
+## Tuning and test sets (#88)
+
+`split.tsv` lists the 36 HGSVC3 samples that have a 1000 Genomes GRCh38 exome
+and fixes the split once and for all:
+
+* **tuning** (7): HG00512, HG00513, HG00731, HG00733, NA19238, NA19239, NA19240.
+  Every threshold and weight up to v0.4.1 was fitted on them.
+* **test** (29): the other samples, never used to fit anything (17
+  populations). Changes are fitted on the tuning set only and reported on the
+  test set. HG002 (GRCh37, lifted truth) stays a second held-out sample.
+
+The split follows the history of the project (the seven exomes were already
+tuned) rather than a stratified draw.
+
+### v0.4.1 on the test set
+
+`run.sh` with `SAMPLES` set to the test samples, `SKIP_HG002=1`,
+`ALIGNMENT_EXT=cram`, 4 threads: 3-6 minutes per sample, 9 GB peak resident set
+on macOS (CRAM, allocator cache included).
+
+| | tuning (7) | test (29) |
+| :--- | :--- | :--- |
+| PASS precision | 0.759 | 0.714 (95% CI 0.649-0.765) |
+| PASS recall | 0.337 | 0.238 (0.194-0.285) |
+| `--min-qual 2` precision / recall | 0.893 / 0.337 | 0.830 / 0.232 |
+| `--min-qual 5` precision / recall | 0.950 / 0.307 | 0.875 / 0.208 |
+| `--min-qual 10` precision / recall | 0.968 / 0.248 | 0.919 / 0.179 |
+| genotypes right (true PASS calls) | 107 / 123 | 310 / 372 |
+
+Recall by distance to the targets (test): in target 115/183, 1-100 bp 183/389,
+more than 100 bp 75/998. By family: Alu 0.237, L1 0.263, SVA 0.205. Fitting
+cost about 0.05 of precision at PASS and 0.03-0.06 with `--min-qual`; recall
+fell more (0.337 to 0.238), which this comparison does not explain.
+
+False positives (150): 54 are at 10 recurrent sites found in 3 to 13 samples
+(chr19:41807k AluY, chr19:52384k AluYb8, chr6:43687k SVA_F, chr7:77241k,
+chr20:26113k, chr19:38836k, chr8:38976k, chr17:80082k), all `low`. One sample,
+NA20355, has 24 of them (34 PASS calls, precision 0.29): mostly `low` L1 and
+mate-typed Alu calls and 8 `medium` Alu calls.
+
 ## Genotypes (#91)
 
 Of the 123 true PASS calls with reads at the site (v0.4.0), 14 heterozygous
