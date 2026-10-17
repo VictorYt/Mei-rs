@@ -6,6 +6,42 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-17
+
+Independent validation: thresholds are now chosen on a tuning set and reported on
+held-out exomes. The default output changes (`--profile exome`).
+
+### Changed
+
+- **Default output** (#90): `--profile exome` (default) sets `--min-qual 10`,
+  so `PASS` calls of lower quality are now flagged `low_qual`; `--profile
+  discovery` (or `--min-qual 0`) gives the previous output. The threshold was
+  chosen on 18 tuning exomes for a precision of 0.95 there; on 18 held-out
+  exomes it gives precision 0.911 (0.873 to 0.946) and recall 0.192 (0.249
+  without it); HG002 0.636 / 0.286 (0.415 / 0.347).
+- Genotype (#91): a candidate that passed is genotyped `0/1` or `1/1`, never
+  `0/0`, with a prior of 0.77 for the heterozygous genotype (`0/0` stays
+  possible for filtered candidates, `--keep-filtered`). HGSVC3 exomes: 107 of
+  123 genotypes of the true calls right (91 before), HG002 11 of 17 (9); the
+  calls are unchanged. `evaluate.py --tp-out` gives the truth genotype of each
+  call.
+
+### Added
+
+- `docs/validation/split.tsv` (#88): the 36 HGSVC3 samples that have a 1000
+  Genomes exome, split in 18 tuning and 18 test samples (by super-population
+  and depth). v0.4.1 on the 29 exomes never used before: precision 0.714
+  (95% CI 0.649 to 0.765), recall 0.238 (0.194 to 0.285), against 0.759 and
+  0.337 on the seven tuned exomes; genotypes 310 of 372 right.
+- Documented in `docs/validation` (#89, #82): a logistic regression and a
+  refit of the score weights on the tuning set do not rank the test calls
+  better than the current score (AUC 0.887 and 0.889 against 0.891), nor does
+  mate-only evidence; the score and the mate-only rule are unchanged.
+
+### Fixed
+
+- Release workflow: the upload job downloads only the binary artifacts (it failed on the image digests still being written, #84); the v0.4.1 binaries were attached by hand from the same run.
+
 ## [0.4.1] - 2026-10-15
 
 Reproducibility and distribution: no change in the calls (HGSVC3 exomes 126
@@ -311,7 +347,9 @@ targeted capture and exome data.
   kept in memory (#23); most soft-clips of older data fall below the base
   quality threshold (#25).
 
-[Unreleased]: https://github.com/VictorYt/Mei-rs/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/VictorYt/Mei-rs/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/VictorYt/Mei-rs/compare/v0.4.1...v0.5.0
+[0.4.1]: https://github.com/VictorYt/Mei-rs/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/VictorYt/Mei-rs/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/VictorYt/Mei-rs/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/VictorYt/Mei-rs/compare/v0.1.1...v0.2.0

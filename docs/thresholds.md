@@ -4,9 +4,9 @@ Every threshold that decides a call or a score, with its value and where it
 comes from. The HGSVC3 truth set and the seven 1000 Genomes exomes used to fit
 or choose them are the ones of [docs/validation](validation/README.md); HG002
 was never used. A value marked **fitted** or **chosen** was set on those seven
-exomes, so the precision and recall measured on them are optimistic for these
-values (HG002, held out, is the only independent check; independent exomes
-are planned for the 1.0 publication).
+exomes (from #90 on, on the 18 tuning exomes of `validation/split.tsv`), so
+the precision and recall measured on them are optimistic for these values;
+the 18 test exomes and HG002 are the independent checks.
 
 Origins:
 
@@ -33,7 +33,7 @@ Origins:
 | `--min-mei-mate-fraction` | 0.3 | chosen (#31) |
 | `--min-signal-ratio` | 0.05 | design (v0.1.0) |
 | `--probe-edge-tolerance` | 2 bp | design (#29) |
-| `--min-qual` | 0 (off) | decided 2026-10-11 to catch every case; see the README for what 2 and 5 give |
+| `--profile`, `--min-qual` | `exome`: 10 (`discovery`: 0) | chosen (#90) on the 18 tuning exomes of `docs/validation/split.tsv`: lowest quality with a precision of 0.95 there (0.911 on the 18 test exomes); 0 until v0.4.1 |
 
 ## Internal constants
 
