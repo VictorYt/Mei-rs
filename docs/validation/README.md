@@ -304,18 +304,19 @@ removed from the annotation files (the hs37d5 contigs are `1`..`22`).
 ## Tuning and test sets (#88)
 
 `split.tsv` lists the 36 HGSVC3 samples that have a 1000 Genomes GRCh38 exome
-and fixes the split once and for all:
+and fixes the split: 18 **tuning** samples, on which thresholds and weights
+are fitted or chosen, and 18 **test** samples, on which they are reported and
+never fitted. HG002 (GRCh37, lifted truth) stays a second held-out sample.
 
-* **tuning** (7): HG00512, HG00513, HG00731, HG00733, NA19238, NA19239, NA19240.
-  Every threshold and weight up to v0.4.1 was fitted on them.
-* **test** (29): the other samples, never used to fit anything (17
-  populations). Changes are fitted on the tuning set only and reported on the
-  test set. HG002 (GRCh37, lifted truth) stays a second held-out sample.
+The seven exomes used up to v0.4.1 are all in the tuning set. The other 11
+tuning samples were drawn from the 29 new ones by super-population (so that
+both sets hold 9-10 African, 3-4 East Asian, 2-3 European, 1-2 American and
+one South Asian sample) and, within each, evenly along the median depth of
+the candidates (column `median_candidate_depth`). A first split kept the 29 new
+samples as the test set; it was redrawn before anything was fitted on them,
+after the false-positive analysis below had been done on all 29.
 
-The split follows the history of the project (the seven exomes were already
-tuned) rather than a stratified draw.
-
-### v0.4.1 on the test set
+### v0.4.1 on the 29 new exomes
 
 `run.sh` with `SAMPLES` set to the test samples, `SKIP_HG002=1`,
 `ALIGNMENT_EXT=cram`, 4 threads: 3-6 minutes per sample, 9 GB peak resident set
@@ -340,6 +341,39 @@ False positives (150): 54 are at 10 recurrent sites found in 3 to 13 samples
 chr20:26113k, chr19:38836k, chr8:38976k, chr17:80082k), all `low`. One sample,
 NA20355, has 24 of them (34 PASS calls, precision 0.29): mostly `low` L1 and
 mate-typed Alu calls and 8 `medium` Alu calls.
+
+### Logistic regression (#89)
+
+A logistic regression on the seven pieces of evidence of the quality score,
+fitted on the 358 labelled `PASS` calls of the tuning set (L2 penalty 1), ranks
+the test calls no better than the current score (AUC 0.887 against 0.891 on
+the 350 test calls; HG002 0.799 against 0.786), and ten more continuous
+features (support, identity, depth, assembly, mate fraction...) did not help
+either (fitted on the seven exomes, AUC on the 29 new ones: 0.894 with them,
+0.896 without, 0.888 for the current score).
+Its probability is roughly calibrated on the test set (calls predicted 0.8-1.0
+true are 0.89 true, 0.6-0.8 are 0.65), not on HG002 (0.8-1.0: 0.67). The
+current score was kept: the ranking is limited by the evidence, not by the
+model.
+
+### Default threshold (#90)
+
+Current score, `PASS` calls, true / false and precision:
+
+| QUAL >= | tuning (18) | test (18) | test precision, 95% CI | test recall, 95% CI |
+| :--- | :--- | :--- | :--- | :--- |
+| 0 | 278 / 80, 0.777 | 240 / 110, 0.686 | | 0.249 |
+| 2 | 273 / 33, 0.892 | 236 / 57, 0.805 | 0.743-0.855 | 0.245 (0.191-0.305) |
+| 3 | 271 / 21, 0.928 | 234 / 47, 0.833 | 0.765-0.882 | 0.242 |
+| 5 | 248 / 17, 0.936 | 212 / 36, 0.855 | 0.798-0.895 | 0.220 (0.169-0.274) |
+| 7 | 225 / 15, 0.938 | 201 / 27, 0.882 | 0.835-0.915 | 0.208 |
+| 10 | 205 / 10, 0.953 | 185 / 18, 0.911 | 0.873-0.946 | 0.192 (0.144-0.245) |
+
+The lowest threshold with a tuning precision of 0.9 (QUAL 3) gives 0.833 on
+the test set: the precision of a threshold drops by 0.05-0.10 on new samples.
+The `exome` profile uses QUAL 10, the lowest with a tuning precision of 0.95,
+which keeps 0.9 on the test set. HG002 at QUAL 10: 14 true / 8 false (0.636,
+recall 0.286).
 
 ## Genotypes (#91)
 
