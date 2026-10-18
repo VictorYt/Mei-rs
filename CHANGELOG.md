@@ -37,6 +37,10 @@ held-out exomes. The default output changes (`--profile exome`).
   refit of the score weights on the tuning set do not rank the test calls
   better than the current score (AUC 0.887 and 0.889 against 0.891), nor does
   mate-only evidence; the score and the mate-only rule are unchanged.
+- `docs/validation` (#83): `fetch-data.sh` and `run.sh` follow `split.tsv`
+  (36 exomes, about 160 GB), scan with `--profile discovery`, evaluate the
+  tuning set, the test set and HG002 separately, and refit the score on the
+  tuning set only. Checked on a reduced set; the full download is not rerun yet.
 
 ### Fixed
 
