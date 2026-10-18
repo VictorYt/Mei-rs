@@ -1,15 +1,18 @@
 #!/bin/bash
-# Download the public inputs of the evaluation (see MANIFEST.md): about 70 GB.
+# Download the public inputs of the evaluation (see MANIFEST.md): about 160 GB (36 exomes).
 #
 #   fetch-data.sh DIR
 #
 # Layout written in DIR, as read by `run.sh`:
 #   truth/   HGSVC3 MEI calls, UCSC hg38ToHg19 chain
 #   ref/     GRCh38 and hs37d5 reference genomes
-#   1000g/   SAMPLE.exome.cram(.crai) of the seven 1000 Genomes exomes
+#   1000g/   SAMPLE.exome.cram(.crai) of the 1000 Genomes exomes of split.tsv
 #   giab/    HG002.exome.bam(.bai)
 #   targets/ exome targets (build-targets.sh)
 # Files already present with the right md5 are not downloaded again.
+#
+# SET selects the samples of split.tsv: `all` (default, 36 exomes, about 140 GB),
+# `tuning` (18) or `test` (18). SAMPLES (a list) overrides it.
 set -euo pipefail
 dir=${1:?usage: fetch-data.sh DIR}
 here=$(cd "$(dirname "$0")" && pwd)
@@ -34,7 +37,9 @@ get $REF/phase2_reference_assembly_sequence/hs37d5.fa.gz "$dir/ref/hs37d5.fa.gz"
 # The 1000 Genomes exome index lists the path and the md5 of every file.
 INDEX=http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000_genomes_project/1000genomes.exome.GRCh38DH.alignment.index
 get $INDEX "$dir/1000g/alignment.index"
-for s in HG00512 HG00513 HG00731 HG00733 NA19238 NA19239 NA19240; do
+set=${SET:-all}
+samples=${SAMPLES:-$(awk -F'\t' -v set="$set" 'NR > 1 && (set == "all" || $2 == set) {print $1}' "$here/split.tsv")}
+for s in $samples; do
   grep -F "/$s/" "$dir/1000g/alignment.index" | tr '\t' '\n' | paste - - | grep -E "\.exome\.cram(\.crai)?\s" |
   while read -r path sum; do
     get "https://${path#ftp:/}" "$dir/1000g/$s.exome.${path##*.exome.}" "$sum"
