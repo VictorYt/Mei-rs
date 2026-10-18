@@ -39,18 +39,26 @@ The whole evaluation is scripted and versioned here; `MANIFEST.md` lists every
 public input with its checksum.
 
 ```bash
-docs/validation/fetch-data.sh data/       # truth, references, 7 CRAMs + HG002, targets (~70 GB)
+docs/validation/fetch-data.sh data/       # truth, references, 36 CRAMs + HG002, targets (~160 GB)
 cargo build --release
 docs/validation/run.sh data/ out/         # scan, evaluate, refit
 ```
 
-`run.sh` runs `mei-rs scan --keep-filtered --reference` on each exome (the
-GRCh38 targets for the 1000 Genomes exomes, the GRCh37 targets and `hs37d5` for
-HG002), then `evaluate.py` and `refit.py`. By hand, for one sample:
+`run.sh` runs `mei-rs scan --profile discovery --keep-filtered --reference` on
+each exome of `split.tsv` (the GRCh38 targets for the 1000 Genomes exomes, the
+GRCh37 targets and `hs37d5` for HG002), one after the other with 4 threads at
+low priority, then `evaluate.py` on the tuning samples, the test samples and
+HG002, and `refit.py` (fitted on the tuning samples, reported on the test
+samples and HG002). `SET=tuning|test`, `SAMPLES`, `TEST_SAMPLES` and `THREADS`
+restrict or tune the run (see the header of the script); a sample whose TSV
+exists is not scanned again. To check the weights of `genotype::score`, which
+were fitted on the first seven exomes: `SAMPLES="HG00512 HG00513 HG00731
+HG00733 NA19238 NA19239 NA19240" SET=tuning run.sh data/ out/` (prior 0.501 on
+the v0.4.0 calls). By hand, for one sample:
 
 ```bash
 mei-rs scan --bam SAMPLE.exome.bam --bed exome_targets.hg38.bed \
-  --reference GRCh38_full_analysis_set_plus_decoy_hla.fa --keep-filtered -o SAMPLE.tsv
+  --reference GRCh38_full_analysis_set_plus_decoy_hla.fa --profile discovery --keep-filtered -o SAMPLE.tsv
 python3 docs/validation/evaluate.py \
   --truth MEI_Callset_GRCh38.ALL.20241211.csv.gz --bed exome_targets.hg38.bed \
   --min-qual 0,2,5,10,15 \
