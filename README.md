@@ -15,7 +15,7 @@ inserted element against Alu, LINE-1 and SVA consensus sequences, and removes
 the artefacts specific to capture data, such as soft-clips that stop at the
 probe edges.
 
-> **Status: v0.4.1.** `mei-rs scan` finds candidate insertion
+> **Status: v0.5.0.** `mei-rs scan` finds candidate insertion
 > sites, types the element (family, subfamily, strand), assembles the
 > junctions (TSD, poly(A) tail), genotypes and scores the candidates, and
 > writes TSV, BED, JSON or VCF. Precision and recall on real exomes are in
@@ -111,7 +111,8 @@ skipped with a warning.
 | `--min-mei-mate-fraction` | 0.3 | minimum fraction of MEI mates among the mates checked against the consensus sequences (`non_mei_mates` below; 0 turns the filter off) |
 | `--require-tail` | off | also require a soft-clip with a poly(A/T) tail (`no_tail`) |
 | `--min-signal-ratio` | 0.05 | minimum number of supporting reads per read of local depth |
-| `--min-qual` | 0 | minimum quality score (`low_qual` below; 0 turns the filter off) |
+| `--profile` | `exome` | preset of the thresholds: `exome` keeps the calls of quality 10 or more, `discovery` all the calls that pass the filters (see [Profiles](#profiles-and---min-qual)) |
+| `--min-qual` | from `--profile` | minimum quality score (`low_qual` below; 0 turns the filter off); overrides the profile |
 | `--probe-edge-tolerance` | 2 | distance in bp to a probe start or end within which a soft-clip stops at the probe edge |
 | `--keep-filtered` | off | also write the candidates flagged `no_junction`, `no_tail`, `untyped`, `non_mei_mates`, `tandem_repeat`, `probe_edge`, `low_ratio` or `low_qual` |
 | **Output** | | |
@@ -261,7 +262,8 @@ flowchart TD
    of a probe start or end, without any poly(A/T) tail, typed clip or TSD
    (digestion or ligation artefact of the capture); `low_ratio` when the
    supporting reads are too few for the local depth; `low_qual` when the
-   quality score is below `--min-qual` (off by default). The quality score
+   quality score is below `--min-qual` (10 with the default `exome`
+   profile). The quality score
    is the phred-scaled probability that the candidate is not an insertion,
    from its evidence (tail, MEI mates, typing identity, distinct fragments,
    reads for the depth, both sides, TSD), with likelihood ratios measured on
@@ -307,14 +309,20 @@ Genomes exomes and on HG002 (held out), with the method and commands in
 
 | | Precision | Recall (`PASS`) |
 |---|---|---|
-| Seven 1000 Genomes exomes, 371 MEIs | 0.759 (0.717 to 0.799) | 0.337 (0.256 to 0.423) |
+| 18 test exomes (held out), 965 MEIs, `--profile exome` (default) | 0.911 (0.873 to 0.946) | 0.192 (0.144 to 0.245) |
+| Same, `--profile discovery` | 0.686 | 0.249 |
+| Seven 1000 Genomes exomes (tuned on), 371 MEIs, `--profile discovery` | 0.759 (0.717 to 0.799) | 0.337 (0.256 to 0.423) |
 | Same, `--min-qual 5` | 0.950 | 0.305 |
-| HG002 (GRCh37), 49 MEIs | 0.415 | 0.347 |
+| HG002 (GRCh37, held out), 49 MEIs, `--profile exome` | 0.636 | 0.286 |
+| Same, `--profile discovery` | 0.415 | 0.347 |
 | MELT 2.2.2, seven exomes | 0.897 | 0.259 |
 | Scramble 1.0.2, seven exomes | 0.687 | 0.154 |
 | xTea 0.1.9, seven exomes (default / exome cutoffs) | 0.852 / 0.767 | 0.062 / 0.089 |
 
-The intervals in brackets are 95% bootstrap intervals over the seven samples.
+The intervals in brackets are 95% bootstrap intervals over the samples. The
+test exomes were never used to fit or choose anything (the split is in
+[docs/validation](docs/validation/README.md#tuning-and-test-sets-88)); recall
+counts every MEI within 300 bp of a target, most of which have no read.
 On the same seven exomes Mei-rs finds more of the insertions than MELT,
 Scramble and xTea (recall 0.337 against 0.259, 0.154 and at most 0.089) and is
 less precise than MELT (0.759 against 0.897). Its precision on HG002, held out
@@ -323,28 +331,32 @@ thresholds were fitted on those seven exomes ([thresholds](docs/thresholds.md)),
 so their numbers are optimistic for a new sample. The comparison with MELT,
 Scramble and xTea is in [docs/validation](docs/validation/README.md#comparison-with-melt-and-xtea).
 
-### Which `--min-qual`
+### Profiles and `--min-qual`
 
-The threshold trades recall for precision; the default (0) keeps every `PASS`
-call. Measured on the seven exomes (HG002 in brackets):
+The quality threshold trades recall for precision. The default profile,
+`exome`, was chosen on the 18 tuning exomes as the lowest threshold with a
+precision of 0.95 there; on the 18 test exomes it gives 0.911. Measured on the
+test exomes (HG002 in brackets):
 
-| Use | `--min-qual` | Precision | Recall (`PASS`) |
+| Use | Option | Precision | Recall (`PASS`) |
 |---|---|---|---|
-| Discovery, nothing missed, confirm afterwards | 0 (default) | 0.759 (0.415) | 0.337 (0.347) |
-| Screening, little cost in recall | 2 | 0.893 (0.567) | 0.334 (0.347) |
-| Short list to confirm | 5 | 0.950 (0.577) | 0.305 (0.306) |
-| Very short list | 10 | 0.968 | 0.245 |
+| Discovery, nothing missed, confirm afterwards | `--profile discovery` | 0.686 (0.415) | 0.249 (0.347) |
+| Screening | `--min-qual 2` | 0.805 (0.567) | 0.245 (0.347) |
+| Shorter list | `--min-qual 5` | 0.855 (0.577) | 0.220 (0.306) |
+| Default | `--profile exome` (`--min-qual 10`) | 0.911 (0.636) | 0.192 (0.286) |
 
 The quality score ranks the calls better than it estimates a probability (AUC
-0.928 leaving one sample out, 0.787 on HG002). Whatever the threshold,
+0.891 on the test exomes, 0.786 on HG002); a logistic regression on the same
+evidence ranks them no better (#89). On other data than the 1000 Genomes
+exomes (HG002 above), the precision of each threshold is lower. There is no
+profile for gene panels yet (no panel with a truth set, #92). Whatever the threshold,
 insertions close to a reference copy of the same family and very deep samples
 produce false calls (the `low` confidence tier).
 
 Recall counts every MEI within 300 bp of a target: 27 of the 36 MEIs inside
 the targets are called `PASS`, against 36 of the 240 at 101-300 bp from them.
 `high` and `medium` candidates (with a tail) are the most reliable (48 true of
-52); most false positives are `low` (no tail): use `--min-qual` (0 by default)
-to trade recall for precision.
+52); most false positives are `low` (no tail), which `--min-qual` removes first.
 
 Other limitations:
 
@@ -360,7 +372,11 @@ Other limitations:
 - Assembly needs `--reference`, and few exome candidates have both junctions
   assembled; otherwise the TSD comes from the soft-clip junctions.
 - The genotype under-counts insertion reads (clips of 15 good bases): it
-  assumes 30% of them at a heterozygous site; 91 of 123 true calls are right.
+  assumes 30% of them at a heterozygous site. A `PASS` call is genotyped
+  `0/1` or `1/1` (never `0/0`): 107 of 123 true calls are right on the seven
+  exomes, 11 of 17 on HG002. Most errors are heterozygous insertions called
+  `1/1` with no reference read over the site (next to a probe edge, where the
+  reads upstream are missing).
 - Candidates closer than `--window` are merged into one.
 - On older data, most soft-clips fall below `--min-clip-quality` (read ends
   masked by the base caller); the log reports how many are set aside (#25).
