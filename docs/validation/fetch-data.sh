@@ -9,6 +9,7 @@
 #   1000g/   SAMPLE.exome.cram(.crai) of the 1000 Genomes exomes of split.tsv
 #   giab/    HG002.exome.bam(.bai)
 #   targets/ exome targets (build-targets.sh)
+#   annotation/ GENCODE exons and coding sequences (GRCh38, GRCh37)
 # Files already present with the right md5 are not downloaded again.
 #
 # SET selects the samples of split.tsv: `all` (default, 36 exomes, about 140 GB),
@@ -33,6 +34,12 @@ get https://hgdownload.soe.ucsc.edu/goldenPath/hg38/liftOver/hg38ToHg19.over.cha
 REF=https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference
 get $REF/GRCh38_reference_genome/GRCh38_full_analysis_set_plus_decoy_hla.fa "$dir/ref/GRCh38_full_analysis_set_plus_decoy_hla.fa" 64b32de2fc934679c16e83a2bc072064
 get $REF/phase2_reference_assembly_sequence/hs37d5.fa.gz "$dir/ref/hs37d5.fa.gz" d10eebe06c0dbbcb04253e3294d63efc
+
+# GENCODE v46 basic annotation (exons and coding sequences of the stratified recall, #114).
+GENCODE=https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_46
+mkdir -p "$dir/annotation"
+get $GENCODE/gencode.v46.basic.annotation.gtf.gz "$dir/annotation/gencode.v46.basic.annotation.gtf.gz" 9d4f206f82756340967a79a96db5bea6
+get $GENCODE/GRCh37_mapping/gencode.v46lift37.basic.annotation.gtf.gz "$dir/annotation/gencode.v46lift37.basic.annotation.gtf.gz" 5eeed01e90825a8e70b6a68b14afb5ea
 
 # The 1000 Genomes exome index lists the path and the md5 of every file.
 INDEX=http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000_genomes_project/1000genomes.exome.GRCh38DH.alignment.index

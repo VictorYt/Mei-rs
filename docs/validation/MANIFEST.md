@@ -14,6 +14,9 @@ numbers of the README (v0.4.0 and later). `fetch-data.sh DIR` downloads and veri
 | GRCh38 reference (full analysis set, decoys, HLA) | `https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/GRCh38_reference_genome/GRCh38_full_analysis_set_plus_decoy_hla.fa` | `64b32de2fc934679c16e83a2bc072064` |
 | GRCh37 reference hs37d5 | `https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/phase2_reference_assembly_sequence/hs37d5.fa.gz` | `d10eebe06c0dbbcb04253e3294d63efc` |
 | Agilent SureSelect V5 baits + 50 bp, merged (HG002 kit), GRCh37 | `https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/data/AshkenazimTrio/analysis/OsloUniversityHospital_Exome_GATK_jointVC_11242015/wex_Agilent_SureSelect_v05_b37.baits.slop50.merged.list` | `e6f46373a2aa67b61000ae316768ddde` |
+| GENCODE v46 basic annotation, GRCh38 (stratified recall) | `https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_46/gencode.v46.basic.annotation.gtf.gz` | `9d4f206f82756340967a79a96db5bea6` |
+| GENCODE v46 basic annotation lifted to GRCh37 (HG002) | `https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_46/GRCh37_mapping/gencode.v46lift37.basic.annotation.gtf.gz` | `5eeed01e90825a8e70b6a68b14afb5ea` |
+| 1000 Genomes pedigree (`family_id` of `split.tsv`) | `https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/working/20130606_sample_info/20130606_g1k.ped` | `ce9150836ccbf135ba764e33f487d6fa` |
 | HG002 exome (Oslo University Hospital, GRCh37) | `https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/data/AshkenazimTrio/HG002_NA24385_son/OsloUniversityHospital_Exome/151002_7001448_0359_AC7F6GANXX_Sample_HG002-EEogPU_v02-KIT-Av5_AGATGTAC_L008.posiSrt.markDup.bam` (+ `.bai`) | `c80f0cab24bfaa504393457b8f7191fa` |
 
 Derived targets (`build-targets.sh`, CrossMap 0.7.3):
