@@ -34,9 +34,13 @@ check targets.GRCh37.chr.bed 3285b0ba60e45550297d5e072d105483
 check hg19ToHg38.over.chain.gz 35887f73fe5e2231656504d1f6430900
 check agilent_v5.slop50.list e6f46373a2aa67b61000ae316768ddde
 
-python3 -m venv venv
-./venv/bin/pip install -q CrossMap==0.7.3
-./venv/bin/CrossMap bed hg19ToHg38.over.chain.gz targets.GRCh37.chr.bed targets.hg38.raw.bed
+# The venv lives in a temporary directory, not in DIR: on exFAT/FAT volumes macOS
+# writes `._*` files that Python then reads as broken `.pth` files.
+venv=$(mktemp -d)
+trap 'rm -rf "$venv"' EXIT
+python3 -m venv "$venv"
+"$venv/bin/pip" install -q CrossMap==0.7.3
+"$venv/bin/CrossMap" bed hg19ToHg38.over.chain.gz targets.GRCh37.chr.bed targets.hg38.raw.bed
 
 awk -F'\t' '{print $1, $2, $3}' OFS='\t' targets.hg38.raw.bed | sort -k1,1 -k2,2n > exome_targets.hg38.bed
 sed 's/^chr//' targets.GRCh37.chr.bed > exome_targets.GRCh37.bed
