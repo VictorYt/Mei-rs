@@ -20,13 +20,26 @@ project follows [Semantic Versioning](https://semver.org/).
   123 genotypes of the true calls right (91 before), HG002 11 of 17 (9); the
   calls are unchanged. `evaluate.py --tp-out` gives the truth genotype of each
   call.
-
 - `--profile exome` (the default) requires `--reference`, unless
   `--allow-no-reference` is given (#120): its quality threshold and every
   published precision were measured with the reference, which turns on the
   `tandem_repeat` filter, the mapped mate checks and the assembly; without
   it the precision is not known. `--profile discovery` still runs without a
   reference.
+
+- **Validation** (#111-#116, #122): the evaluation now excludes from the test
+  set the mother of a tuning sample (HG00732, evaluated apart; families in
+  `split.tsv`, `check_split.py`), matches calls and truth MEIs one to one
+  with a family check, computes its intervals over families and loci, counts
+  sites and carrier pairs apart, gives the recall per stratum with exact
+  lower bounds, and evaluates HG002 on the baits of its own kit (Agilent V5).
+  17 test exomes, `--profile exome`: precision 0.908 (0.809 to 0.977), recall
+  0.183 (0.115 to 0.264), 918 carrier pairs at 244 sites; HG002 0.538 / 0.264
+  (0.636 / 0.286 on the 1000 Genomes targets). Recall within 20 bp of a
+  coding sequence 0.516 (one-sided 95% bound 0.406). The README states the
+  intended use (one caller in an ensemble, calls to confirm), what is out of
+  scope, that the test set is a development set, that the absence of a call
+  never excludes an insertion, and the memory of BAM and CRAM runs apart.
 
 ### Added
 
