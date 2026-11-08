@@ -1,6 +1,6 @@
 //! The `scan` subcommand: discovery of candidate insertion sites.
 
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
 use std::path::Path;
 
@@ -13,7 +13,7 @@ use tracing::{info, warn};
 use crate::assembly::{self, Assembly};
 use crate::cli::{OutputFormat, ScanArgs};
 use crate::cluster::{Candidate, Confidence, Filter, cluster, filters, tracts};
-use crate::genotype::{self, AlleleCounts};
+use crate::genotype::{self, AlleleCounts, score};
 use crate::inputs::Inputs;
 use crate::reader::alleles::Site;
 use crate::reader::breakpoints::BreakpointRequest;
@@ -39,6 +39,13 @@ use crate::writer::{self, Report};
 /// Fails if the inputs are unusable or inconsistent, or if the output cannot
 /// be written.
 pub fn run(args: &ScanArgs) -> Result<()> {
+    let min_qual = args.filter_options().min_qual;
+    if min_qual > score::max_quality() {
+        warn!(
+            "--min-qual {min_qual} is above the largest quality the score can give ({}): every candidate will be flagged low_qual",
+            score::max_quality()
+        );
+    }
     let inputs = Inputs::load(args)?;
     let consensus = ConsensusSet::load(args.consensus.as_deref())?;
     let targets = &inputs.targets;
@@ -599,36 +606,58 @@ fn reference_window(
 }
 
 /// Write the report to the output file, or to standard output.
+///
+/// A file is written next to its final path under a temporary name and
+/// renamed once complete, so an interrupted run never leaves a truncated
+/// output that looks finished. A path ending in `.gz` is compressed (BGZF,
+/// readable by any gzip reader) whatever the format; a compressed VCF is
+/// also indexed.
 fn write_output(report: &Report<'_>, args: &ScanArgs) -> Result<()> {
-    let open = |path: &Path| {
-        File::create(path).with_context(|| format!("cannot create {}", path.display()))
+    let Some(path) = &args.output else {
+        let mut out = BufWriter::new(io::stdout().lock());
+        return writer::write(report, args.format, &mut out)
+            .and_then(|()| out.flush())
+            .context("cannot write the candidates");
     };
-    let compressed = args.format == OutputFormat::Vcf
-        && args
-            .output
-            .as_deref()
-            .is_some_and(|p| p.extension().is_some_and(|e| e == "gz"));
-    let mut out: Box<dyn Write> = match &args.output {
-        Some(path) if compressed => Box::new(bgzf::io::Writer::new(open(path)?)),
-        Some(path) => Box::new(BufWriter::new(open(path)?)),
-        None => Box::new(BufWriter::new(io::stdout().lock())),
-    };
-    writer::write(report, args.format, &mut out)
-        .and_then(|()| out.flush())
-        .context("cannot write the candidates")?;
-    // The BGZF writer writes its end-of-file block when dropped.
-    drop(out);
-    if let Some(path) = &args.output {
-        info!(
-            "{} candidates written to {}",
-            report.candidates.len(),
-            path.display()
-        );
-        if compressed {
-            index_vcf(path)?;
-        }
+    let compressed = path.extension().is_some_and(|e| e == "gz");
+    let partial = partial_path(path);
+    let file =
+        File::create(&partial).with_context(|| format!("cannot create {}", partial.display()))?;
+    let written = (|| {
+        let mut out: Box<dyn Write> = if compressed {
+            Box::new(bgzf::io::Writer::new(file))
+        } else {
+            Box::new(BufWriter::new(file))
+        };
+        writer::write(report, args.format, &mut out)?;
+        out.flush()?;
+        // The BGZF writer writes its end-of-file block when dropped.
+        drop(out);
+        fs::rename(&partial, path)
+    })();
+    if let Err(error) = written {
+        let _ = fs::remove_file(&partial);
+        return Err(error)
+            .with_context(|| format!("cannot write the candidates to {}", path.display()));
+    }
+    info!(
+        "{} candidates written to {}",
+        report.candidates.len(),
+        path.display()
+    );
+    if compressed && args.format == OutputFormat::Vcf {
+        index_vcf(path)?;
     }
     Ok(())
+}
+
+/// Temporary name of an output file while it is written: `.NAME.PID.part`
+/// in the same directory (a rename within a directory is atomic).
+fn partial_path(path: &Path) -> std::path::PathBuf {
+    let name = path
+        .file_name()
+        .map_or_else(|| "output".into(), |n| n.to_string_lossy().into_owned());
+    path.with_file_name(format!(".{name}.{}.part", std::process::id()))
 }
 
 /// Index a bgzipped VCF: tabix (`.tbi`), or CSI (`.csi`) for contigs longer
