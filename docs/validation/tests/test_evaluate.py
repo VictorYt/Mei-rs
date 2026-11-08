@@ -129,3 +129,16 @@ def test_families_resampled_together():
     """Two samples of one family move together: with one family, the interval has no width."""
     cells = [("F", "A", 0, [1, 0, 0]), ("F", "B", 1, [0, 1, 0])]
     assert evaluate.bootstrap(cells, ["F"], 2, 200)["precision"] == ("0.500", "0.500")
+
+
+def test_clopper_pearson_lower_bound():
+    """59 of 59 found is the classic 95% claim; known values of the exact bound."""
+    assert evaluate.clopper_pearson_lower(59, 59) > 0.95
+    assert evaluate.clopper_pearson_lower(58, 58) < 0.95
+    assert abs(evaluate.clopper_pearson_lower(5, 10) - 0.2224) < 1e-3
+    assert evaluate.clopper_pearson_lower(0, 10) == 0.0
+
+
+def test_bins():
+    """Half-open bins named by their bounds."""
+    assert [evaluate.bins(v, [100, 150]) for v in (99, 100, 149, 150)] == ["< 100", "100-149", "100-149", ">= 150"]

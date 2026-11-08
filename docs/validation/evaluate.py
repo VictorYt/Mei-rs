@@ -42,6 +42,7 @@ import bisect
 import collections
 import csv
 import gzip
+import math
 import random
 import sys
 
@@ -205,6 +206,7 @@ def load_truth(path, samples, targets, raw_targets, chain):
                     "family": FAMILIES.get(row[col["TE_Designation"]], "other"),
                     "distance": target_distance(raw_targets, contig, pos),
                     "genotypes": {s: row[col[s]] for s in others},
+                    "carriers": sum(carries(row[col[s]]) for s in others),
                 }
             )
     return truth, unlifted
@@ -433,6 +435,17 @@ def main():
         help="resamples of the families and loci for the confidence intervals; 0 to skip [2000]",
     )
     parser.add_argument(
+        "--annotation",
+        help="GENCODE GTF(.gz) of the assembly of the calls: recall by distance to the "
+        "coding sequences and exons (strata, with --strata-qual)",
+    )
+    parser.add_argument(
+        "--strata-qual",
+        type=float,
+        default=10,
+        help="QUAL threshold of the stratified recall: that of the default profile [10]",
+    )
+    parser.add_argument(
         "--families",
         help="split.tsv: the `family_id` of each sample, resampled together in the "
         "bootstrap (default: every sample is its own family)",
@@ -556,6 +569,9 @@ def main():
     if args.bootstrap and len(per_sample) > 1:
         families = read_families(args.families) if args.families else {}
         print_intervals(per_sample, loci, families, args.bootstrap)
+    annotation = load_annotation(args.annotation) if args.annotation else None
+    samples = read_samples(args.families) if args.families else {}
+    print_strata(per_sample, annotation, samples, args.strata_qual)
     print("\n# recall by distance to the target\tfound_any\tfound_pass")
     for _, _, name in strata:
         if strata_total[name]:
@@ -696,6 +712,137 @@ def outcomes(per_sample, loci, level):
             if s in FALSE:
                 cells[(sample, loci.of_call(c))][1] += 1
     return cells
+
+
+def read_samples(path):
+    """Read the rows of a `split.tsv`, by sample."""
+    with open(path) as handle:
+        return {r["sample"]: r for r in csv.DictReader(handle, delimiter="\t")}
+
+
+def load_annotation(path):
+    """Read the merged exons and coding sequences of a GTF, per contig (0-based half-open, sorted)."""
+    raw = {"exon": collections.defaultdict(list), "CDS": collections.defaultdict(list)}
+    with open_text(path) as handle:
+        for line in handle:
+            if line.startswith("#"):
+                continue
+            fields = line.split("\t", 5)
+            if fields[2] in raw:
+                raw[fields[2]][contig_name(fields[0])].append((int(fields[3]) - 1, int(fields[4])))
+    merged = {}
+    for feature, contigs in raw.items():
+        merged[feature] = {}
+        for contig, intervals in contigs.items():
+            intervals.sort()
+            out = [list(intervals[0])]
+            for start, end in intervals[1:]:
+                if start <= out[-1][1]:
+                    out[-1][1] = max(out[-1][1], end)
+                else:
+                    out.append([start, end])
+            merged[feature][contig] = ([a for a, _ in out], [b for _, b in out])
+    return merged
+
+
+def clopper_pearson_lower(found, total, alpha=0.05):
+    """Return the one-sided exact lower bound of a proportion (Clopper-Pearson).
+
+    It is the sensitivity that can be claimed with confidence `1 - alpha`
+    from `found` detections among `total`: the `p` at which observing
+    `found` or more has probability `alpha`.
+    """
+    if found == 0:
+        return 0.0
+
+    def log_comb(k):
+        return math.lgamma(total + 1) - math.lgamma(k + 1) - math.lgamma(total - k + 1)
+
+    def upper_tail(p):
+        terms = (log_comb(k) + k * math.log(p) + (total - k) * math.log1p(-p) for k in range(found, total + 1))
+        return sum(math.exp(term) for term in terms)
+
+    low, high = 0.0, 1.0
+    for _ in range(60):
+        middle = (low + high) / 2
+        if upper_tail(middle) < alpha:
+            low = middle
+        else:
+            high = middle
+    return low
+
+
+def bins(value, edges, unit=""):
+    """Name of the bin of `value` among the half-open bins split at `edges`."""
+    for low, high in zip([None] + edges, edges + [None]):
+        if high is None or value < high:
+            if low is None:
+                return f"< {high}{unit}"
+            return f">= {low}{unit}" if high is None else f"{low}-{high - 1}{unit}"
+    return "."
+
+
+def print_strata(per_sample, annotation, samples, strata_qual):
+    """Print the recall per stratum at the default QUAL, with its one-sided 95% exact lower bound.
+
+    The unit is the carrier pair (a truth MEI in one sample). Strata: distance
+    to the target, to a coding sequence and to an exon (with `annotation`),
+    family, number of HGSVC3 carriers, median candidate depth and read length
+    of the sample (with `samples`, from `split.tsv`). The genotype errors of
+    the true calls are counted by depth. The lower bound is the sensitivity
+    that can be claimed for a stratum; it ignores the dependence between the
+    pairs of one site, so it is optimistic for strata of few sites.
+    """
+    level = f"QUAL>={strata_qual:g}"
+    if level not in per_sample[0][2]:
+        return
+    strata = collections.defaultdict(lambda: [0, 0, 0])
+    genotypes = collections.defaultdict(lambda: [0, 0])
+    kinds = collections.Counter()
+    for sample, carried, levels in per_sample:
+        rows = levels[level]
+        hit = found(rows)
+        info = samples.get(sample, {})
+        for c, s, t, _ in rows:
+            if s == "tp":
+                kinds["imprecise (mate-only)" if c["imprecise"] else "precise"] += 1
+                if c["genotype"] != ".":
+                    depth = bins(int(info["median_candidate_depth"]), [100, 150]) if info else "all"
+                    genotypes[depth][0] += unphased(t["genotypes"][sample]) == c["genotype"]
+                    genotypes[depth][1] += 1
+        for t in carried:
+            if t["distance"] == 0:
+                where = "in target"
+            else:
+                where = "1-100 bp from it" if t["distance"] <= 100 else "101-300 bp from it"
+            names = [
+                ("target", where),
+                ("family", t["family"]),
+                ("HGSVC3 carriers (of 65)", bins(t["carriers"], [4, 17, 33])),
+            ]
+            if annotation is not None:
+                cds = target_distance(annotation["CDS"], t["contig"], t["pos"])
+                exon = target_distance(annotation["exon"], t["contig"], t["pos"])
+                names.append(("coding sequence", "." if cds is None else ("CDS +/- 20 bp" if cds <= 20 else "farther")))
+                names.append(("exon", "." if exon is None else ("in an exon" if exon == 0 else "outside")))
+            if info:
+                names.append(("median candidate depth", bins(int(info["median_candidate_depth"]), [100, 150])))
+                names.append(("read length", f"{info['read_length']} bp"))
+            for group, name in names:
+                cell = strata[(group, name)]
+                cell[0] += t["id"] in hit
+                cell[1] += 1
+    print(f"\n# recall at {level} by stratum (carrier pairs)\tfound\ttotal\trecall\tlower_95")
+    for (group, name), (n_found, total, _) in sorted(strata.items()):
+        print(
+            f"{group}: {name}\t{n_found}\t{total}\t{n_found / total:.3f}"
+            f"\t{clopper_pearson_lower(n_found, total):.3f}"
+        )
+    print(f"\n# true calls at {level} by kind\t" + "\t".join(f"{k} {n}" for k, n in sorted(kinds.items())))
+    if genotypes:
+        print(f"\n# genotypes of the true calls at {level} by median candidate depth\tright\tcalls")
+        for depth, (right, n) in sorted(genotypes.items()):
+            print(f"{depth}\t{right}\t{n}")
 
 
 def read_families(path):

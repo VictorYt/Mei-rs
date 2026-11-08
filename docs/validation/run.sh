@@ -69,6 +69,7 @@ evaluate() { # NAME SAMPLES...
   local runs=(); for s in "$@"; do runs+=("$s=$out/$s.tsv"); done
   python3 -I "$here/evaluate.py" --truth "$truth" --bed "$data/targets/exome_targets.hg38.bed" \
     --min-qual 0,2,5,10,15 --tolerances 5,20,50,100 --families "$here/split.tsv" \
+    --annotation "$data/annotation/gencode.v46.basic.annotation.gtf.gz" \
     --fp-out "$out/fp_$name.tsv" --tp-out "$out/tp_$name.tsv" \
     --fn-out "$out/fn_$name.tsv" "${runs[@]}" | tee "$out/evaluation_$name.txt"
 }
@@ -80,6 +81,7 @@ held_out=()
 if [ -z "${SKIP_HG002:-}" ]; then
   python3 -I "$here/evaluate.py" --truth "$truth" --bed "$data/targets/agilent_v5.GRCh37.bed" \
     --chain "$data/truth/hg38ToHg19.over.chain.gz" --min-qual 0,2,5,10,15 --tolerances 5,20,50,100 \
+    --annotation "$data/annotation/gencode.v46lift37.basic.annotation.gtf.gz" \
     --fp-out "$out/fp_hg002.tsv" --tp-out "$out/tp_hg002.tsv" \
     NA24385="$out/HG002.tsv" | tee "$out/evaluation_hg002.txt"
   held_out=(--held-out "NA24385=$out/HG002.tsv" --held-out-fp "$out/fp_hg002.tsv" --held-out-tp "$out/tp_hg002.tsv")
