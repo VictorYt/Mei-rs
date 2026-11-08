@@ -53,10 +53,11 @@ for s in $tuning $test_samples $related; do
   mv "$out/$s.tsv.part" "$out/$s.tsv"
   echo "$s wall_seconds $(($(date +%s) - start))" >> "$out/times.txt"
 done
+# HG002 is scanned and evaluated on the baits of its own capture kit, Agilent V5 (#116).
 if [ -z "${SKIP_HG002:-}" ]; then
   [ -s "$out/HG002.tsv" ] || {
     nice -n "$nice_level" "$mei_rs" scan --bam "$data/giab/HG002.exome.bam" \
-      --bed "$data/targets/exome_targets.GRCh37.bed" \
+      --bed "$data/targets/agilent_v5.GRCh37.bed" \
       --reference "$data/ref/hs37d5.fa.gz" \
       --threads "$threads" --profile discovery --keep-filtered -o "$out/HG002.tsv.part"
     mv "$out/HG002.tsv.part" "$out/HG002.tsv"
@@ -77,7 +78,7 @@ evaluate() { # NAME SAMPLES...
 
 held_out=()
 if [ -z "${SKIP_HG002:-}" ]; then
-  python3 -I "$here/evaluate.py" --truth "$truth" --bed "$data/targets/exome_targets.GRCh37.bed" \
+  python3 -I "$here/evaluate.py" --truth "$truth" --bed "$data/targets/agilent_v5.GRCh37.bed" \
     --chain "$data/truth/hg38ToHg19.over.chain.gz" --min-qual 0,2,5 \
     --fp-out "$out/fp_hg002.tsv" --tp-out "$out/tp_hg002.tsv" \
     NA24385="$out/HG002.tsv" | tee "$out/evaluation_hg002.txt"
