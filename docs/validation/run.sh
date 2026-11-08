@@ -79,15 +79,18 @@ evaluate() { # NAME SAMPLES...
 held_out=()
 if [ -z "${SKIP_HG002:-}" ]; then
   python3 -I "$here/evaluate.py" --truth "$truth" --bed "$data/targets/agilent_v5.GRCh37.bed" \
-    --chain "$data/truth/hg38ToHg19.over.chain.gz" --min-qual 0,2,5 \
+    --chain "$data/truth/hg38ToHg19.over.chain.gz" --min-qual 0,2,5,10,15 --tolerances 5,20,50,100 \
     --fp-out "$out/fp_hg002.tsv" --tp-out "$out/tp_hg002.tsv" \
     NA24385="$out/HG002.tsv" | tee "$out/evaluation_hg002.txt"
   held_out=(--held-out "NA24385=$out/HG002.tsv" --held-out-fp "$out/fp_hg002.tsv" --held-out-tp "$out/tp_hg002.tsv")
 fi
 
 # Refit on the tuning samples; the test samples are scored with those weights.
+# `${a[@]+"${a[@]}"}` expands an empty array without failing under `set -u` on bash 3.2 (macOS).
+[ -n "$tuning" ] || exit 0
 tests=(); for s in $test_samples; do tests+=(--test "$s=$out/$s.tsv"); done
 test_labels=(); [ -n "$test_samples" ] && test_labels=(--test-fp "$out/fp_test.tsv" --test-tp "$out/tp_test.tsv")
 runs=(); for s in $tuning; do runs+=("$s=$out/$s.tsv"); done
 python3 -I "$here/refit.py" --fp "$out/fp_tuning.tsv" --tp "$out/tp_tuning.tsv" \
-  "${tests[@]}" "${test_labels[@]}" "${held_out[@]}" "${runs[@]}" | tee "$out/refit.txt"
+  ${tests[@]+"${tests[@]}"} ${test_labels[@]+"${test_labels[@]}"} ${held_out[@]+"${held_out[@]}"} \
+  "${runs[@]}" | tee "$out/refit.txt"
