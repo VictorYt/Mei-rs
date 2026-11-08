@@ -17,6 +17,9 @@ use crate::genotype::Genotype;
 use crate::reader::signals::{Side, Signal, SignalKind};
 use crate::typer::Typing;
 
+/// Research-use notice written in every output (TSV, BED, JSON, VCF).
+pub const NOTICE: &str = "research use only: not a validated diagnostic test; a call is a candidate to confirm with an orthogonal method, and the absence of a call does not exclude an insertion";
+
 /// What the outputs describe.
 #[derive(Clone, Copy, Debug)]
 pub struct Report<'a> {
@@ -35,6 +38,9 @@ pub struct Report<'a> {
     pub reference_bases: Option<&'a [u8]>,
     /// Candidates, sorted by contig and position.
     pub candidates: &'a [Candidate],
+    /// Replace the read names of the JSON output by `read_1`, `read_2`...
+    /// (the same name for the two segments of a pair).
+    pub anonymize: bool,
 }
 
 /// Write the report in the given format.
@@ -103,6 +109,7 @@ pub const TSV_COLUMNS: [&str; 46] = [
 
 fn write_tsv(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
     writeln!(out, "##mei-rs {}", env!("CARGO_PKG_VERSION"))?;
+    writeln!(out, "##note: {NOTICE}")?;
     writeln!(out, "##command: {}", report.command)?;
     writeln!(out, "##sample: {}", report.sample)?;
     writeln!(
@@ -179,6 +186,7 @@ fn write_tsv(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
 }
 
 fn write_bed(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
+    writeln!(out, "# mei-rs {}: {NOTICE}", env!("CARGO_PKG_VERSION"))?;
     for (i, c) in report.candidates.iter().enumerate() {
         // The TSD when the junctions show one, else the base before the
         // insertion.
@@ -204,8 +212,9 @@ fn write_bed(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
 }
 
 fn write_json(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
-    let json = JsonReport {
+    let mut json = JsonReport {
         mei_rs: env!("CARGO_PKG_VERSION"),
+        note: NOTICE,
         command: report.command,
         sample: report.sample,
         positions: "1-based; a position p means the insertion is right after base p",
@@ -216,6 +225,20 @@ fn write_json(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
             .map(|(i, c)| JsonCandidate::new(i, c, report.contigs))
             .collect(),
     };
+    if report.anonymize {
+        let mut names: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        for signal in json
+            .candidates
+            .iter_mut()
+            .flat_map(|c| c.signals.iter_mut())
+        {
+            let next = names.len() + 1;
+            let name = names
+                .entry(std::mem::take(&mut signal.read))
+                .or_insert_with(|| format!("read_{next}"));
+            signal.read.clone_from(name);
+        }
+    }
     serde_json::to_writer_pretty(&mut *out, &json)?;
     writeln!(out)
 }
@@ -284,6 +307,7 @@ fn ratio(value: f64) -> f64 {
 #[derive(Serialize)]
 struct JsonReport<'a> {
     mei_rs: &'a str,
+    note: &'a str,
     command: &'a str,
     sample: &'a str,
     positions: &'a str,
@@ -581,6 +605,10 @@ mod tests {
     }
 
     fn render(format: OutputFormat) -> String {
+        render_with(format, false)
+    }
+
+    fn render_with(format: OutputFormat, anonymize: bool) -> String {
         let candidates = candidates();
         let contigs = ["chr1".to_owned(), "chr2".to_owned()];
         let report = Report {
@@ -591,6 +619,7 @@ mod tests {
             reference: None,
             reference_bases: None,
             candidates: &candidates,
+            anonymize,
         };
         let mut out = Vec::new();
         write(&report, format, &mut out).unwrap();
@@ -601,19 +630,20 @@ mod tests {
     fn tsv() {
         let tsv = render(OutputFormat::Tsv);
         let lines: Vec<&str> = tsv.lines().collect();
-        assert_eq!(lines[1], "##command: mei-rs scan");
-        assert_eq!(lines[2], "##sample: s1");
-        assert_eq!(lines[4], format!("#{}", TSV_COLUMNS.join("\t")));
+        assert_eq!(lines[1], format!("##note: {NOTICE}"));
+        assert_eq!(lines[2], "##command: mei-rs scan");
+        assert_eq!(lines[3], "##sample: s1");
+        assert_eq!(lines[5], format!("#{}", TSV_COLUMNS.join("\t")));
         assert_eq!(
-            lines[5],
+            lines[6],
             "MEI_1\tchr1\t1000\t1012\t1000\t12\t+\tPASS\thigh\t7\t3\t3\t3\t3\t0\t0\t1\t3\t0\tyes\t3\t40\t0.175\t1000\t1050\tALU\tAluYa5\t+\t1\t281\t0.988\t6\t0\t0\t0\t.\t.\t.\t.\t.\t.\t.\t.\tclips\t.\t0"
         );
         assert_eq!(
-            lines[6],
+            lines[7],
             "MEI_2\tchr1\t5000\t.\t5000\t.\t.\tprobe_edge;low_ratio\t.\t3\t3\t0\t0\t3\t0\t0\t0\t0\t0\tno\t1\t100\t0.030\t5000\t5000\t.\t.\t.\t.\t.\t.\t0\t0\t0\t0\t.\t.\t.\t.\t.\t.\t.\t.\t.\t.\t0"
         );
-        assert_eq!(lines.len(), 7);
-        for line in &lines[4..] {
+        assert_eq!(lines.len(), 8);
+        for line in &lines[5..] {
             assert_eq!(line.split('\t').count(), TSV_COLUMNS.len());
         }
     }
@@ -622,7 +652,8 @@ mod tests {
     fn bed() {
         assert_eq!(
             render(OutputFormat::Bed),
-            "chr1\t1000\t1012\tMEI_1\t7\t+\thigh\nchr1\t4999\t5000\tMEI_2\t3\t.\tprobe_edge;low_ratio\n"
+            format!("# mei-rs {}: {NOTICE}\n", env!("CARGO_PKG_VERSION"))
+                + "chr1\t1000\t1012\tMEI_1\t7\t+\thigh\nchr1\t4999\t5000\tMEI_2\t3\t.\tprobe_edge;low_ratio\n"
         );
     }
 
@@ -630,6 +661,7 @@ mod tests {
     fn json() {
         let json: serde_json::Value = serde_json::from_str(&render(OutputFormat::Json)).unwrap();
         assert_eq!(json["sample"], "s1");
+        assert_eq!(json["note"], NOTICE);
         let first = &json["candidates"][0];
         assert_eq!(first["id"], "MEI_1");
         assert_eq!(first["filter"], serde_json::json!(["PASS"]));
@@ -666,5 +698,25 @@ mod tests {
             json["candidates"][1]["filter"],
             serde_json::json!(["probe_edge", "low_ratio"])
         );
+    }
+
+    #[test]
+    fn anonymized_json_has_no_read_name() {
+        let plain = render(OutputFormat::Json);
+        let anonymized = render_with(OutputFormat::Json, true);
+        let json: serde_json::Value = serde_json::from_str(&anonymized).unwrap();
+        let names: Vec<&str> = json["candidates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|c| c["signals"].as_array().unwrap())
+            .map(|s| s["read"].as_str().unwrap())
+            .collect();
+        assert!(names.iter().all(|n| n.starts_with("read_")), "{names:?}");
+        let original: serde_json::Value = serde_json::from_str(&plain).unwrap();
+        let first = original["candidates"][0]["signals"][0]["read"]
+            .as_str()
+            .unwrap();
+        assert!(!anonymized.contains(&format!("\"{first}\"")));
     }
 }

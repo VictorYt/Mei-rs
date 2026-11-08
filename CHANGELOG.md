@@ -6,31 +6,76 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-10-17
+## [0.5.0] - 2026-11-08
 
-Independent validation: thresholds are now chosen on a tuning set and reported on
-held-out exomes. The default output changes (`--profile exome`).
+Defensible numbers and genotypes: thresholds chosen on a tuning set and
+reported on held-out exomes with an evaluation that survives scrutiny
+(families kept together, one-to-one matching, intervals over families and
+loci, recall per stratum, HG002 on its own kit). The default output changes
+(`--profile exome`), and **two changes can break existing runs**: `--profile
+exome` needs `--reference` (or `--allow-no-reference`, #120), and the BED
+output starts with a comment line (#121). The calls are those of v0.4.1;
+genotypes and their quality change (#91, #117). The v0.5.0 pull request
+merged into `main` on 2026-11-08 (#108) was never tagged: this release
+replaces it (#155).
 
 ### Changed
 
 - **Default output** (#90): `--profile exome` (default) sets `--min-qual 10`,
   so `PASS` calls of lower quality are now flagged `low_qual`; `--profile
-  discovery` (or `--min-qual 0`) gives the previous output. The threshold was
-  chosen on 18 tuning exomes for a precision of 0.95 there; on 18 held-out
-  exomes it gives precision 0.911 (0.873 to 0.946) and recall 0.192 (0.249
-  without it); HG002 0.636 / 0.286 (0.415 / 0.347).
+  discovery` (or `--min-qual 0`) gives the previous output. The threshold is
+  the lowest with a precision of 0.95 on the 18 tuning exomes, an internal
+  target to choose it, not a precision to expect. On the 17 test exomes it
+  gives precision 0.908 (0.809 to 0.977) and recall 0.183 (0.115 to 0.264,
+  0.235 without it); HG002, on its own kit, 0.538 / 0.264 (0.365 / 0.358).
+- **Breaking:** `--profile exome` (the default) requires `--reference`,
+  unless `--allow-no-reference` is given (#120): its quality threshold and
+  every published precision were measured with the reference, which turns on
+  the `tandem_repeat` filter, the mapped mate checks and the assembly; without
+  it the precision is not known. `--profile discovery` still runs without a
+  reference.
 - Genotype (#91): a candidate that passed is genotyped `0/1` or `1/1`, never
   `0/0`, with a prior of 0.77 for the heterozygous genotype (`0/0` stays
-  possible for filtered candidates, `--keep-filtered`). HGSVC3 exomes: 107 of
-  123 genotypes of the true calls right (91 before), HG002 11 of 17 (9); the
-  calls are unchanged. `evaluate.py --tp-out` gives the truth genotype of each
-  call.
+  possible for filtered candidates, `--keep-filtered`); with no reference
+  read counted at its site, `1/1` needs the alternative reads to be at least
+  0.2 of the local depth (next to a probe edge the reference reads end at
+  the site and are not counted; fitted on the tuning exomes). Genotypes of
+  the true `PASS` calls right: 17 test exomes 183 of 215 (85.1%), tuning 237
+  of 263, HG002 14 of 19. `evaluate.py --tp-out` gives the truth genotype of
+  each call.
+- Genotype quality (#117): `gq` is the probability of a wrong genotype given
+  the reads alone (equal priors over `0/0`, `0/1` and `1/1`); the prior still
+  chooses the call but no longer raises its quality. **GQ values are much
+  lower**: median of the true test calls 21 (93 before), of the false ones 1;
+  a call without alternative read has a `gq` of 0 instead of 99. The genotype
+  of a candidate flagged only `low_qual` no longer depends on the profile.
+- **Validation** (#111-#116, #122): the evaluation now excludes from the test
+  set the mother of a tuning sample (HG00732, evaluated apart; families in
+  `split.tsv`, `check_split.py`), matches calls and truth MEIs one to one
+  with a family check, computes its intervals over families and loci, counts
+  sites and carrier pairs apart, gives the recall per stratum with exact
+  lower bounds, and evaluates HG002 on the baits of its own kit (Agilent V5).
+  17 test exomes, `--profile exome`: precision 0.908 (0.809 to 0.977), recall
+  0.183 (0.115 to 0.264), 918 carrier pairs at 244 sites; HG002 0.538 / 0.264
+  (0.636 / 0.286 on the 1000 Genomes targets). Recall within 20 bp of a
+  coding sequence 0.516 (one-sided 95% bound 0.406). The README states the
+  intended use (one caller in an ensemble, calls to confirm), what is out of
+  scope, that the test set is a development set, that the absence of a call
+  never excludes an insertion, and the memory of BAM and CRAM runs apart.
 
 ### Added
 
+- Every output carries a research-use notice (`##note` in the TSV, a `#`
+  line in the BED, `note` in the JSON, `##mei-rsNote` in the VCF): not a
+  validated diagnostic test, calls to confirm, absence of a call does not
+  exclude an insertion (#121). The BED output now starts with this comment
+  line.
+- `--anonymize` (#121): file names only in the command line written in the
+  outputs, read names of the JSON replaced by `read_1`, `read_2`...
+  `docs/output.md` lists what each output and the log contain.
 - `docs/validation/split.tsv` (#88): the 36 HGSVC3 samples that have a 1000
   Genomes exome, split in 18 tuning and 18 test samples (by super-population
-  and depth). v0.4.1 on the 29 exomes never used before: precision 0.714
+  and depth; 17 test samples since #111, HG00732 evaluated apart). v0.4.1 on the 29 exomes never used before: precision 0.714
   (95% CI 0.649 to 0.765), recall 0.238 (0.194 to 0.285), against 0.759 and
   0.337 on the seven tuned exomes; genotypes 310 of 372 right.
 - Documented in `docs/validation` (#89, #82): a logistic regression and a
@@ -44,6 +89,23 @@ held-out exomes. The default output changes (`--profile exome`).
 
 ### Fixed
 
+- `scan` fails (exit code 1) when no target of the BED can be scanned (every
+  target on a contig absent from the alignment or beyond the end of its
+  contig, e.g. a BED of another genome build), instead of writing an empty
+  output that reads as "no insertion" (#118).
+- `--reference` is checked against the `M5` checksums of the alignment
+  header (`@SQ`), for BAM as for CRAM: a reference with the same contig
+  lengths but other bases (another version of the build) now stops `scan`
+  with a message giving both checksums in hexadecimal, before any read is
+  decoded (#119). A BAM without `M5` tags gets a warning. The check reads
+  each scanned contig of the reference once (GRCh38 with a warm file cache:
+  +0.5 s wall, +4.6 s CPU).
+- Small fixes (#123): an output path ending in `.gz` is compressed for every
+  format (TSV, BED and JSON were written uncompressed); outputs are written
+  under a temporary name and renamed once complete, so an interrupted run
+  leaves no truncated file; `--min-qual` above the largest quality the score
+  can give (26) gets a warning; two unsigned subtractions of the filters
+  saturate; `__pycache__/` is ignored.
 - Release workflow: the upload job downloads only the binary artifacts (it failed on the image digests still being written, #84); the v0.4.1 binaries were attached by hand from the same run.
 
 ## [0.4.1] - 2026-10-15

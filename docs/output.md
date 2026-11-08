@@ -7,6 +7,26 @@ those flagged `no_junction`, `no_tail`, `untyped`, `non_mei_mates`,
 `tandem_repeat`, `probe_edge` or `low_ratio`. Clusters with fewer than
 `--min-support` distinct reads are never written.
 
+Every output starts with a research-use notice: `mei-rs` is not a validated
+diagnostic test, a call is a candidate to confirm with an orthogonal method,
+and the absence of a call does not exclude an insertion (`##note:` in the TSV,
+a `#` line in the BED, `note` in the JSON, `##mei-rsNote` in the VCF).
+
+## What the outputs contain
+
+The outputs, and the log on standard error, may identify a patient:
+
+| Output | Identifying content | With `--anonymize` |
+|---|---|---|
+| TSV, JSON, VCF | sample name (`SM` of the read groups, or the file name) and the command line, with the input paths | input paths reduced to their file names; the sample name is kept |
+| JSON | read names and clipped read sequences of every signal | read names replaced by `read_1`, `read_2`... (one name per read pair); sequences kept |
+| BED | candidate positions only | unchanged |
+| log (standard error) | sample name and input paths | unchanged: do not keep the log with the outputs if this matters |
+
+The VCF `##reference` line holds the file name of the reference only.
+A file name can itself be an identifier: rename the inputs before the run if
+it is.
+
 ## Coordinates
 
 TSV and JSON positions are **1-based**: a position `p` means the insertion is
@@ -17,8 +37,8 @@ The BED output is 0-based half-open, like every BED file.
 
 ## TSV (`--format tsv`, default)
 
-Header lines start with `##` (version, command line, sample, coordinate
-convention), then one `#` line names the columns:
+Header lines start with `##` (version, research-use notice, command line,
+sample, coordinate convention), then one `#` line names the columns:
 
 | Column | Description |
 |---|---|
@@ -29,7 +49,7 @@ convention), then one `#` line names the columns:
 | `right_junction` | Start of the downstream flank: the assembled junction (`assembled` is `both` or `right`), or else the most supported junction of the reads clipped on their left end (`.` if none). |
 | `tsd_length` | Length of the target site duplication: with both junctions assembled, the length of `tsd` (`.` when the assembled flanks do not overlap by 1 to 50 bp); otherwise estimated from the clips, `left_junction - right_junction` when each junction has at least `--min-clips` soft-clips and the flanks overlap by 1 to 50 bp (`.` otherwise). |
 | `strand` | Strand of the inserted element: `+` when poly(A) tails outnumber poly(T) tails in the soft-clips, `-` for the reverse, `.` on ties. |
-| `filter` | `PASS`, or the failed filters separated by `;`: `no_junction` (fewer than `--min-clips` soft-clips at the junctions, short ones counting only when the candidate has an MEI mate: mate signals alone do not resolve the insertion to the base; unless at least 60% and 4 of its checked mates are MEI mates matching the consensus with 98% identity or more (young element; the candidate typed by its mates, or by its junction clip), and `breakpoint_clips` is not 0 or a junction soft-clip marks the breakpoint: it then passes `no_junction` and `untyped`, with `low` confidence), `no_tail` (no soft-clip with a poly(A/T) tail; only with `--require-tail`), `untyped` (fewer than `--min-typed-clips` junction soft-clips typed to an MEI consensus, short ones counting only when the candidate has an MEI mate, and not one typed clip with a poly(A/T) tail and at least as many MEI mates, nor, typed by its mates (`typed_by` `mates`), at least as many clips with a poly(A/T) tail and MEI mates, the mates matching the consensus with 96% identity or more (young element), nor one typed clip with at least 60% and 4 of its checked mates MEI mates at 96% identity or more: nothing shows that the inserted sequence is a mobile element), `non_mei_mates` (mates were checked against the consensus sequences and fewer than `--min-mei-mate-fraction` of them are mobile elements: the mate signals are mostly noise), `tandem_repeat` (with `--reference` only: the soft-clips are a length variant of a reference homopolymer or tandem repeat, such as a longer poly(A) tract of an Alu of the reference: at least 2 junction soft-clips, and half of the informative ones, end in the reference where a longer tract would put them, or the tailed soft-clips hold only their tail and the reference has a homopolymer of at least 10 bp of the tail base at their junction), `probe_edge` (every soft-clip stops within `--probe-edge-tolerance` of a probe start or end, none has a poly(A/T) tail, none is typed and there is no TSD: capture artefact), `low_ratio` (`signal_ratio` below `--min-signal-ratio`, unless 5 or more junction soft-clips are typed: at very deep sites, an insertion is a small fraction of the reads), `low_qual` (`qual` below `--min-qual`; off by default). |
+| `filter` | `PASS`, or the failed filters separated by `;`: `no_junction` (fewer than `--min-clips` soft-clips at the junctions, short ones counting only when the candidate has an MEI mate: mate signals alone do not resolve the insertion to the base; unless at least 60% and 4 of its checked mates are MEI mates matching the consensus with 98% identity or more (young element; the candidate typed by its mates, or by its junction clip), and `breakpoint_clips` is not 0 or a junction soft-clip marks the breakpoint: it then passes `no_junction` and `untyped`, with `low` confidence), `no_tail` (no soft-clip with a poly(A/T) tail; only with `--require-tail`), `untyped` (fewer than `--min-typed-clips` junction soft-clips typed to an MEI consensus, short ones counting only when the candidate has an MEI mate, and not one typed clip with a poly(A/T) tail and at least as many MEI mates, nor, typed by its mates (`typed_by` `mates`), at least as many clips with a poly(A/T) tail and MEI mates, the mates matching the consensus with 96% identity or more (young element), nor one typed clip with at least 60% and 4 of its checked mates MEI mates at 96% identity or more: nothing shows that the inserted sequence is a mobile element), `non_mei_mates` (mates were checked against the consensus sequences and fewer than `--min-mei-mate-fraction` of them are mobile elements: the mate signals are mostly noise), `tandem_repeat` (with `--reference` only: the soft-clips are a length variant of a reference homopolymer or tandem repeat, such as a longer poly(A) tract of an Alu of the reference: at least 2 junction soft-clips, and half of the informative ones, end in the reference where a longer tract would put them, or the tailed soft-clips hold only their tail and the reference has a homopolymer of at least 10 bp of the tail base at their junction), `probe_edge` (every soft-clip stops within `--probe-edge-tolerance` of a probe start or end, none has a poly(A/T) tail, none is typed and there is no TSD: capture artefact), `low_ratio` (`signal_ratio` below `--min-signal-ratio`, unless 5 or more junction soft-clips are typed: at very deep sites, an insertion is a small fraction of the reads), `low_qual` (`qual` below `--min-qual`, set by `--profile`: 10 with `exome`, the default; 0, off, with `discovery`). |
 | `confidence` | For `PASS` candidates (typed, unless `--min-typed-clips 0`): `high` (a poly(A/T) tail and a TSD: complete evidence of a retrotransposition), `medium` (a poly(A/T) tail, without a TSD), `low` (no poly(A/T) tail: often the tailed junction is not covered by clips long enough; or typed by its mates only, `typed_by` `mates`); `.` for filtered candidates. |
 | `support` | Distinct supporting reads (by name). |
 | `left_clips` | Reads soft-clipped on their left end (the insertion lies before them). |
@@ -60,7 +80,7 @@ convention), then one `#` line names the columns:
 | `polya_length` | Length of the poly(A) (or poly(T)) tail at an assembled junction: the run of A (T) from the junction, when the contig holds its end (`.` otherwise). |
 | `qual` | Quality score: phred-scaled probability that the candidate is not a mobile element insertion, from its evidence (naive Bayes: a poly(A/T) tail, mostly MEI mates (60%), typed clips of 98% identity, distinct fragment starts (70% of the supporting reads), `signal_ratio` of 0.2, signals on both sides, a TSD), with likelihood ratios measured on the `PASS` candidates of 7 HGSVC3 exomes. It ranks the candidates better than it estimates the probability. |
 | `genotype` | `0/0`, `0/1` or `1/1`: the most likely genotype from `alt_reads` and `ref_reads` at each junction (binomial: 2% of alternative reads for `0/0`, 30% for `0/1`, as alternative reads are under-counted, 98% for `1/1`; with two junctions, their log-likelihoods are averaged). `.` without junction or without any counted read. |
-| `gq` | Genotype quality: phred-scaled probability that `genotype` is wrong, equal priors, at most 99. |
+| `gq` | Genotype quality: phred-scaled probability that `genotype` is wrong given the reads alone (`0/0`, `0/1` and `1/1` with equal priors), at most 99. The prior that excludes `0/0` for a candidate that passed chooses `genotype` but does not enter `gq`: a call without alternative read has a `gq` of 0. |
 | `alt_reads` | Reads clipped at a junction (within 5 bp) by at least `--min-short-clip-len` bases of median quality at least `--min-clip-quality`, summed over the junctions. |
 | `ref_reads` | Reads aligned over the whole site (both junctions) with at least `--min-short-clip-len` bases on each side, counted at each junction (twice with two junctions). |
 | `typed_by` | What typed the element: `clips` (junction soft-clips) or `mates` (no clip typed; see `family`); `.` if untyped. |

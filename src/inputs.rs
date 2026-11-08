@@ -6,13 +6,17 @@
 //! index) are logged as warnings.
 
 use std::collections::{HashMap, HashSet};
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use md5::{Digest, Md5};
+use noodles::core::Position;
+use rayon::prelude::*;
 use thiserror::Error;
 use tracing::warn;
 
-use crate::cli::ScanArgs;
+use crate::cli::{Profile, ScanArgs};
 use crate::reader::alignment::{AlignmentError, AlignmentFile};
 use crate::regions::Region;
 use crate::regions::bed::{self, BedError, Probe};
@@ -56,6 +60,16 @@ pub enum InputError {
         /// A few BED contigs.
         contigs: Vec<String>,
     },
+    /// Every target was skipped: nothing would be scanned.
+    #[error(
+        "no target of {bed} can be scanned in {alignment}: all are on absent contigs or beyond the end of their contig; is it the same genome build?"
+    )]
+    NoUsableTarget {
+        /// Path of the BED file.
+        bed: PathBuf,
+        /// Path of the alignment file.
+        alignment: PathBuf,
+    },
     /// The reference has no `.fai` index, or it cannot be read.
     #[error("cannot read the index {path} of the reference (run `samtools faidx`): {source}")]
     ReferenceIndex {
@@ -91,6 +105,38 @@ pub enum InputError {
         header_length: u64,
         /// Length in the reference.
         reference_length: u64,
+    },
+    /// `--profile exome` without `--reference`.
+    #[error(
+        "--profile exome (the default) needs --reference: its quality threshold was chosen with the reference (tandem_repeat filter, mate checks, assembly); give --reference, or --profile discovery, or --allow-no-reference to run without it (precision not measured)"
+    )]
+    ReferenceRequired,
+    /// A target contig of the reference differs from the `M5` checksum of the
+    /// alignment header.
+    #[error(
+        "contig {contig} of the reference {reference} has the MD5 {actual}, but the header of {alignment} gives {expected} (M5): the reads were aligned to another sequence; is it the same genome build and version?"
+    )]
+    ReferenceChecksum {
+        /// Contig name.
+        contig: String,
+        /// Path of the alignment file.
+        alignment: PathBuf,
+        /// Path of the reference.
+        reference: PathBuf,
+        /// `M5` of the alignment header, hexadecimal.
+        expected: String,
+        /// MD5 of the reference sequence, hexadecimal.
+        actual: String,
+    },
+    /// The reference sequence of a contig cannot be read.
+    #[error("cannot read contig {contig} of the reference {reference}: {source}")]
+    ReferenceRead {
+        /// Contig name.
+        contig: String,
+        /// Path of the reference.
+        reference: PathBuf,
+        /// Underlying I/O error.
+        source: std::io::Error,
     },
     /// The contig of `--region` is not in the alignment header.
     #[error("contig {contig} of --region is not in the header of {alignment}{}",
@@ -136,6 +182,14 @@ impl Inputs {
 
         let probes = bed::read(&args.bed)?;
         let probes = check_probes(probes, &contigs, &args.bed, alignment.path())?;
+        if args.reference.is_none() && args.profile == Profile::Exome {
+            if !args.allow_no_reference {
+                return Err(InputError::ReferenceRequired);
+            }
+            warn!(
+                "--allow-no-reference: --profile exome without --reference was never validated; its precision is not known"
+            );
+        }
         if let Some(reference) = &args.reference {
             check_reference(reference, &probes, &contigs, alignment.path())?;
         }
@@ -157,6 +211,15 @@ impl Inputs {
             }
         }
 
+        if let Some(reference) = &args.reference {
+            let scanned: HashSet<&str> = targets
+                .regions()
+                .iter()
+                .map(|r| r.contig.as_str())
+                .collect();
+            check_checksums(reference, &scanned, &alignment)?;
+        }
+
         let sample = sample_name(&alignment);
         Ok(Self {
             alignment,
@@ -168,9 +231,9 @@ impl Inputs {
 
 /// Keep the probes the alignment can be queried on.
 ///
-/// A naming mismatch (`chr1` vs `1`) or a BED without any known contig is an
-/// error; probes on other unknown contigs, or starting after the end of their
-/// contig, are dropped with a warning.
+/// A naming mismatch (`chr1` vs `1`), a BED without any known contig, or a BED
+/// whose every probe is dropped is an error; probes on other unknown contigs,
+/// or starting after the end of their contig, are dropped with a warning.
 fn check_probes(
     probes: Vec<Probe>,
     contigs: &[Contig],
@@ -246,6 +309,12 @@ fn check_probes(
             )
         );
     }
+    if kept.is_empty() {
+        return Err(InputError::NoUsableTarget {
+            bed: bed.to_path_buf(),
+            alignment: alignment.to_path_buf(),
+        });
+    }
     let clamped = kept
         .iter()
         .filter(|p| p.end > lengths[p.contig.as_str()])
@@ -301,6 +370,93 @@ fn check_reference(
         }
     }
     Ok(())
+}
+
+/// Bases of reference sequence read at once to compute a checksum.
+const CHECKSUM_CHUNK: usize = 1 << 23;
+
+/// Check the reference sequence of the scanned contigs against the `M5`
+/// checksums of the alignment header, when it has them (warning otherwise:
+/// only the names and lengths of the contigs are then compared).
+///
+/// The MD5 is that of the SAM specification: the sequence in upper case.
+/// Contigs are read in parallel, in chunks, so the memory stays small; the
+/// cost is one read of the target contigs of the reference.
+fn check_checksums(
+    reference: &Path,
+    scanned: &HashSet<&str>,
+    alignment: &AlignmentFile,
+) -> Result<(), InputError> {
+    let checksums = alignment.checksums();
+    let used: Vec<Contig> = alignment
+        .contigs()
+        .into_iter()
+        .filter(|c| scanned.contains(c.name.as_str()))
+        .collect();
+    let missing = used
+        .iter()
+        .filter(|c| !checksums.contains_key(&c.name))
+        .count();
+    if missing > 0 {
+        warn!(
+            "{missing} of {} scanned contigs have no M5 checksum in the header of {}: the reference is only checked by contig names and lengths",
+            used.len(),
+            alignment.path().display()
+        );
+    }
+    let mismatch = used
+        .par_iter()
+        .filter_map(|c| checksums.get(&c.name).map(|m5| (c, m5)))
+        .map(|(c, expected)| {
+            let actual = sequence_md5(reference, &c.name, c.length)?;
+            Ok((actual != *expected).then(|| (c.name.clone(), expected.clone(), actual)))
+        })
+        .collect::<Result<Vec<_>, InputError>>()?
+        .into_iter()
+        .flatten()
+        .min();
+    match mismatch {
+        Some((contig, expected, actual)) => Err(InputError::ReferenceChecksum {
+            contig,
+            alignment: alignment.path().to_path_buf(),
+            reference: reference.to_path_buf(),
+            expected,
+            actual,
+        }),
+        None => Ok(()),
+    }
+}
+
+/// MD5 (hexadecimal) of the upper-case sequence of `contig` in the reference.
+fn sequence_md5(reference: &Path, contig: &str, length: u64) -> Result<String, InputError> {
+    let read_error = |source| InputError::ReferenceRead {
+        contig: contig.to_owned(),
+        reference: reference.to_path_buf(),
+        source,
+    };
+    let mut reader = noodles::fasta::io::indexed_reader::Builder::default()
+        .build_from_path(reference)
+        .map_err(read_error)?;
+    let length = usize::try_from(length).unwrap_or(usize::MAX);
+    let mut md5 = Md5::new();
+    let mut start = 1;
+    while start <= length {
+        let end = (start + CHECKSUM_CHUNK - 1).min(length);
+        let (Ok(first), Ok(last)) = (Position::try_from(start), Position::try_from(end)) else {
+            break;
+        };
+        let record = reader
+            .query(&noodles::core::Region::new(contig, first..=last))
+            .map_err(read_error)?;
+        let mut chunk = record.sequence().as_ref().to_vec();
+        chunk.make_ascii_uppercase();
+        md5.update(&chunk);
+        start = end + 1;
+    }
+    Ok(md5.finalize().iter().fold(String::new(), |mut hex, b| {
+        let _ = write!(hex, "{b:02x}");
+        hex
+    }))
 }
 
 /// Name of `name` in the other naming style (`chr1` ↔ `1`, `chrM` ↔ `MT`), if
@@ -414,6 +570,7 @@ mod tests {
             bam.as_os_str(),
             "--bed".as_ref(),
             bed.as_os_str(),
+            "--allow-no-reference".as_ref(),
         ])
         .unwrap();
         let Command::Scan(args) = cli.command;
@@ -439,6 +596,19 @@ mod tests {
     }
 
     #[test]
+    fn exome_profile_requires_a_reference() {
+        let mut args = args(&data("targets.bed"));
+        args.allow_no_reference = false;
+        let err = Inputs::load(&args).unwrap_err();
+        assert!(matches!(err, InputError::ReferenceRequired), "{err}");
+        args.profile = Profile::Discovery;
+        Inputs::load(&args).unwrap();
+        args.profile = Profile::Exome;
+        args.reference = Some(data("reference.fa"));
+        Inputs::load(&args).unwrap();
+    }
+
+    #[test]
     fn contig_naming_mismatch() {
         let dir = TempDir::new("naming");
         let bed = dir.file("t.bed", "1\t9850\t10150\nchrM\t1\t10\n");
@@ -458,6 +628,16 @@ mod tests {
         let err = Inputs::load(&args(&bed)).unwrap_err();
         assert!(matches!(err, InputError::NoKnownContig { .. }));
         assert!(err.to_string().starts_with("no contig of "), "{err}");
+    }
+
+    #[test]
+    fn no_usable_target() {
+        // Known contigs, every target beyond their end: a BED of another build.
+        let dir = TempDir::new("beyond");
+        let bed = dir.file("t.bed", "chr1\t30000\t30050\nchrZ\t1\t10\n");
+        let err = Inputs::load(&args(&bed)).unwrap_err();
+        assert!(matches!(err, InputError::NoUsableTarget { .. }), "{err}");
+        assert!(err.to_string().starts_with("no target of "), "{err}");
     }
 
     #[test]
@@ -507,6 +687,87 @@ mod tests {
         args.reference = Some(dir.file("noindex.fa", ">chr1\nACGT\n"));
         let err = Inputs::load(&args).unwrap_err();
         assert!(matches!(err, InputError::ReferenceIndex { .. }));
+    }
+
+    /// A copy of `positive.bam` whose header gives the `M5` of each contig of
+    /// `reference.fa`, with its index.
+    fn bam_with_checksums(dir: &TempDir) -> PathBuf {
+        use noodles::sam::alignment::io::Write as _;
+        use noodles::sam::header::record::value::map::reference_sequence::tag::MD5_CHECKSUM;
+
+        let mut reader = noodles::bam::io::reader::Builder
+            .build_from_path(data("positive.bam"))
+            .unwrap();
+        let mut header = reader.read_header().unwrap();
+        for (name, contig) in header.reference_sequences_mut().iter_mut() {
+            let name = name.to_string();
+            let length = contig.length().get() as u64;
+            let m5 = sequence_md5(&data("reference.fa"), &name, length).unwrap();
+            contig.other_fields_mut().insert(MD5_CHECKSUM, m5.into());
+        }
+        let path = dir.0.join("m5.bam");
+        let mut writer = noodles::bam::io::writer::Builder
+            .build_from_path(&path)
+            .unwrap();
+        writer.write_header(&header).unwrap();
+        for record in reader.records() {
+            writer
+                .write_alignment_record(&header, &record.unwrap())
+                .unwrap();
+        }
+        writer.finish(&header).unwrap();
+        drop(writer);
+        let noodles::bam::Index::Bai(index) = noodles::bam::fs::index(&path).unwrap() else {
+            panic!("BAI index expected");
+        };
+        let mut bai = path.as_os_str().to_owned();
+        bai.push(".bai");
+        noodles::bam::bai::fs::write(PathBuf::from(bai), &index).unwrap();
+        path
+    }
+
+    #[test]
+    fn reference_checksums() {
+        let dir = TempDir::new("checksums");
+        // The fixture reference with 2% of its bases changed, same lengths.
+        let fasta = fs::read_to_string(data("reference.fa")).unwrap();
+        // Header lines are lower case (`>chr1`): only bases change.
+        let mut n = 0;
+        let mutated: String = fasta
+            .chars()
+            .map(|b| {
+                n += 1;
+                match (n % 50, b) {
+                    (0, 'A') => 'C',
+                    (0, 'C') => 'G',
+                    (0, 'G') => 'T',
+                    (0, 'T') => 'A',
+                    _ => b,
+                }
+            })
+            .collect();
+        let mutated = dir.file("mutated.fa", &mutated);
+        fs::copy(data("reference.fa.fai"), dir.0.join("mutated.fa.fai")).unwrap();
+
+        let mut args = args(&data("targets.bed"));
+        args.bam = bam_with_checksums(&dir);
+        args.reference = Some(data("reference.fa"));
+        Inputs::load(&args).unwrap();
+        args.reference = Some(mutated.clone());
+        let err = Inputs::load(&args).unwrap_err();
+        assert!(
+            matches!(err, InputError::ReferenceChecksum { ref contig, .. } if contig == "chr1"),
+            "{err}"
+        );
+        assert!(err.to_string().contains("(M5)"), "{err}");
+
+        // A CRAM file carries its checksums: the mismatch is found before decoding.
+        args.bam = data("positive.cram");
+        let err = Inputs::load(&args).unwrap_err();
+        assert!(matches!(err, InputError::ReferenceChecksum { .. }), "{err}");
+        // A BAM without M5 tags is only checked by names and lengths.
+        args.bam = data("positive.bam");
+        Inputs::load(&args).unwrap();
     }
 
     #[test]

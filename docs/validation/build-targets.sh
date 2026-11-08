@@ -8,6 +8,11 @@
 # targets mapped in one piece are kept; the others are listed in
 # `targets.hg38.raw.bed.unmap`) and writes `exome_targets.GRCh37.bed` (contigs
 # `1`..`22`, as the GRCh37 exomes) and `exome_targets.hg38.bed` (`chr1`..).
+#
+# HG002 was captured with another kit, Agilent SureSelect Human All Exon V5
+# (GIAB README of the Oslo exomes): its baits, published by GIAB as a Picard
+# interval list extended by 50 bp on each side and merged, are shrunk back by
+# 50 bp into `agilent_v5.GRCh37.bed` (#116). Baits closer than 100 bp stay merged.
 # Needs curl, python3 (venv, pip) and md5sum or md5.
 set -euo pipefail
 dir=${1:?usage: build-targets.sh DIR}
@@ -23,8 +28,11 @@ curl -sfL -o targets.GRCh37.chr.bed \
   https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/exome_pull_down_targets/20130108.exome.targets.bed
 curl -sfL -o hg19ToHg38.over.chain.gz \
   https://hgdownload.soe.ucsc.edu/goldenPath/hg19/liftOver/hg19ToHg38.over.chain.gz
+curl -sfL -o agilent_v5.slop50.list \
+  https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/data/AshkenazimTrio/analysis/OsloUniversityHospital_Exome_GATK_jointVC_11242015/wex_Agilent_SureSelect_v05_b37.baits.slop50.merged.list
 check targets.GRCh37.chr.bed 3285b0ba60e45550297d5e072d105483
 check hg19ToHg38.over.chain.gz 35887f73fe5e2231656504d1f6430900
+check agilent_v5.slop50.list e6f46373a2aa67b61000ae316768ddde
 
 python3 -m venv venv
 ./venv/bin/pip install -q CrossMap==0.7.3
@@ -34,4 +42,8 @@ awk -F'\t' '{print $1, $2, $3}' OFS='\t' targets.hg38.raw.bed | sort -k1,1 -k2,2
 sed 's/^chr//' targets.GRCh37.chr.bed > exome_targets.GRCh37.bed
 check exome_targets.hg38.bed f4f589406344a74b624e1af7d8ff8e33
 check exome_targets.GRCh37.bed 14805f7965dc8b44772b410d1141393c
-echo "targets: $(wc -l < exome_targets.GRCh37.bed) GRCh37, $(wc -l < exome_targets.hg38.bed) GRCh38"
+# Picard intervals are 1-based and closed: BED start = start - 1 + 50, end = end - 50.
+awk -F'\t' '!/^@/ && $3 - $2 + 1 > 100 {print $1, $2 - 1 + 50, $3 - 50}' OFS='\t' agilent_v5.slop50.list > agilent_v5.GRCh37.bed
+check agilent_v5.GRCh37.bed 588e00280fc53612a54812dc9fe39b30
+echo "targets: $(wc -l < exome_targets.GRCh37.bed) GRCh37, $(wc -l < exome_targets.hg38.bed) GRCh38," \
+  "$(wc -l < agilent_v5.GRCh37.bed) Agilent V5 baits (HG002)"

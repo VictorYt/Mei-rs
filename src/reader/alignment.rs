@@ -4,6 +4,7 @@
 //! locate its index; each thread then opens its own [`RegionReader`], so no
 //! mutable state is shared.
 
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
@@ -236,6 +237,21 @@ impl AlignmentFile {
             .map(|(name, contig)| Contig {
                 name: name.to_string(),
                 length: contig.length().get() as u64,
+            })
+            .collect()
+    }
+
+    /// MD5 checksums (`M5`, hexadecimal) of the header contigs that have one.
+    #[must_use]
+    pub fn checksums(&self) -> HashMap<String, String> {
+        self.header
+            .reference_sequences()
+            .iter()
+            .filter_map(|(name, contig)| {
+                contig
+                    .other_fields()
+                    .get(&sam::header::record::value::map::reference_sequence::tag::MD5_CHECKSUM)
+                    .map(|m5| (name.to_string(), m5.to_string().to_ascii_lowercase()))
             })
             .collect()
     }

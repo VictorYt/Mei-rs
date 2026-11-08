@@ -5,8 +5,10 @@ comes from. The HGSVC3 truth set and the seven 1000 Genomes exomes used to fit
 or choose them are the ones of [docs/validation](validation/README.md); HG002
 was never used. A value marked **fitted** or **chosen** was set on those seven
 exomes (from #90 on, on the 18 tuning exomes of `validation/split.tsv`), so
-the precision and recall measured on them are optimistic for these values;
-the 18 test exomes and HG002 are the independent checks.
+the precision and recall measured on them are optimistic for these values.
+The 17 test exomes were never fitted on but were looked at (false-positive
+analysis, model and threshold comparisons, #122): they are a development set;
+HG002 is the only fully external check.
 
 Origins:
 
@@ -33,7 +35,7 @@ Origins:
 | `--min-mei-mate-fraction` | 0.3 | chosen (#31) |
 | `--min-signal-ratio` | 0.05 | design (v0.1.0) |
 | `--probe-edge-tolerance` | 2 bp | design (#29) |
-| `--profile`, `--min-qual` | `exome`: 10 (`discovery`: 0) | chosen (#90) on the 18 tuning exomes of `docs/validation/split.tsv`: lowest quality with a precision of 0.95 there (0.911 on the 18 test exomes); 0 until v0.4.1 |
+| `--profile`, `--min-qual` | `exome`: 10 (`discovery`: 0); `exome` requires `--reference` (#120) | chosen (#90) on the 18 tuning exomes of `docs/validation/split.tsv`: lowest quality with a precision of 0.95 there, an internal target to choose the value, not a precision to expect (test exomes: 0.908, 95% interval over families and loci 0.809 to 0.977); 0 until v0.4.1 |
 
 ## Internal constants
 
@@ -57,6 +59,7 @@ Origins:
 | Assembly `K`, `MIN_COUNT`, `MAX_CONTIG`, `MAX_TSD` | 21, 2, 600, 50 | `assembly` | design (#33) |
 | `MIN_INSERT`, `MIN_SEED_GAP`, `MAX_SEED_GAP`, `SNP_CHECK` | 10, 3, 40, 8 | `assembly` | design (#33, #66) |
 | `ERROR` (genotype) | 0.02 | `genotype` | design |
+| `HOM_MIN_ALT_FRACTION` | 0.2 | `genotype` | fitted (#91) on the 18 tuning exomes: without reference read at the site, a `1/1` call needs this fraction of alternative reads among the reads at the site (best of 0.15 to 0.3) |
 | `HET_FRACTION` | 0.3 | `genotype` | fitted (#34; median alternative fraction of the true heterozygous calls 0.28; 76 of 91 genotypes right, 68 with 0.5) |
 | `PRIOR` and the 14 log10 likelihood ratios of the score | see `genotype::score` | `genotype::score` | fitted (#34, refit in #67 on 129 true and 40 false `PASS` calls) |
 | Score cutoffs: identity 0.98, distinct starts 0.7, MEI mates 0.6, signal ratio 0.2 | | `genotype::score` | chosen (#34) |

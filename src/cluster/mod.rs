@@ -329,6 +329,14 @@ impl Candidate {
         self.filters.is_empty()
     }
 
+    /// Whether the candidate passes every filter but the quality threshold
+    /// (`low_qual`, set by `--min-qual` or `--profile`): an insertion
+    /// whatever the profile, for its genotype.
+    #[must_use]
+    pub fn passes_before_quality(&self) -> bool {
+        self.filters.iter().all(|f| *f == Filter::LowQual)
+    }
+
     /// Whether signals support the insertion from both flanks.
     #[must_use]
     pub fn both_sides(&self) -> bool {
@@ -495,6 +503,24 @@ pub fn cluster(signals: Vec<Signal>, options: &ClusterOptions) -> Vec<Candidate>
 pub(crate) mod tests {
     use super::*;
     use crate::reader::signals::PolyTail;
+
+    #[test]
+    fn passes_before_the_quality_threshold() {
+        let mut c = cluster(
+            vec![
+                clip(1_000, Side::Left, "r1", Some(b'A')),
+                clip(1_000, Side::Left, "r2", Some(b'A')),
+            ],
+            &ClusterOptions::default(),
+        )
+        .remove(0);
+        c.filters.clear();
+        assert!(c.is_pass() && c.passes_before_quality());
+        c.filters = vec![Filter::LowQual];
+        assert!(!c.is_pass() && c.passes_before_quality());
+        c.filters = vec![Filter::ProbeEdge, Filter::LowQual];
+        assert!(!c.passes_before_quality());
+    }
 
     pub(crate) fn clip(position: u64, side: Side, read: &str, tail: Option<u8>) -> Signal {
         Signal {

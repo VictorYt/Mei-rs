@@ -59,6 +59,9 @@ fn normalize(output: &str) -> String {
             let trimmed = line.trim_start();
             if line.starts_with("##mei-rs ") {
                 "##mei-rs {version}".to_owned()
+            } else if line.starts_with("# mei-rs ") {
+                // The comment line of the BED output.
+                line.replacen(env!("CARGO_PKG_VERSION"), "{version}", 1)
             } else if line.starts_with("##command: ") {
                 "##command: {command}".to_owned()
             } else if line.starts_with("##source=mei-rs ") {
@@ -258,6 +261,11 @@ fn mate_only_insertion_placed_by_short_clips() {
             ("right_junction_clips", "0"),
             ("typed_by", "mates"),
             ("assembled", "left"),
+            // No alternative read: a heterozygous call that the reads do not
+            // support (#117).
+            ("genotype", "0/1"),
+            ("gq", "0"),
+            ("alt_reads", "0"),
             ("position", "10012"),
             ("left_junction", "10012"),
         ] {
@@ -555,7 +563,16 @@ fn same_output_with_any_thread_count() {
 fn exome_profile_flags_low_quality() {
     // The default profile keeps the three insertions and flags the
     // candidates of quality below 10, here the two artefacts.
-    let args = [&POSITIVE[..], &["--keep-filtered", "--profile", "exome"]].concat();
+    let args = [
+        &POSITIVE[..],
+        &[
+            "--keep-filtered",
+            "--profile",
+            "exome",
+            "--allow-no-reference",
+        ],
+    ]
+    .concat();
     let tsv = scan(&args);
     let filters: Vec<_> = rows(&tsv)
         .iter()
@@ -568,7 +585,18 @@ fn exome_profile_flags_low_quality() {
         "{tsv}"
     );
     // `--profile exome` is `--min-qual 10` (the default, see `cli`).
-    let default = scan(&[&POSITIVE[..], &["--keep-filtered", "--min-qual", "10"]].concat());
+    let default = scan(
+        &[
+            &POSITIVE[..],
+            &[
+                "--keep-filtered",
+                "--min-qual",
+                "10",
+                "--allow-no-reference",
+            ],
+        ]
+        .concat(),
+    );
     assert_eq!(normalize(&default), normalize(&tsv));
 }
 
@@ -614,8 +642,15 @@ fn output_file() {
     );
     assert_eq!(stdout, "");
     let bed = fs::read_to_string(&path).unwrap();
-    assert_eq!(bed.lines().count(), 3);
-    assert!(bed.starts_with("chr1\t6000\t6010\tMEI_1\t"), "{bed}");
+    assert_eq!(bed.lines().count(), 4);
+    assert!(bed.starts_with("# mei-rs "), "{bed}");
+    assert!(
+        bed.lines()
+            .nth(1)
+            .unwrap()
+            .starts_with("chr1\t6000\t6010\tMEI_1\t"),
+        "{bed}"
+    );
     fs::remove_dir_all(&dir).unwrap();
 }
 

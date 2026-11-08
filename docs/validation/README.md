@@ -88,27 +88,114 @@ release (prior 0.501, AUC 0.928 and 0.787).
   of filtered candidates) or from a VCF of `mei-rs` or of another caller
   (`FILTER` `PASS` or `.` passes); calls outside the padded targets are left
   out (other callers scan the whole alignment file);
-* matches a call to a truth MEI of the same sample when its position, left
-  junction or right junction is within `--tolerance` (20 bp) of the truth
-  position (both 1-based, insertion right after the position);
-* precision: PASS calls matching a truth MEI of the sample, over PASS calls
-  matching it or no MEI of any HGSVC3 sample (calls near an MEI of another
-  sample, or of a sample with a missing haplotype, are counted apart);
+* matches the calls of a sample **one to one** with the truth MEIs it
+  carries (#112): a pair is possible when the position, left junction or
+  right junction of the call is within `--tolerance` (20 bp) of the truth
+  position (both 1-based, insertion right after the position), and the
+  closest pairs are taken first, each call and each MEI at most once. A
+  matched call of another family (an Alu call on a LINE-1) is
+  `wrong_family`, a second call of a matched MEI a `duplicate`: both are
+  false calls. This is done at every level (any candidate, `PASS`, each
+  `--min-qual`), so a filtered candidate never takes the MEI of a `PASS` call;
+* precision: true `PASS` calls over true and false ones (`fp`,
+  `wrong_family`, `duplicate`); calls near an MEI of another sample
+  (`other_sample`), or of a sample with a missing haplotype (`unknown`), are
+  counted apart and left out of the refit;
 * recall: truth MEIs of the sample matched by a PASS call (`recall_pass`) or
   by any candidate, filtered or not (`recall_any`), also by distance to the
   unpadded target and by family;
 * genotype concordance of the true PASS calls, and precision and recall of the
   PASS calls above each `--min-qual` threshold;
-* 95% bootstrap intervals of precision and recall (PASS and each `--min-qual`)
-  resampling the samples (`--bootstrap`, 2000 resamples, fixed seed): the
-  samples are the unit, since the calls of one sample share depth, library and
-  ancestry; HG002 alone has no interval;
+* counts the carrier pairs (a truth MEI in one sample) and the distinct
+  sites behind them, the loci of the false calls, and the recall per site
+  (#113): most MEIs are common polymorphisms carried by several samples, and
+  most false calls are recurrent artefacts at a few loci;
+* 95% two-way bootstrap intervals of precision and recall (`PASS` and each
+  `--min-qual`; `--bootstrap`, 2000 resamples, fixed seed): the families of
+  `split.tsv` (`--families`) and the loci (truth MEIs and false calls closer
+  than 100 bp, across samples) are resampled independently and each
+  sample-locus cell is weighted by both counts (#113). The interval over the
+  samples alone, used up to v0.5.0, is printed next to it; it is narrower
+  because it treats the samples sharing an insertion or an artefact as
+  independent. HG002 alone has no interval;
+* precision and recall at several tolerances (`--tolerances` 5, 20, 50 and
+  100 bp), mate-only (imprecise) calls apart (#112);
+* recall at the default profile (`--strata-qual`, QUAL 10) by stratum, each
+  with its one-sided 95% Clopper-Pearson lower bound, the sensitivity that
+  can be claimed for it (#114): distance to the target, coding sequence
+  +/- 20 bp and exon (GENCODE v46 basic, `--annotation`), family, number of
+  HGSVC3 carriers, median candidate depth and read length of the sample
+  (`split.tsv`); and the genotype errors by depth. The bound treats the
+  carrier pairs as independent, so it is optimistic for strata of few sites;
 * `--fp-out`, `--tp-out` (true positives, with calls near an MEI of another
   sample or of a sample not genotyped there under their own status) and
   `--fn-out` list the PASS false positives, the PASS calls that are not, and
   the missed MEIs.
 
 ## Results
+
+### v0.5.0 (#111-#117, #91)
+
+Rerun of `run.sh` on the 36 exomes and HG002 with all the changes of the
+milestone (the calls are those of v0.4.1; the genotypes and their quality
+change, #117 and #91). Units: carrier pairs (a truth MEI in one sample) and
+distinct sites. Intervals: 95% two-way bootstrap over families and loci.
+
+| Set | Pairs (sites) | PASS true / false | Precision | Recall | QUAL ≥ 10 true / false | Precision | Recall |
+|---|---|---|---|---|---|---|---|
+| 18 tuning | 976 (236) | 268 / 82 | 0.766 | 0.275 | 196 / 11 | 0.947 | 0.201 |
+| 17 test | 918 (244) | 216 / 107 | 0.669 (0.526-0.797) | 0.235 (0.159-0.321) | 168 / 17 | 0.908 (0.809-0.977) | 0.183 (0.115-0.264) |
+| HG00732 (related) | 47 | 14 / 4 | 0.778 | 0.298 | 8 / 2 | 0.800 | 0.170 |
+| HG002 (Agilent V5) | 53 | 19 / 33 | 0.365 | 0.358 | 14 / 12 | 0.538 | 0.264 |
+
+Test set at the other thresholds: QUAL 2 212 / 56 (0.791, 0.658-0.899),
+QUAL 5 191 / 35 (0.845, 0.725-0.934), QUAL 15 137 / 5 (0.965). The intervals
+over the samples alone (the method up to v0.4.1) are 0.871-0.943 for the
+precision at QUAL 10 and 0.134-0.237 for the recall: about half as wide.
+False `PASS` calls: 107 at 80 loci (test), 82 at 49 loci (tuning). Sites
+found in at least one carrier: 91 of 244 (test).
+
+Changes of the method, on the same calls (test set):
+
+* without HG00732 (#111): QUAL 10 169 / 16 (0.914) instead of 177 / 18
+  (0.908) on 18 exomes; HG00732 alone 8 / 2 (0.800);
+* one-to-one matching (#112): one call becomes a `duplicate` (168 / 17); no
+  call of the wrong family; 9 calls `other_sample`. Tolerance: 5 bp 0.483 /
+  0.170 (PASS); 20, 50 and 100 bp give the same numbers;
+* HG002 on the baits of its kit (#116): 53 truth MEIs instead of 49, QUAL 10
+  14 / 12 (0.538) instead of 14 / 8 (0.636).
+
+Recall at QUAL 10 by stratum (test, carrier pairs; lower: one-sided 95%
+Clopper-Pearson bound, which treats the pairs as independent and is
+optimistic for strata of few sites):
+
+| Stratum | Found / pairs | Recall | Lower |
+|---|---|---|---|
+| inside a target | 57 / 104 | 0.548 | 0.463 |
+| 1-100 bp from a target | 84 / 222 | 0.378 | 0.324 |
+| 101-300 bp | 27 / 592 | 0.046 | 0.032 |
+| coding sequence +/- 20 bp | 33 / 64 | 0.516 | 0.406 |
+| in an exon | 15 / 42 | 0.357 | 0.235 |
+| Alu | 149 / 798 | 0.187 | 0.164 |
+| LINE-1 | 11 / 69 | 0.159 | 0.092 |
+| SVA | 8 / 51 | 0.157 | 0.081 |
+| fewer than 4 HGSVC3 carriers | 15 / 94 | 0.160 | 0.101 |
+| reads 76 / 90 / 100 / 101 bp | 28/277, 48/173, 75/290, 17/178 | 0.101, 0.277, 0.259, 0.096 | |
+| median candidate depth < 100 / 100-149 / >= 150 | 35/295, 53/342, 80/281 | 0.119, 0.155, 0.285 | |
+
+All 168 true calls at QUAL 10 have a precise position (3 `PASS` calls of the
+37 exomes are imprecise, `CIPOS`).
+
+Genotypes of the true `PASS` calls: test 183 of 215 right (178 before #91),
+tuning 237 of 263 (229), HG00732 12 of 14, HG002 14 of 19. GQ measures the
+reads only (#117): median GQ of the true test calls 21 (93 before), of the
+false ones 1 (57); no call without alternative read has a GQ above 0.
+
+Score (refit on the tuning calls, for reference; the weights of the release
+are kept): AUC 0.894 leaving one tuning sample out, 0.895 on the test calls,
+0.746 on HG002.
+
+### Earlier versions
 
 v0.4.0 (`develop` after #67), default options with `--reference`: seven
 exomes 126 true / 40 false PASS (precision 0.759, recall 0.337, recall of any
@@ -313,8 +400,18 @@ removed from the annotation files (the hs37d5 contigs are `1`..`22`).
 
 `split.tsv` lists the 36 HGSVC3 samples that have a 1000 Genomes GRCh38 exome
 and fixes the split: 18 **tuning** samples, on which thresholds and weights
-are fitted or chosen, and 18 **test** samples, on which they are reported and
-never fitted. HG002 (GRCh37, lifted truth) stays a second held-out sample.
+are fitted or chosen, and 17 **test** samples, on which they are reported and
+never fitted. The test samples were looked at, though (the false-positive
+analysis below, the model choice of #89 and the threshold of #90): they are a
+development set, not a locked one. HG002 (GRCh37, lifted truth, another
+centre and kit) is the only fully external sample.
+
+Each sample has the `family_id` of the 1000 Genomes pedigree. HG00732, the
+mother of the tuning sample HG00733 (family PR05), was a test sample until
+v0.4.1; it is now in a `related` set, evaluated apart (#111):
+`check_split.py` fails when a family spans the tuning and the test sets.
+`read_length` is the modal read length (samtools, chr1) for the strata of
+#114.
 
 The seven exomes used up to v0.4.1 are all in the tuning set. The other 11
 tuning samples were drawn from the 29 new ones by super-population (so that
@@ -379,9 +476,12 @@ Current score, `PASS` calls, true / false and precision:
 
 The lowest threshold with a tuning precision of 0.9 (QUAL 3) gives 0.833 on
 the test set: the precision of a threshold drops by 0.05-0.10 on new samples.
-The `exome` profile uses QUAL 10, the lowest with a tuning precision of 0.95,
-which keeps 0.9 on the test set. HG002 at QUAL 10: 14 true / 8 false (0.636,
-recall 0.286).
+The `exome` profile uses QUAL 10, the lowest with a tuning precision of 0.95.
+That 0.95 is an internal target to choose the value, not a precision to
+expect (#122); the numbers to quote are those measured on the test set and
+HG002 (v0.5.0 above). The numbers of this table were computed with the
+evaluation of v0.4.1 (HG00732 in the test set, matching without family
+check, intervals over the samples alone).
 
 ### Refit on the tuning set and mate-only rule (#82)
 
