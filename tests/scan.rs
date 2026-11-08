@@ -258,6 +258,11 @@ fn mate_only_insertion_placed_by_short_clips() {
             ("right_junction_clips", "0"),
             ("typed_by", "mates"),
             ("assembled", "left"),
+            // No alternative read: a heterozygous call that the reads do not
+            // support (#117).
+            ("genotype", "0/1"),
+            ("gq", "0"),
+            ("alt_reads", "0"),
             ("position", "10012"),
             ("left_junction", "10012"),
         ] {

@@ -30,6 +30,13 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Genotype quality (#117): `gq` is the probability of a wrong genotype given
+  the reads alone (equal priors over `0/0`, `0/1` and `1/1`); the prior that
+  excludes `0/0` for a candidate that passed still chooses the call but no
+  longer raises its quality, so a call without alternative read has a `gq`
+  of 0 instead of 99 (the `mateonly` fixture). The genotype of a candidate
+  flagged only `low_qual` no longer depends on the profile: it is genotyped
+  as an insertion.
 - `scan` fails (exit code 1) when no target of the BED can be scanned (every
   target on a contig absent from the alignment or beyond the end of its
   contig, e.g. a BED of another genome build), instead of writing an empty
