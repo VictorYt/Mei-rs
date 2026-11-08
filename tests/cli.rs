@@ -148,3 +148,21 @@ fn scan_region() {
             "--region chr1:1-100 holds no target",
         ));
 }
+
+#[test]
+fn scan_fails_without_any_usable_target() {
+    // A BED of another build: an empty output would read as "no insertion".
+    let dir = std::env::temp_dir().join(format!("mei-rs-cli-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let bed = dir.join("other-build.bed");
+    std::fs::write(&bed, "chr1\t30000\t30050\nchrZZ\t1\t10\n").unwrap();
+    mei_rs()
+        .args(["scan", "--bam", &data("positive.bam"), "--bed"])
+        .arg(&bed)
+        .assert()
+        .code(1)
+        .stderr(
+            predicate::str::contains("no target of ").and(predicate::str::contains("positive.bam")),
+        );
+    std::fs::remove_dir_all(&dir).unwrap();
+}

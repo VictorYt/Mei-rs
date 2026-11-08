@@ -56,6 +56,16 @@ pub enum InputError {
         /// A few BED contigs.
         contigs: Vec<String>,
     },
+    /// Every target was skipped: nothing would be scanned.
+    #[error(
+        "no target of {bed} can be scanned in {alignment}: all are on absent contigs or beyond the end of their contig; is it the same genome build?"
+    )]
+    NoUsableTarget {
+        /// Path of the BED file.
+        bed: PathBuf,
+        /// Path of the alignment file.
+        alignment: PathBuf,
+    },
     /// The reference has no `.fai` index, or it cannot be read.
     #[error("cannot read the index {path} of the reference (run `samtools faidx`): {source}")]
     ReferenceIndex {
@@ -168,9 +178,9 @@ impl Inputs {
 
 /// Keep the probes the alignment can be queried on.
 ///
-/// A naming mismatch (`chr1` vs `1`) or a BED without any known contig is an
-/// error; probes on other unknown contigs, or starting after the end of their
-/// contig, are dropped with a warning.
+/// A naming mismatch (`chr1` vs `1`), a BED without any known contig, or a BED
+/// whose every probe is dropped is an error; probes on other unknown contigs,
+/// or starting after the end of their contig, are dropped with a warning.
 fn check_probes(
     probes: Vec<Probe>,
     contigs: &[Contig],
@@ -245,6 +255,12 @@ fn check_probes(
                     .map(|p| format!("{}:{}-{}", p.contig, p.start, p.end))
             )
         );
+    }
+    if kept.is_empty() {
+        return Err(InputError::NoUsableTarget {
+            bed: bed.to_path_buf(),
+            alignment: alignment.to_path_buf(),
+        });
     }
     let clamped = kept
         .iter()
@@ -458,6 +474,16 @@ mod tests {
         let err = Inputs::load(&args(&bed)).unwrap_err();
         assert!(matches!(err, InputError::NoKnownContig { .. }));
         assert!(err.to_string().starts_with("no contig of "), "{err}");
+    }
+
+    #[test]
+    fn no_usable_target() {
+        // Known contigs, every target beyond their end: a BED of another build.
+        let dir = TempDir::new("beyond");
+        let bed = dir.file("t.bed", "chr1\t30000\t30050\nchrZ\t1\t10\n");
+        let err = Inputs::load(&args(&bed)).unwrap_err();
+        assert!(matches!(err, InputError::NoUsableTarget { .. }), "{err}");
+        assert!(err.to_string().starts_with("no target of "), "{err}");
     }
 
     #[test]

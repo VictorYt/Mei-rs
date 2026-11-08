@@ -23,6 +23,10 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- `scan` fails (exit code 1) when no target of the BED can be scanned (every
+  target on a contig absent from the alignment or beyond the end of its
+  contig, e.g. a BED of another genome build), instead of writing an empty
+  output that reads as "no insertion" (#118).
 - Release workflow: the upload job downloads only the binary artifacts (it failed on the image digests still being written, #84); the v0.4.1 binaries were attached by hand from the same run.
 
 ## [0.4.1] - 2026-10-15
