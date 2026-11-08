@@ -1,0 +1,10 @@
+# Lint of the evaluation scripts: `uvx ruff check docs/validation`.
+line-length = 120
+
+[lint]
+select = ["E", "F", "I", "B", "N", "D"]
+# `zip(strict=)` needs Python 3.10; the scripts run on the Python 3.9 of macOS.
+ignore = ["B905"]
+
+[lint.pydocstyle]
+convention = "pep257"
