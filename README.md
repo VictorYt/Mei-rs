@@ -117,8 +117,9 @@ skipped with a warning.
 | `--probe-edge-tolerance` | 2 | distance in bp to a probe start or end within which a soft-clip stops at the probe edge |
 | `--keep-filtered` | off | also write the candidates flagged `no_junction`, `no_tail`, `untyped`, `non_mei_mates`, `tandem_repeat`, `probe_edge`, `low_ratio` or `low_qual` |
 | **Output** | | |
-| `-o`, `--output` | stdout | output file |
+| `-o`, `--output` | stdout | output file, written under a temporary name and renamed once complete; compressed (BGZF, readable by any gzip reader) when it ends with `.gz` |
 | `--format` | `tsv` | `tsv`, `bed`, `json` (with every signal of every candidate) or `vcf` (VCF 4.2; bgzipped and indexed, `.tbi`, when `--output` ends with `.gz`) |
+| `--anonymize` | off | input paths reduced to their file names in the command line written in the outputs, read names of the JSON replaced (see [what the outputs contain](docs/output.md#what-the-outputs-contain)) |
 | **Global** | | |
 | `-t`, `--threads` | all cores | worker threads |
 | `-v`, `-q` | | more (`-v`, `-vv`) or fewer (`-q`) logs; `RUST_LOG` takes precedence |

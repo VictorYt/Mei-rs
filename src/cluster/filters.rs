@@ -153,7 +153,7 @@ pub fn apply(
     let junction_clips = candidate.left_junction_clips + candidate.right_junction_clips;
     if !short_counts
         && !mate_only
-        && junction_clips - candidate.short_junction_clips < options.min_clips
+        && junction_clips.saturating_sub(candidate.short_junction_clips) < options.min_clips
         && !candidate.filters.contains(&Filter::NoJunction)
     {
         // In filter order: only `low_support` comes before.
@@ -165,7 +165,7 @@ pub fn apply(
     let counted_typed_clips = if short_counts {
         typed_clips
     } else {
-        typed_clips - candidate.typing.as_ref().map_or(0, |t| t.short_typed_clips)
+        typed_clips.saturating_sub(candidate.typing.as_ref().map_or(0, |t| t.short_typed_clips))
     };
     // One typed clip is enough with a poly(A/T) tail and as many MEI mates
     // as typed clips required: on short reads, few clips are long enough to

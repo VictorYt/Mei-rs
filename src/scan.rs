@@ -1,6 +1,6 @@
 //! The `scan` subcommand: discovery of candidate insertion sites.
 
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
 use std::path::Path;
 
@@ -13,7 +13,7 @@ use tracing::{info, warn};
 use crate::assembly::{self, Assembly};
 use crate::cli::{OutputFormat, ScanArgs};
 use crate::cluster::{Candidate, Confidence, Filter, cluster, filters, tracts};
-use crate::genotype::{self, AlleleCounts};
+use crate::genotype::{self, AlleleCounts, score};
 use crate::inputs::Inputs;
 use crate::reader::alleles::Site;
 use crate::reader::breakpoints::BreakpointRequest;
@@ -39,6 +39,13 @@ use crate::writer::{self, Report};
 /// Fails if the inputs are unusable or inconsistent, or if the output cannot
 /// be written.
 pub fn run(args: &ScanArgs) -> Result<()> {
+    let min_qual = args.filter_options().min_qual;
+    if min_qual > score::max_quality() {
+        warn!(
+            "--min-qual {min_qual} is above the largest quality the score can give ({}): every candidate will be flagged low_qual",
+            score::max_quality()
+        );
+    }
     let inputs = Inputs::load(args)?;
     let consensus = ConsensusSet::load(args.consensus.as_deref())?;
     let targets = &inputs.targets;
@@ -138,7 +145,7 @@ fn report(
     candidates: &[Candidate],
 ) -> Result<()> {
     let contigs: Vec<String> = header_contigs.iter().map(|c| c.name.clone()).collect();
-    let command = command_line();
+    let command = command_line(args.anonymize);
     let contig_lengths: Vec<u64> = header_contigs.iter().map(|c| c.length).collect();
     let reference_bases = match (&args.reference, args.format) {
         (Some(reference), OutputFormat::Vcf) => {
@@ -159,6 +166,7 @@ fn report(
         reference: reference_name.as_deref(),
         reference_bases: reference_bases.as_deref(),
         candidates,
+        anonymize: args.anonymize,
     };
     write_output(&report, args)
 }
@@ -598,36 +606,58 @@ fn reference_window(
 }
 
 /// Write the report to the output file, or to standard output.
+///
+/// A file is written next to its final path under a temporary name and
+/// renamed once complete, so an interrupted run never leaves a truncated
+/// output that looks finished. A path ending in `.gz` is compressed (BGZF,
+/// readable by any gzip reader) whatever the format; a compressed VCF is
+/// also indexed.
 fn write_output(report: &Report<'_>, args: &ScanArgs) -> Result<()> {
-    let open = |path: &Path| {
-        File::create(path).with_context(|| format!("cannot create {}", path.display()))
+    let Some(path) = &args.output else {
+        let mut out = BufWriter::new(io::stdout().lock());
+        return writer::write(report, args.format, &mut out)
+            .and_then(|()| out.flush())
+            .context("cannot write the candidates");
     };
-    let compressed = args.format == OutputFormat::Vcf
-        && args
-            .output
-            .as_deref()
-            .is_some_and(|p| p.extension().is_some_and(|e| e == "gz"));
-    let mut out: Box<dyn Write> = match &args.output {
-        Some(path) if compressed => Box::new(bgzf::io::Writer::new(open(path)?)),
-        Some(path) => Box::new(BufWriter::new(open(path)?)),
-        None => Box::new(BufWriter::new(io::stdout().lock())),
-    };
-    writer::write(report, args.format, &mut out)
-        .and_then(|()| out.flush())
-        .context("cannot write the candidates")?;
-    // The BGZF writer writes its end-of-file block when dropped.
-    drop(out);
-    if let Some(path) = &args.output {
-        info!(
-            "{} candidates written to {}",
-            report.candidates.len(),
-            path.display()
-        );
-        if compressed {
-            index_vcf(path)?;
-        }
+    let compressed = path.extension().is_some_and(|e| e == "gz");
+    let partial = partial_path(path);
+    let file =
+        File::create(&partial).with_context(|| format!("cannot create {}", partial.display()))?;
+    let written = (|| {
+        let mut out: Box<dyn Write> = if compressed {
+            Box::new(bgzf::io::Writer::new(file))
+        } else {
+            Box::new(BufWriter::new(file))
+        };
+        writer::write(report, args.format, &mut out)?;
+        out.flush()?;
+        // The BGZF writer writes its end-of-file block when dropped.
+        drop(out);
+        fs::rename(&partial, path)
+    })();
+    if let Err(error) = written {
+        let _ = fs::remove_file(&partial);
+        return Err(error)
+            .with_context(|| format!("cannot write the candidates to {}", path.display()));
+    }
+    info!(
+        "{} candidates written to {}",
+        report.candidates.len(),
+        path.display()
+    );
+    if compressed && args.format == OutputFormat::Vcf {
+        index_vcf(path)?;
     }
     Ok(())
+}
+
+/// Temporary name of an output file while it is written: `.NAME.PID.part`
+/// in the same directory (a rename within a directory is atomic).
+fn partial_path(path: &Path) -> std::path::PathBuf {
+    let name = path
+        .file_name()
+        .map_or_else(|| "output".into(), |n| n.to_string_lossy().into_owned());
+    path.with_file_name(format!(".{name}.{}.part", std::process::id()))
 }
 
 /// Index a bgzipped VCF: tabix (`.tbi`), or CSI (`.csi`) for contigs longer
@@ -680,9 +710,15 @@ fn reference_bases(
         .collect()
 }
 
-/// The command line, with the program name only (not its path).
-fn command_line() -> String {
-    let mut args = std::env::args();
+/// The command line, with the program name only (not its path); with
+/// `anonymize`, every argument that is a path (or `--option=path`) keeps
+/// its file name only.
+fn command_line(anonymize: bool) -> String {
+    command_line_of(std::env::args(), anonymize)
+}
+
+/// [`command_line`] of the given arguments.
+fn command_line_of(mut args: impl Iterator<Item = String>, anonymize: bool) -> String {
     let program = args
         .next()
         .map(|p| {
@@ -691,8 +727,21 @@ fn command_line() -> String {
                 .map_or(p.clone(), |name| name.to_string_lossy().into_owned())
         })
         .unwrap_or_default();
+    let file_name = |arg: String| -> String {
+        if !anonymize || !arg.contains(std::path::MAIN_SEPARATOR) {
+            return arg;
+        }
+        let (option, value) = match arg.split_once('=') {
+            Some((option, value)) if option.starts_with("--") => (Some(option), value),
+            _ => (None, arg.as_str()),
+        };
+        let name = Path::new(value)
+            .file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+        option.map_or_else(|| name.clone(), |o| format!("{o}={name}"))
+    };
     std::iter::once(program)
-        .chain(args)
+        .chain(args.map(file_name))
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -735,6 +784,36 @@ fn log_extraction(extraction: &Extraction, (short, kept): (usize, usize), clip: 
             "{short} short soft-clips ({} to {} bp): {kept} kept with a poly(A/T) tail or MEI sequence",
             clip.min_short_length,
             clip.min_length - 1
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::command_line_of;
+
+    fn line(args: &[&str], anonymize: bool) -> String {
+        command_line_of(args.iter().map(|a| (*a).to_owned()), anonymize)
+    }
+
+    #[test]
+    fn command_line_keeps_file_names_only_when_anonymized() {
+        let args = [
+            "/opt/bin/mei-rs",
+            "scan",
+            "--bam",
+            "/data/patients/P123/P123.bam",
+            "--bed=/data/kits/v5.bed",
+            "--min-qual",
+            "10",
+        ];
+        assert_eq!(
+            line(&args, false),
+            "mei-rs scan --bam /data/patients/P123/P123.bam --bed=/data/kits/v5.bed --min-qual 10"
+        );
+        assert_eq!(
+            line(&args, true),
+            "mei-rs scan --bam P123.bam --bed=v5.bed --min-qual 10"
         );
     }
 }

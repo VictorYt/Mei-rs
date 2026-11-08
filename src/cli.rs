@@ -203,6 +203,11 @@ pub struct ScanArgs {
     /// Output format
     #[arg(long, value_enum, default_value_t = OutputFormat::Tsv, help_heading = "Output")]
     pub format: OutputFormat,
+
+    /// Keep only the file names (no directory) in the command line written
+    /// in the outputs, and replace the read names of the JSON output
+    #[arg(long, help_heading = "Output")]
+    pub anonymize: bool,
 }
 
 impl ScanArgs {

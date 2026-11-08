@@ -28,6 +28,17 @@ project follows [Semantic Versioning](https://semver.org/).
   it the precision is not known. `--profile discovery` still runs without a
   reference.
 
+### Added
+
+- Every output carries a research-use notice (`##note` in the TSV, a `#`
+  line in the BED, `note` in the JSON, `##mei-rsNote` in the VCF): not a
+  validated diagnostic test, calls to confirm, absence of a call does not
+  exclude an insertion (#121). The BED output now starts with this comment
+  line.
+- `--anonymize` (#121): file names only in the command line written in the
+  outputs, read names of the JSON replaced by `read_1`, `read_2`...
+  `docs/output.md` lists what each output and the log contain.
+
 ### Fixed
 
 - Genotype quality (#117): `gq` is the probability of a wrong genotype given
@@ -48,6 +59,12 @@ project follows [Semantic Versioning](https://semver.org/).
   decoded (#119). A BAM without `M5` tags gets a warning. The check reads
   each scanned contig of the reference once (GRCh38 with a warm file cache:
   +0.5 s wall, +4.6 s CPU).
+- Small fixes (#123): an output path ending in `.gz` is compressed for every
+  format (TSV, BED and JSON were written uncompressed); outputs are written
+  under a temporary name and renamed once complete, so an interrupted run
+  leaves no truncated file; `--min-qual` above the largest quality the score
+  can give (26) gets a warning; two unsigned subtractions of the filters
+  saturate; `__pycache__/` is ignored.
 - Release workflow: the upload job downloads only the binary artifacts (it failed on the image digests still being written, #84); the v0.4.1 binaries were attached by hand from the same run.
 
 ## [0.4.1] - 2026-10-15
