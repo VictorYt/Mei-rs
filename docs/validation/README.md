@@ -88,21 +88,45 @@ release (prior 0.501, AUC 0.928 and 0.787).
   of filtered candidates) or from a VCF of `mei-rs` or of another caller
   (`FILTER` `PASS` or `.` passes); calls outside the padded targets are left
   out (other callers scan the whole alignment file);
-* matches a call to a truth MEI of the same sample when its position, left
-  junction or right junction is within `--tolerance` (20 bp) of the truth
-  position (both 1-based, insertion right after the position);
-* precision: PASS calls matching a truth MEI of the sample, over PASS calls
-  matching it or no MEI of any HGSVC3 sample (calls near an MEI of another
-  sample, or of a sample with a missing haplotype, are counted apart);
+* matches the calls of a sample **one to one** with the truth MEIs it
+  carries (#112): a pair is possible when the position, left junction or
+  right junction of the call is within `--tolerance` (20 bp) of the truth
+  position (both 1-based, insertion right after the position), and the
+  closest pairs are taken first, each call and each MEI at most once. A
+  matched call of another family (an Alu call on a LINE-1) is
+  `wrong_family`, a second call of a matched MEI a `duplicate`: both are
+  false calls. This is done at every level (any candidate, `PASS`, each
+  `--min-qual`), so a filtered candidate never takes the MEI of a `PASS` call;
+* precision: true `PASS` calls over true and false ones (`fp`,
+  `wrong_family`, `duplicate`); calls near an MEI of another sample
+  (`other_sample`), or of a sample with a missing haplotype (`unknown`), are
+  counted apart and left out of the refit;
 * recall: truth MEIs of the sample matched by a PASS call (`recall_pass`) or
   by any candidate, filtered or not (`recall_any`), also by distance to the
   unpadded target and by family;
 * genotype concordance of the true PASS calls, and precision and recall of the
   PASS calls above each `--min-qual` threshold;
-* 95% bootstrap intervals of precision and recall (PASS and each `--min-qual`)
-  resampling the samples (`--bootstrap`, 2000 resamples, fixed seed): the
-  samples are the unit, since the calls of one sample share depth, library and
-  ancestry; HG002 alone has no interval;
+* counts the carrier pairs (a truth MEI in one sample) and the distinct
+  sites behind them, the loci of the false calls, and the recall per site
+  (#113): most MEIs are common polymorphisms carried by several samples, and
+  most false calls are recurrent artefacts at a few loci;
+* 95% two-way bootstrap intervals of precision and recall (`PASS` and each
+  `--min-qual`; `--bootstrap`, 2000 resamples, fixed seed): the families of
+  `split.tsv` (`--families`) and the loci (truth MEIs and false calls closer
+  than 100 bp, across samples) are resampled independently and each
+  sample-locus cell is weighted by both counts (#113). The interval over the
+  samples alone, used up to v0.5.0, is printed next to it; it is narrower
+  because it treats the samples sharing an insertion or an artefact as
+  independent. HG002 alone has no interval;
+* precision and recall at several tolerances (`--tolerances` 5, 20, 50 and
+  100 bp), mate-only (imprecise) calls apart (#112);
+* recall at the default profile (`--strata-qual`, QUAL 10) by stratum, each
+  with its one-sided 95% Clopper-Pearson lower bound, the sensitivity that
+  can be claimed for it (#114): distance to the target, coding sequence
+  +/- 20 bp and exon (GENCODE v46 basic, `--annotation`), family, number of
+  HGSVC3 carriers, median candidate depth and read length of the sample
+  (`split.tsv`); and the genotype errors by depth. The bound treats the
+  carrier pairs as independent, so it is optimistic for strata of few sites;
 * `--fp-out`, `--tp-out` (true positives, with calls near an MEI of another
   sample or of a sample not genotyped there under their own status) and
   `--fn-out` list the PASS false positives, the PASS calls that are not, and

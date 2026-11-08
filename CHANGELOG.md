@@ -20,7 +20,6 @@ project follows [Semantic Versioning](https://semver.org/).
   123 genotypes of the true calls right (91 before), HG002 11 of 17 (9); the
   calls are unchanged. `evaluate.py --tp-out` gives the truth genotype of each
   call.
-
 - `--profile exome` (the default) requires `--reference`, unless
   `--allow-no-reference` is given (#120): its quality threshold and every
   published precision were measured with the reference, which turns on the
