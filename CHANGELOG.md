@@ -41,6 +41,13 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- Genotype (#91): a candidate that passed, with no reference read counted at
+  its site, is called `0/1` instead of `1/1` when its alternative reads are
+  less than 0.2 of the local depth (next to a probe edge the reference reads
+  end at the site and are not counted). The fraction was fitted on the 18
+  tuning exomes. Genotypes of the true `PASS` calls right: 17 test exomes 183
+  of 215 (85.1%; 178 before), tuning 237 of 263 (229), HG002 14 of 19 (13).
+  The calls are unchanged.
 - Genotype quality (#117): `gq` is the probability of a wrong genotype given
   the reads alone (equal priors over `0/0`, `0/1` and `1/1`); the prior that
   excludes `0/0` for a candidate that passed still chooses the call but no
