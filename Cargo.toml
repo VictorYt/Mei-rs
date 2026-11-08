@@ -1,6 +1,6 @@
 [package]
 name = "mei-rs"
-version = "0.4.1"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.91"
 description = "Detection of mobile element insertions (Alu, LINE-1, SVA) in targeted capture and exome sequencing data"
