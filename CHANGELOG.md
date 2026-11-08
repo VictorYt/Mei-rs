@@ -28,6 +28,17 @@ project follows [Semantic Versioning](https://semver.org/).
   it the precision is not known. `--profile discovery` still runs without a
   reference.
 
+### Added
+
+- Every output carries a research-use notice (`##note` in the TSV, a `#`
+  line in the BED, `note` in the JSON, `##mei-rsNote` in the VCF): not a
+  validated diagnostic test, calls to confirm, absence of a call does not
+  exclude an insertion (#121). The BED output now starts with this comment
+  line.
+- `--anonymize` (#121): file names only in the command line written in the
+  outputs, read names of the JSON replaced by `read_1`, `read_2`...
+  `docs/output.md` lists what each output and the log contain.
+
 ### Fixed
 
 - `scan` fails (exit code 1) when no target of the BED can be scanned (every

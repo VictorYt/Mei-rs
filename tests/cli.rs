@@ -38,6 +38,7 @@ fn scan_help_lists_every_option() {
         "--min-typed-clips",
         "--output",
         "--format",
+        "--anonymize",
         "--threads",
         "--verbose",
         "--quiet",

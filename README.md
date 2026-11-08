@@ -119,6 +119,7 @@ skipped with a warning.
 | **Output** | | |
 | `-o`, `--output` | stdout | output file |
 | `--format` | `tsv` | `tsv`, `bed`, `json` (with every signal of every candidate) or `vcf` (VCF 4.2; bgzipped and indexed, `.tbi`, when `--output` ends with `.gz`) |
+| `--anonymize` | off | input paths reduced to their file names in the command line written in the outputs, read names of the JSON replaced (see [what the outputs contain](docs/output.md#what-the-outputs-contain)) |
 | **Global** | | |
 | `-t`, `--threads` | all cores | worker threads |
 | `-v`, `-q` | | more (`-v`, `-vv`) or fewer (`-q`) logs; `RUST_LOG` takes precedence |

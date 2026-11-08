@@ -634,8 +634,15 @@ fn output_file() {
     );
     assert_eq!(stdout, "");
     let bed = fs::read_to_string(&path).unwrap();
-    assert_eq!(bed.lines().count(), 3);
-    assert!(bed.starts_with("chr1\t6000\t6010\tMEI_1\t"), "{bed}");
+    assert_eq!(bed.lines().count(), 4);
+    assert!(bed.starts_with("# mei-rs "), "{bed}");
+    assert!(
+        bed.lines()
+            .nth(1)
+            .unwrap()
+            .starts_with("chr1\t6000\t6010\tMEI_1\t"),
+        "{bed}"
+    );
     fs::remove_dir_all(&dir).unwrap();
 }
 
