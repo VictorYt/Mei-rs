@@ -84,3 +84,48 @@ def test_tolerance():
     """A larger tolerance matches farther calls."""
     assert statuses([call(1000)], [truth("a", 1050)], tolerance=50) == ["tp"]
     assert statuses([call(1000)], [truth("a", 1050)], tolerance=20) == ["fp"]
+
+
+def per_sample(samples, truths, calls_of):
+    """Build the input of `Loci` and `outcomes`: PASS rows of every sample."""
+    index = evaluate.TruthIndex(truths)
+    out = []
+    for s in samples:
+        carried = [t for t in truths if evaluate.carries(t["genotypes"][s])]
+        out.append((s, carried, {"PASS": evaluate.evaluate(s, calls_of[s], index, 20)}))
+    return out
+
+
+def test_loci_join_samples_at_one_site():
+    """An MEI and the false calls of other samples nearby are one locus; far calls are another."""
+    genotypes = {"A": "1|0", "B": "0|0"}
+    data = per_sample(["A", "B"], [truth("a", 1000, genotypes=genotypes)], {"A": [call(1000)], "B": [call(1050)]})
+    loci = evaluate.Loci(data)
+    assert loci.count == 1
+    cells = evaluate.outcomes(data, loci, "PASS")
+    assert cells == {("A", 0): [1, 0, 0], ("B", 0): [0, 1, 0]}
+    data = per_sample(["A", "B"], [truth("a", 1000, genotypes=genotypes)], {"A": [], "B": [call(5000)]})
+    loci = evaluate.Loci(data)
+    assert loci.count == 2
+    assert evaluate.outcomes(data, loci, "PASS") == {("A", 0): [0, 0, 1], ("B", 1): [0, 1, 0]}
+
+
+def test_two_way_interval_wider_for_a_recurrent_locus():
+    """A false call repeated at one locus in every sample widens the interval once loci are resampled."""
+    cells = []
+    for i in range(10):
+        s = f"S{i}"
+        cells.append((s, s, 0, [0, 1, 0]))  # the same artefact in every sample
+        cells += [(s, s, 1 + i * 3 + j, [1, 0, 0]) for j in range(3)]
+    groups = [f"S{i}" for i in range(10)]
+    samples_only = evaluate.bootstrap(cells, groups, 31, 500)
+    two_way = evaluate.bootstrap(cells, groups, 31, 500, by_locus=True)
+    assert samples_only["precision"] == ("0.750", "0.750")
+    low, high = (float(x) for x in two_way["precision"])
+    assert low < 0.75 < high
+
+
+def test_families_resampled_together():
+    """Two samples of one family move together: with one family, the interval has no width."""
+    cells = [("F", "A", 0, [1, 0, 0]), ("F", "B", 1, [0, 1, 0])]
+    assert evaluate.bootstrap(cells, ["F"], 2, 200)["precision"] == ("0.500", "0.500")

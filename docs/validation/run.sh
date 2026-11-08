@@ -67,7 +67,8 @@ evaluate() { # NAME SAMPLES...
   local name=$1; shift
   local runs=(); for s in "$@"; do runs+=("$s=$out/$s.tsv"); done
   python3 -I "$here/evaluate.py" --truth "$truth" --bed "$data/targets/exome_targets.hg38.bed" \
-    --min-qual 0,2,5,10,15 --fp-out "$out/fp_$name.tsv" --tp-out "$out/tp_$name.tsv" \
+    --min-qual 0,2,5,10,15 --tolerances 5,20,50,100 --families "$here/split.tsv" \
+    --fp-out "$out/fp_$name.tsv" --tp-out "$out/tp_$name.tsv" \
     --fn-out "$out/fn_$name.tsv" "${runs[@]}" | tee "$out/evaluation_$name.txt"
 }
 [ -n "$tuning" ] && evaluate tuning $tuning
