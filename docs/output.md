@@ -7,6 +7,26 @@ those flagged `no_junction`, `no_tail`, `untyped`, `non_mei_mates`,
 `tandem_repeat`, `probe_edge` or `low_ratio`. Clusters with fewer than
 `--min-support` distinct reads are never written.
 
+Every output starts with a research-use notice: `mei-rs` is not a validated
+diagnostic test, a call is a candidate to confirm with an orthogonal method,
+and the absence of a call does not exclude an insertion (`##note:` in the TSV,
+a `#` line in the BED, `note` in the JSON, `##mei-rsNote` in the VCF).
+
+## What the outputs contain
+
+The outputs, and the log on standard error, may identify a patient:
+
+| Output | Identifying content | With `--anonymize` |
+|---|---|---|
+| TSV, JSON, VCF | sample name (`SM` of the read groups, or the file name) and the command line, with the input paths | input paths reduced to their file names; the sample name is kept |
+| JSON | read names and clipped read sequences of every signal | read names replaced by `read_1`, `read_2`... (one name per read pair); sequences kept |
+| BED | candidate positions only | unchanged |
+| log (standard error) | sample name and input paths | unchanged: do not keep the log with the outputs if this matters |
+
+The VCF `##reference` line holds the file name of the reference only.
+A file name can itself be an identifier: rename the inputs before the run if
+it is.
+
 ## Coordinates
 
 TSV and JSON positions are **1-based**: a position `p` means the insertion is
@@ -17,8 +37,8 @@ The BED output is 0-based half-open, like every BED file.
 
 ## TSV (`--format tsv`, default)
 
-Header lines start with `##` (version, command line, sample, coordinate
-convention), then one `#` line names the columns:
+Header lines start with `##` (version, research-use notice, command line,
+sample, coordinate convention), then one `#` line names the columns:
 
 | Column | Description |
 |---|---|

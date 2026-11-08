@@ -38,6 +38,7 @@ fn scan_help_lists_every_option() {
         "--min-typed-clips",
         "--output",
         "--format",
+        "--anonymize",
         "--threads",
         "--verbose",
         "--quiet",
@@ -173,6 +174,77 @@ fn scan_fails_without_any_usable_target() {
             predicate::str::contains("no target of ").and(predicate::str::contains("positive.bam")),
         );
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn compressed_output_and_no_partial_file() {
+    use std::io::Read;
+
+    let dir = std::env::temp_dir().join(format!("mei-rs-gz-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let base = [
+        "scan",
+        "--bam",
+        &data("positive.bam"),
+        "--bed",
+        &data("targets.bed"),
+        "--profile",
+        "discovery",
+    ];
+    for format in ["tsv", "json", "bed"] {
+        let plain = dir.join(format!("calls.{format}"));
+        let gz = dir.join(format!("calls.{format}.gz"));
+        for path in [&plain, &gz] {
+            mei_rs()
+                .args(base)
+                .args(["--format", format, "-o"])
+                .arg(path)
+                .assert()
+                .success();
+        }
+        let mut decoded = String::new();
+        flate2::read::MultiGzDecoder::new(std::fs::File::open(&gz).unwrap())
+            .read_to_string(&mut decoded)
+            .unwrap();
+        // Only the command line in the header differs.
+        let body = |text: &str| -> String {
+            text.lines()
+                .filter(|l| !l.contains("calls."))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        assert_eq!(
+            body(&decoded),
+            body(&std::fs::read_to_string(&plain).unwrap()),
+            "{format}"
+        );
+    }
+    // The outputs were written under a temporary name and renamed.
+    let left: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".part"))
+        .collect();
+    assert!(left.is_empty(), "{left:?}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn unreachable_quality_threshold_warns() {
+    mei_rs()
+        .args([
+            "scan",
+            "--bam",
+            &data("positive.bam"),
+            "--bed",
+            &data("targets.bed"),
+        ])
+        .args(["--profile", "discovery", "--min-qual", "30"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "--min-qual 30 is above the largest quality the score can give (26)",
+        ));
 }
 
 #[test]

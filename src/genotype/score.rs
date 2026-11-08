@@ -94,6 +94,18 @@ const EVIDENCE: [Evidence; 7] = [
     },
 ];
 
+/// Largest quality score a candidate can get: every piece of evidence on
+/// the side of a true insertion.
+#[must_use]
+pub fn max_quality() -> u32 {
+    let log_odds = PRIOR
+        + EVIDENCE
+            .iter()
+            .map(|e| e.log_ratios.0.max(e.log_ratios.1))
+            .sum::<f64>();
+    super::phred(1.0 / (1.0 + 10f64.powf(log_odds)))
+}
+
 /// Quality score of a candidate, at most [`super::MAX_QUALITY`].
 #[must_use]
 pub fn quality(candidate: &Candidate) -> u32 {
@@ -138,5 +150,12 @@ mod tests {
         with_tail.checked_mates = 10;
         with_tail.mei_mates = 8;
         assert!(quality(&with_tail) > before);
+        assert!(quality(&with_tail) <= max_quality());
+    }
+
+    #[test]
+    fn largest_quality() {
+        // 0.501 + 0.184 + 0.560 + 0.056 + 0.276 + 0.156 + 0.665 + 0.156.
+        assert_eq!(max_quality(), 26);
     }
 }
