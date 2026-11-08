@@ -1,6 +1,7 @@
 ##fileformat=VCFv4.2
 ##source=mei-rs {version}
 ##mei-rsCommand={command}
+##mei-rsNote=research use only: not a validated diagnostic test; a call is a candidate to confirm with an orthogonal method, and the absence of a call does not exclude an insertion
 ##contig=<ID=chr1,length=20000>
 ##contig=<ID=chr2,length=10000>
 ##ALT=<ID=INS:ME:ALU,Description="Insertion of an Alu element">

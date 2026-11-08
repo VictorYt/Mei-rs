@@ -24,6 +24,7 @@ fn scan_help_lists_every_option() {
         "--bam",
         "--bed",
         "--reference",
+        "--allow-no-reference",
         "--consensus",
         "--padding",
         "--region",
@@ -37,6 +38,7 @@ fn scan_help_lists_every_option() {
         "--min-typed-clips",
         "--output",
         "--format",
+        "--anonymize",
         "--threads",
         "--verbose",
         "--quiet",
@@ -80,9 +82,10 @@ fn scan_logs_a_summary() {
     ] {
         let mut cmd = mei_rs();
         cmd.args(["scan", "--bam", &data(bam), "--bed", &data("targets.bed")]);
-        if let Some(reference) = reference {
-            cmd.args(["--reference", &data(reference)]);
-        }
+        match reference {
+            Some(reference) => cmd.args(["--reference", &data(reference)]),
+            None => cmd.arg("--allow-no-reference"),
+        };
         cmd.assert()
             .success()
             .stderr(predicate::str::contains("sample positive"))
@@ -141,7 +144,7 @@ fn scan_region() {
             "--bed",
             &data("targets.bed"),
         ])
-        .args(["--region", "chr1:1-100"])
+        .args(["--region", "chr1:1-100", "--allow-no-reference"])
         .assert()
         .code(1)
         .stderr(predicate::str::contains(
@@ -157,7 +160,13 @@ fn scan_fails_without_any_usable_target() {
     let bed = dir.join("other-build.bed");
     std::fs::write(&bed, "chr1\t30000\t30050\nchrZZ\t1\t10\n").unwrap();
     mei_rs()
-        .args(["scan", "--bam", &data("positive.bam"), "--bed"])
+        .args([
+            "scan",
+            "--bam",
+            &data("positive.bam"),
+            "--allow-no-reference",
+            "--bed",
+        ])
         .arg(&bed)
         .assert()
         .code(1)
@@ -236,4 +245,33 @@ fn unreachable_quality_threshold_warns() {
         .stderr(predicate::str::contains(
             "--min-qual 30 is above the largest quality the score can give (26)",
         ));
+}
+
+#[test]
+fn exome_profile_requires_a_reference() {
+    let base = [
+        "scan",
+        "--bam",
+        &data("positive.bam"),
+        "--bed",
+        &data("targets.bed"),
+    ];
+    mei_rs()
+        .args(base)
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "--profile exome (the default) needs --reference",
+        ));
+    mei_rs()
+        .args(base)
+        .arg("--allow-no-reference")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("its precision is not known"));
+    mei_rs()
+        .args(base)
+        .args(["--profile", "discovery"])
+        .assert()
+        .success();
 }
