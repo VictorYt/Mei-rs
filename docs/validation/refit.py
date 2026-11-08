@@ -64,7 +64,7 @@ def read_keys(path, default_sample=None):
 
 
 def number(text, default=0.0):
-    """A float, or `default` for `.`."""
+    """Parse a float, or return `default` for `.`."""
     try:
         return float(text)
     except ValueError:
@@ -144,7 +144,7 @@ def leave_one_out(rows, samples, names):
 
 
 def table(label, rows, scores):
-    """True / false PASS calls kept at each QUAL threshold."""
+    """Print the true / false PASS calls kept at each QUAL threshold."""
     cells = []
     for q in (0, 2, 5, 8, 10):
         tp = sum(1 for r, s in zip(rows, scores) if r["label"] == 1 and phred(s) >= q)
@@ -154,6 +154,7 @@ def table(label, rows, scores):
 
 
 def main():
+    """Refit the score on the calls given on the command line."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--fp", required=True, help="--fp-out of evaluate.py on the samples")
     parser.add_argument("--tp", required=True, help="--tp-out of evaluate.py on the samples")

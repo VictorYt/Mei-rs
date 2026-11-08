@@ -71,6 +71,7 @@ class Chain:
     """
 
     def __init__(self, path):
+        """Read the chain file `path`."""
         # Per source contig: (start, end, score, target contig, target size,
         # strand, block starts, [(block end, target start)]).
         self.chains = collections.defaultdict(list)
@@ -128,7 +129,7 @@ def lift_insertion(chain, contig, pos):
 
 
 def load_targets(path, padding):
-    """Merged padded targets per contig, as sorted 0-based half-open intervals."""
+    """Read the targets: merged padded intervals per contig, sorted, 0-based half-open."""
     raw = collections.defaultdict(list)
     with open_text(path) as handle:
         for line in handle:
@@ -208,7 +209,7 @@ def load_truth(path, samples, targets, raw_targets, chain):
 
 
 def carries(genotype):
-    """A haplotype carries the insertion."""
+    """Tell whether a haplotype carries the insertion."""
     return "1" in genotype.split("|")
 
 
@@ -223,7 +224,7 @@ def unphased(genotype):
 
 
 def load_tsv(path):
-    """Calls of a `mei-rs scan` TSV (written with `--keep-filtered`)."""
+    """Read the calls of a `mei-rs scan` TSV (written with `--keep-filtered`)."""
     calls = []
     with open(path) as handle:
         columns = None
@@ -254,7 +255,7 @@ def load_tsv(path):
 
 
 def load_vcf(path):
-    """Calls of a VCF (first sample column for the genotype)."""
+    """Read the calls of a VCF (first sample column for the genotype)."""
     calls = []
     with open_text(path) as handle:
         for line in handle:
@@ -286,7 +287,7 @@ def load_vcf(path):
 
 
 def load_calls(path):
-    """Calls of a TSV or VCF file."""
+    """Read the calls of a TSV or VCF file."""
     return load_vcf(path) if path.endswith((".vcf", ".vcf.gz")) else load_tsv(path)
 
 
@@ -333,6 +334,7 @@ def found(rows, keep):
 
 
 def main():
+    """Evaluate the calls given on the command line."""
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--truth", required=True, help="MEI_Callset_GRCh38 CSV(.gz)")
     parser.add_argument("--bed", required=True, help="capture targets (BED)")
@@ -430,7 +432,9 @@ def main():
                 nearest = min(own, key=lambda t: min(abs(p - t["pos"]) for p in c["points"]))
                 genotypes[(unphased(nearest["genotypes"][sample]), c["genotype"])] += 1
         for q in thresholds:
-            kept = lambda c: c["pass"] and c["qual"] is not None and c["qual"] >= q
+            def kept(c, q=q):
+                return c["pass"] and c["qual"] is not None and c["qual"] >= q
+
             by_qual[(q, "tp")] += sum(kept(c) and s == "tp" for c, s, _ in rows)
             by_qual[(q, "fp")] += sum(kept(c) and s == "fp" for c, s, _ in rows)
             by_qual[(q, "found")] += len(found(rows, kept))
@@ -577,8 +581,20 @@ def print_intervals(per_sample, thresholds, resamples):
         ("PASS", "recall", lambda p: ratio(sum(v["found_pass"] for v, _ in p), sum(v["truth"] for v, _ in p))),
     ]
     for q in thresholds:
-        stats.append((f"QUAL>={q:g}", "precision", lambda p, q=q: ratio(sum(x[q][0] for _, x in p), sum(x[q][0] + x[q][1] for _, x in p))))
-        stats.append((f"QUAL>={q:g}", "recall", lambda p, q=q: ratio(sum(x[q][2] for _, x in p), sum(v["truth"] for v, _ in p))))
+        stats.append(
+            (
+                f"QUAL>={q:g}",
+                "precision",
+                lambda p, q=q: ratio(sum(x[q][0] for _, x in p), sum(x[q][0] + x[q][1] for _, x in p)),
+            )
+        )
+        stats.append(
+            (
+                f"QUAL>={q:g}",
+                "recall",
+                lambda p, q=q: ratio(sum(x[q][2] for _, x in p), sum(v["truth"] for v, _ in p)),
+            )
+        )
     for level, metric, stat in stats:
         low, high, _ = interval(stat)
         print(f"{level}\t{metric}\t{low}\t{high}")
