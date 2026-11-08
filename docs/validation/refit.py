@@ -9,10 +9,11 @@ the ranking: AUC leaving one sample out, AUC in sample, precision and recall
 at several QUAL thresholds, and the AUC on a held-out sample.
 
 Labels come from `evaluate.py` run on the same calls: the PASS calls of its
-`--fp-out` file are false; those of its `--tp-out` file are true (true
-positives, and the few calls near an MEI of another sample or of a sample not
-genotyped there). A PASS call in neither file (outside the padded targets) is
-left out. The test samples and the held-out sample (HG002) are optional.
+`--fp-out` file are false (false positives, calls of the wrong family and
+second calls of one MEI); those of its `--tp-out` file with the status `tp`
+are true. The calls near an MEI of another sample or of a sample not genotyped
+there (statuses `other_sample` and `unknown`), and the PASS calls in neither
+file (outside the padded targets), are left out (#112). The test samples and the held-out sample (HG002) are optional.
 
 Usage:
     refit.py --fp fp.tsv --tp tp.tsv SAMPLE=calls.tsv ...
@@ -54,12 +55,16 @@ def read_calls(sample, path, false_calls, true_calls):
     return rows
 
 
-def read_keys(path, default_sample=None):
-    """`(sample, contig, position)` of the calls of an `--fp-out` or `--tp-out` file."""
+def read_keys(path, default_sample=None, status=None):
+    """Read `(sample, contig, position)` of the calls of an `--fp-out` or `--tp-out` file.
+
+    With `status`, only the calls of that status are read.
+    """
     with open(path) as handle:
         return {
             (r.get("sample", default_sample), r["contig"], r["position"])
             for r in csv.DictReader(handle, delimiter="\t")
+            if status is None or r["status"] == status
         }
 
 
@@ -170,7 +175,7 @@ def main():
 
     runs = [r.split("=", 1) for r in args.runs]
     samples = [s for s, _ in runs]
-    false_calls, true_calls = read_keys(args.fp), read_keys(args.tp)
+    false_calls, true_calls = read_keys(args.fp), read_keys(args.tp, status="tp")
     rows = [r for s, p in runs for r in read_calls(s, p, false_calls, true_calls)]
     for r in rows:
         r["f"] = features(r)
@@ -192,7 +197,7 @@ def main():
     table("refit, leave-one-out", loo_rows, loo_scores)
 
     if args.test:
-        test_fp, test_tp = read_keys(args.test_fp), read_keys(args.test_tp)
+        test_fp, test_tp = read_keys(args.test_fp), read_keys(args.test_tp, status="tp")
         test = [r for s, p in (x.split("=", 1) for x in args.test) for r in read_calls(s, p, test_fp, test_tp)]
         for r in test:
             r["f"] = features(r)
@@ -205,7 +210,7 @@ def main():
     if args.held_out:
         sample, path = args.held_out.split("=", 1)
         held = read_calls(
-            sample, path, read_keys(args.held_out_fp, sample), read_keys(args.held_out_tp, sample)
+            sample, path, read_keys(args.held_out_fp, sample), read_keys(args.held_out_tp, sample, "tp")
         )
         for r in held:
             r["f"] = features(r)
