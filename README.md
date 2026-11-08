@@ -1,8 +1,10 @@
 # Mei-rs
 
 A Rust tool for detecting mobile element insertions (Alu, LINE-1, SVA) in
-targeted capture and exome sequencing data. One exome takes 30 s to 4 min and
-0.5 to 2.5 GB on 12 to 18 cores; against Scramble it is faster in wall time
+targeted capture and exome sequencing data. One exome takes 1 to 8 min on 16
+cores (36 CRAM exomes of the validation); memory is 1.3 to 2.5 GB for BAM and
+up to 9 GB for CRAM on macOS (peak resident set, allocator cache included).
+Against Scramble it is faster in wall time
 (1 to 5 times, from using every core) but uses 1.5 to 9 times more CPU time
 ([measured](docs/validation/README.md#comparison-with-scramble)). It is a
 research tool, not validated for clinical use (see
@@ -305,60 +307,78 @@ Every column of the TSV, BED and JSON formats is described in
 
 ## Accuracy and limitations
 
-Measured against the HGSVC3 MEI calls (long-read assemblies) on seven 1000
-Genomes exomes and on HG002 (held out), with the method and commands in
-[docs/validation](docs/validation/README.md) (#26):
+Measured against the HGSVC3 MEI calls (long-read assemblies), with the
+method, the commands and every number in
+[docs/validation](docs/validation/README.md). The units are **carrier
+pairs** (a truth MEI in one sample): most truth MEIs are common
+polymorphisms carried by several samples, so the 918 pairs of the test set
+are 244 distinct sites.
 
-| | Precision | Recall (`PASS`) |
+| Set (truth MEIs within 300 bp of a target) | Profile | Precision | Recall (`PASS`) |
+|---|---|---|---|
+| 17 test exomes (held out), 918 pairs at 244 sites | `exome` (default) | 0.908 (0.809 to 0.977) | 0.183 (0.115 to 0.264) |
+| Same | `discovery` | 0.669 (0.526 to 0.797) | 0.235 (0.159 to 0.321) |
+| 18 tuning exomes, 976 pairs at 236 sites | `exome` | 0.947 | 0.201 |
+| HG002 (GRCh37, its own kit: Agilent V5), 53 MEIs | `exome` | 0.538 (14 / 26) | 0.264 |
+| Same | `discovery` | 0.365 (19 / 52) | 0.358 |
+
+The intervals in brackets are 95% bootstrap intervals that resample both the
+families of the samples and the loci (#113); intervals over the samples
+alone, published up to v0.4.1, were about half as wide. The thresholds and
+weights were fitted or chosen on the tuning exomes. The test exomes were not
+fitted on, but they were looked at: false positives were analysed on them
+before the split was redrawn, and the model choice (#89) and the default
+threshold (#90) were compared on them; they are therefore a development set
+rather than a locked validation set. The mother of a tuning sample (HG00732)
+was moved out of the test set (#111). HG002, from another centre and another
+kit, is the only fully external sample, and its precision is much lower: on
+other data than the 1000 Genomes exomes, expect lower precision than above.
+
+Recall depends on where the insertion is (17 test exomes, `exome` profile;
+the lower bound is the one-sided 95% exact bound, the sensitivity that can
+be claimed):
+
+| Insertion | Recall | Lower bound |
 |---|---|---|
-| 18 test exomes (held out), 965 MEIs, `--profile exome` (default) | 0.911 (0.873 to 0.946) | 0.192 (0.144 to 0.245) |
-| Same, `--profile discovery` | 0.686 | 0.249 |
-| Seven 1000 Genomes exomes (tuned on), 371 MEIs, `--profile discovery` | 0.759 (0.717 to 0.799) | 0.337 (0.256 to 0.423) |
-| Same, `--min-qual 5` | 0.950 | 0.305 |
-| HG002 (GRCh37, held out), 49 MEIs, `--profile exome` | 0.636 | 0.286 |
-| Same, `--profile discovery` | 0.415 | 0.347 |
-| MELT 2.2.2, seven exomes | 0.897 | 0.259 |
-| Scramble 1.0.2, seven exomes | 0.687 | 0.154 |
-| xTea 0.1.9, seven exomes (default / exome cutoffs) | 0.852 / 0.767 | 0.062 / 0.089 |
+| inside a target | 57 / 104 (0.548) | 0.463 |
+| 1 to 100 bp from a target | 84 / 222 (0.378) | 0.324 |
+| 101 to 300 bp from a target | 27 / 592 (0.046) | 0.032 |
+| within 20 bp of a coding sequence | 33 / 64 (0.516) | 0.406 |
+| Alu / LINE-1 / SVA | 0.187 / 0.159 / 0.157 | 0.164 / 0.092 / 0.081 |
 
-The intervals in brackets are 95% bootstrap intervals over the samples. The
-test exomes were never used to fit or choose anything (the split is in
-[docs/validation](docs/validation/README.md#tuning-and-test-sets-88)); recall
-counts every MEI within 300 bp of a target, most of which have no read.
-On the same seven exomes Mei-rs finds more of the insertions than MELT,
-Scramble and xTea (recall 0.337 against 0.259, 0.154 and at most 0.089) and is
-less precise than MELT (0.759 against 0.897). Its precision on HG002, held out
-(0.415), is far below that on the seven exomes: the quality score and several
-thresholds were fitted on those seven exomes ([thresholds](docs/thresholds.md)),
-so their numbers are optimistic for a new sample. The comparison with MELT,
-Scramble and xTea is in [docs/validation](docs/validation/README.md#comparison-with-melt-and-xtea).
+Recall is also lower on 76 and 101 bp reads (0.10) than on 90 and 100 bp
+reads (0.26 to 0.28) and on shallow samples; the full table is in
+[docs/validation](docs/validation/README.md). The truth set holds common
+polymorphisms: rare, de novo and mosaic insertions, the ones that matter for
+diagnosis, are not measured. **The absence of a call never excludes an
+insertion.**
+
+Comparison with other callers, on the seven exomes used up to v0.4.0 (tuned
+on, so favourable to Mei-rs): Mei-rs v0.4.0 0.759 / 0.337, MELT 2.2.2 0.897 /
+0.259, Scramble 1.0.2 0.687 / 0.154, xTea 0.1.9 0.852 / 0.062 (precision /
+recall). They were not run on the test exomes yet (#125).
 
 ### Profiles and `--min-qual`
 
-The quality threshold trades recall for precision. The default profile,
-`exome`, was chosen on the 18 tuning exomes as the lowest threshold with a
-precision of 0.95 there; on the 18 test exomes it gives 0.911. Measured on the
-test exomes (HG002 in brackets):
+The quality threshold trades recall for precision (17 test exomes, HG002 in
+brackets):
 
 | Use | Option | Precision | Recall (`PASS`) |
 |---|---|---|---|
-| Discovery, nothing missed, confirm afterwards | `--profile discovery` | 0.686 (0.415) | 0.249 (0.347) |
-| Screening | `--min-qual 2` | 0.805 (0.567) | 0.245 (0.347) |
-| Shorter list | `--min-qual 5` | 0.855 (0.577) | 0.220 (0.306) |
-| Default | `--profile exome` (`--min-qual 10`) | 0.911 (0.636) | 0.192 (0.286) |
+| Discovery: most candidates, to confirm | `--profile discovery` | 0.669 (0.365) | 0.235 (0.358) |
+| Screening | `--min-qual 2` | 0.791 (0.500) | 0.231 (0.358) |
+| Shorter list | `--min-qual 5` | 0.845 (0.531) | 0.208 (0.321) |
+| Default | `--profile exome` (`--min-qual 10`) | 0.908 (0.538) | 0.183 (0.264) |
 
-The quality score ranks the calls better than it estimates a probability (AUC
-0.891 on the test exomes, 0.786 on HG002); a logistic regression on the same
-evidence ranks them no better (#89). On other data than the 1000 Genomes
-exomes (HG002 above), the precision of each threshold is lower. There is no
-profile for gene panels yet (no panel with a truth set, #92). Whatever the threshold,
-insertions close to a reference copy of the same family and very deep samples
-produce false calls (the `low` confidence tier).
-
-Recall counts every MEI within 300 bp of a target: 27 of the 36 MEIs inside
-the targets are called `PASS`, against 36 of the 240 at 101-300 bp from them.
-`high` and `medium` candidates (with a tail) are the most reliable (48 true of
-52); most false positives are `low` (no tail), which `--min-qual` removes first.
+The `exome` threshold was chosen on the tuning exomes as the lowest with a
+tuning precision of 0.95: that was an internal target to choose the
+threshold, not a precision to expect (#122). The quality score ranks the
+calls better than it estimates a probability (AUC 0.895 on the test exomes,
+0.746 on HG002). There is no profile for gene panels yet (no panel with a
+truth set, #92). Whatever the threshold, insertions close to a reference copy
+of the same family and very deep samples produce false calls (the `low`
+confidence tier); 107 false `PASS` calls of the test exomes are at 80 loci,
+several recurrent across samples.
 
 Other limitations:
 
@@ -390,9 +410,16 @@ Other limitations:
 ### Scope and licence
 
 Mei-rs is a research tool. It has not been validated for clinical use: it was
-evaluated on 7 exomes of one resource (plus HG002), with long-read assembly
-calls as truth, and no panel data. Confirm its calls with an orthogonal
-method before any clinical use.
+evaluated on 36 exomes of one resource (1000 Genomes, 76 to 101 bp reads)
+plus HG002, with long-read assembly calls of common polymorphisms as truth,
+and no panel data. It is meant to be one caller among several: its calls are
+merged with those of other MEI callers (same kind or different methods) into
+a consensus, as candidates to confirm with an orthogonal method and as an aid
+to diagnosis, never as a result on their own.
+
+Out of scope or not measured: gene panels; 2x150 bp reads; deletions of
+reference elements; HERV and processed pseudogenes; 3' transductions;
+mosaic and de novo insertions at low allele fraction.
 
 Mei-rs is licensed under the AGPL-3.0-or-later. Running the binary on your
 data, inside a pipeline or a workflow engine, does not subject the rest of the
