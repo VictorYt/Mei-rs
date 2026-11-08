@@ -21,6 +21,13 @@ project follows [Semantic Versioning](https://semver.org/).
   calls are unchanged. `evaluate.py --tp-out` gives the truth genotype of each
   call.
 
+- `--profile exome` (the default) requires `--reference`, unless
+  `--allow-no-reference` is given (#120): its quality threshold and every
+  published precision were measured with the reference, which turns on the
+  `tandem_repeat` filter, the mapped mate checks and the assembly; without
+  it the precision is not known. `--profile discovery` still runs without a
+  reference.
+
 ### Fixed
 
 - `scan` fails (exit code 1) when no target of the BED can be scanned (every

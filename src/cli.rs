@@ -42,6 +42,8 @@ pub enum Command {
 }
 
 /// Arguments of `mei-rs scan`.
+// Each flag is a command-line switch: an enum would not make the options clearer.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Args)]
 pub struct ScanArgs {
     /// Alignments to scan: BAM or CRAM, coordinate-sorted and indexed
@@ -52,10 +54,16 @@ pub struct ScanArgs {
     #[arg(long, value_name = "FILE", help_heading = "Input")]
     pub bed: PathBuf,
 
-    /// Reference genome (FASTA, indexed); required for CRAM, and for the
-    /// `tandem_repeat` filter
+    /// Reference genome (FASTA, indexed); required for CRAM and with
+    /// `--profile exome` (the default), and for the `tandem_repeat` filter
     #[arg(long, value_name = "FILE", help_heading = "Input")]
     pub reference: Option<PathBuf>,
+
+    /// Run `--profile exome` without `--reference`: the `tandem_repeat`
+    /// filter, the mapped mate checks and the assembly are off, and the
+    /// precision of this mode was never measured
+    #[arg(long, help_heading = "Input")]
+    pub allow_no_reference: bool,
 
     /// MEI consensus sequences (FASTA, headers `>name#SINE/Alu`,
     /// `>name#LINE/L1` or `>name#Retroposon/SVA`) [default: the Dfam Alu,
@@ -160,7 +168,8 @@ pub struct ScanArgs {
     pub min_signal_ratio: f64,
 
     /// Preset of the thresholds: `exome` keeps the calls of quality 10 or
-    /// more (precision 0.91 on held-out exomes), `discovery` all of them
+    /// more (precision 0.91 on held-out exomes, with `--reference`, which it
+    /// requires), `discovery` all of them
     #[arg(long, value_enum, default_value_t = Profile::Exome, help_heading = "Clustering and filters")]
     pub profile: Profile,
 
