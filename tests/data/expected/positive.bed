@@ -1,4 +1,4 @@
-# mei-rs 0.4.1: research use only: not a validated diagnostic test; a call is a candidate to confirm with an orthogonal method, and the absence of a call does not exclude an insertion
+# mei-rs {version}: research use only: not a validated diagnostic test; a call is a candidate to confirm with an orthogonal method, and the absence of a call does not exclude an insertion
 chr1	2999	3000	MEI_1	10	.	untyped;probe_edge
 chr1	6000	6010	MEI_2	150	+	high
 chr1	10000	10012	MEI_3	161	+	high

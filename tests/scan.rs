@@ -59,6 +59,9 @@ fn normalize(output: &str) -> String {
             let trimmed = line.trim_start();
             if line.starts_with("##mei-rs ") {
                 "##mei-rs {version}".to_owned()
+            } else if line.starts_with("# mei-rs ") {
+                // The comment line of the BED output.
+                line.replacen(env!("CARGO_PKG_VERSION"), "{version}", 1)
             } else if line.starts_with("##command: ") {
                 "##command: {command}".to_owned()
             } else if line.starts_with("##source=mei-rs ") {
