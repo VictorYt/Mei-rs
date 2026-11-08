@@ -357,7 +357,8 @@ def main():
         "--tp-out",
         help="write the PASS calls that are not false positives to this TSV, with a "
         "`status` column: tp, other_sample (near an MEI of another sample) or "
-        "unknown (a truth MEI nearby is not genotyped in the sample)",
+        "unknown (a truth MEI nearby is not genotyped in the sample), and the truth "
+        "genotype (0/1 or 1/1) of the matched MEI",
     )
     parser.add_argument(
         "--bootstrap",
@@ -450,11 +451,15 @@ def main():
                     }
                 )
                 fn_rows.append((sample, t["id"], t["family"], ",".join(tiers) or "."))
-        for c, s, _ in passing:
+        for c, s, own in passing:
             if s == "fp" and args.fp_out:
                 fp_rows.append((sample, c))
             if s != "fp" and args.tp_out:
-                tp_rows.append((sample, s, c))
+                truth_genotype = "."
+                if own:
+                    nearest = min(own, key=lambda t: min(abs(p - t["pos"]) for p in c["points"]))
+                    truth_genotype = unphased(nearest["genotypes"][sample])
+                tp_rows.append((sample, s, c, truth_genotype))
         values = {
             "truth": len(carried),
             "found_any": len(found_any),
@@ -520,9 +525,13 @@ def main():
     if args.tp_out:
         with open(args.tp_out, "w") as out:
             keys = list(tp_rows[0][2]["row"]) if tp_rows else []
-            out.write("sample\tstatus\t" + "\t".join(keys) + "\n")
-            for sample, status, c in tp_rows:
-                out.write(f"{sample}\t{status}\t" + "\t".join(c["row"].get(k, ".") for k in keys) + "\n")
+            out.write("sample\tstatus\ttruth_genotype\t" + "\t".join(keys) + "\n")
+            for sample, status, c, truth_genotype in tp_rows:
+                out.write(
+                    f"{sample}\t{status}\t{truth_genotype}\t"
+                    + "\t".join(c["row"].get(k, ".") for k in keys)
+                    + "\n"
+                )
     if args.fp_out:
         with open(args.fp_out, "w") as out:
             keys = list(fp_rows[0][1]["row"]) if fp_rows else []

@@ -9,6 +9,11 @@
 //! apart) and would count twice. The genotype is the most likely one, and
 //! its quality (GQ) the phred-scaled probability that it is wrong, with
 //! equal priors, at most [`MAX_QUALITY`].
+//!
+//! A candidate that passed the filters is an insertion in the sample: its
+//! genotype is `0/1` or `1/1` (never `0/0`), with a prior that favours the
+//! heterozygous genotype ([`HET_PRIOR`]). `0/0` stays possible for the
+//! candidates that did not pass (`--keep-filtered`).
 
 pub mod score;
 
@@ -24,6 +29,12 @@ pub const ERROR: f64 = 0.02;
 /// exomes (#26) is 0.28; with 0.3, 76 of their 91 genotypes are right
 /// (68 with 0.5).
 pub const HET_FRACTION: f64 = 0.3;
+
+/// Prior probability of a heterozygous genotype among the carriers of an
+/// insertion: 77% of the HGSVC3 genotypes of the seven exomes with an
+/// insertion are heterozygous (4,471 + 4,367 haplotype pairs `0|1` / `1|0`
+/// against 2,654 `1|1`). Used for the candidates that passed.
+pub const HET_PRIOR: f64 = 0.77;
 
 /// Highest genotype quality.
 pub const MAX_QUALITY: u32 = 99;
@@ -78,8 +89,12 @@ pub struct Genotype {
 
 /// Genotype from the reads of each allele at the junctions (the reference
 /// reads of the site at each junction); `None` without any read.
+///
+/// `present` is true for a candidate that passed the filters: the genotype
+/// is then `0/1` or `1/1`, with [`HET_PRIOR`]. Otherwise the three genotypes
+/// have equal priors.
 #[must_use]
-pub fn genotype(junctions: &[AlleleCounts]) -> Option<Genotype> {
+pub fn genotype(junctions: &[AlleleCounts], present: bool) -> Option<Genotype> {
     let alternative: u32 = junctions.iter().map(|c| c.alternative).sum();
     let reference: u32 = junctions.iter().map(|c| c.reference).sum();
     if alternative + reference == 0 {
@@ -101,13 +116,28 @@ pub fn genotype(junctions: &[AlleleCounts]) -> Option<Genotype> {
             / n;
     }
     let calls = [Call::HomRef, Call::Het, Call::HomAlt];
-    let best = (0..3)
-        .max_by(|&a, &b| log_likelihoods[a].total_cmp(&log_likelihoods[b]))
-        .unwrap_or(0);
-    // Posterior of the other genotypes, with equal priors.
-    let total: f64 = log_likelihoods
+    // log10 prior of each genotype; `0/0` is excluded for a passed candidate.
+    let priors = if present {
+        [
+            f64::NEG_INFINITY,
+            HET_PRIOR.log10(),
+            (1.0 - HET_PRIOR).log10(),
+        ]
+    } else {
+        [0.0; 3]
+    };
+    let posteriors: Vec<f64> = log_likelihoods
         .iter()
-        .map(|ll| 10f64.powf(ll - log_likelihoods[best]))
+        .zip(priors)
+        .map(|(ll, prior)| ll + prior)
+        .collect();
+    let best = (0..3)
+        .max_by(|&a, &b| posteriors[a].total_cmp(&posteriors[b]))
+        .unwrap_or(0);
+    // Posterior of the other genotypes.
+    let total: f64 = posteriors
+        .iter()
+        .map(|ll| 10f64.powf(ll - posteriors[best]))
         .sum();
     let wrong = 1.0 - 1.0 / total;
     Some(Genotype {
@@ -147,20 +177,40 @@ mod tests {
 
     #[test]
     fn calls() {
-        let g = genotype(&[counts(10, 12), counts(11, 12)]).unwrap();
+        let g = genotype(&[counts(10, 12), counts(11, 12)], false).unwrap();
         assert_eq!((g.call, g.alternative, g.reference), (Call::Het, 21, 24));
         assert_eq!(g.quality, MAX_QUALITY);
         assert_eq!(
-            genotype(&[counts(15, 0), counts(14, 1)]).unwrap().call,
+            genotype(&[counts(15, 0), counts(14, 1)], false)
+                .unwrap()
+                .call,
             Call::HomAlt
         );
-        assert_eq!(genotype(&[counts(0, 30)]).unwrap().call, Call::HomRef);
-        assert_eq!(genotype(&[counts(0, 0)]), None);
+        assert_eq!(
+            genotype(&[counts(0, 30)], false).unwrap().call,
+            Call::HomRef
+        );
+        assert_eq!(genotype(&[counts(0, 0)], false), None);
+    }
+
+    #[test]
+    fn a_passed_candidate_is_never_homozygous_reference() {
+        // Few alternative reads among many reference reads: `0/0` without the
+        // filters, a heterozygous insertion for a candidate that passed.
+        assert_eq!(
+            genotype(&[counts(1, 56)], false).unwrap().call,
+            Call::HomRef
+        );
+        let g = genotype(&[counts(1, 56)], true).unwrap();
+        assert_eq!(g.call, Call::Het);
+        assert!(g.quality <= MAX_QUALITY);
+        // Without reference reads, the homozygous genotype is still called.
+        assert_eq!(genotype(&[counts(15, 0)], true).unwrap().call, Call::HomAlt);
     }
 
     #[test]
     fn few_reads_give_a_low_quality() {
-        let g = genotype(&[counts(1, 0)]).unwrap();
+        let g = genotype(&[counts(1, 0)], false).unwrap();
         assert_eq!(g.call, Call::HomAlt);
         assert!(g.quality < 10, "{g:?}");
     }

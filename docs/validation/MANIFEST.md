@@ -1,8 +1,8 @@
 # Data manifest
 
 Every public input of the evaluation, with the checksum of the copy used for the
-numbers of the README (v0.4.0). `fetch-data.sh DIR` downloads and verifies them
-(about 70 GB, most of it the reference genomes and the HG002 alignment);
+numbers of the README (v0.4.0 and later). `fetch-data.sh DIR` downloads and verifies them
+(about 160 GB with the 36 exomes of `split.tsv`: 140 GB of CRAM, 6 GB of references, the HG002 alignment);
 `run.sh DATA OUT` then reruns the evaluation and the refit.
 
 | Input | Source | md5 |
@@ -27,12 +27,14 @@ script stops on the checksum instead of changing the targets silently.
 
 ## 1000 Genomes exome alignments (GRCh38)
 
-HG00512, HG00513, HG00731, HG00733, NA19238, NA19239 and NA19240: the
-`*.exome.cram` and `.crai` listed, with their md5, in
+The 36 samples of `split.tsv` (18 tuning, 18 test; every one has an HGSVC3
+genotype call set): the `*.exome.cram` and `.crai` listed, with their md5, in
 `https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000_genomes_project/1000genomes.exome.GRCh38DH.alignment.index`
-(`fetch-data.sh` reads the checksums from this index). The numbers of the
-README were measured on the BAM conversions of these CRAMs (same records); the
-calls of CRAM and BAM are identical.
+(`fetch-data.sh` reads the checksums from this index; `SET=tuning` or
+`SET=test` fetches half). The seven exomes of the first evaluation (HG00512,
+HG00513, HG00731, HG00733, NA19238, NA19239 and NA19240) were first measured on
+BAM conversions of their CRAMs (same records; the calls of CRAM and BAM are
+identical); the other 29 were run on the CRAM.
 
 ## Not public
 
@@ -47,8 +49,10 @@ cargo build --release
 docs/validation/run.sh data/ out/
 ```
 
-`run.sh` writes in `out/`: the TSV of every sample, `evaluation.txt` and
+`run.sh` writes in `out/`: the TSV of every sample (scanned with
+`--profile discovery`), `evaluation_tuning.txt`, `evaluation_test.txt` and
 `evaluation_hg002.txt` (`evaluate.py`, with the 95% bootstrap intervals over the
-samples), the true and false PASS calls (`tp.tsv`, `fp.tsv`), the missed
-insertions (`fn.tsv`) and `refit.txt` (`refit.py`: the values of
-`src/genotype/score.rs`, the AUC leaving one sample out and on HG002).
+samples), the true and false PASS calls and the missed insertions (`tp_*.tsv`,
+`fp_*.tsv`, `fn_*.tsv`) and `refit.txt` (`refit.py`: the values of
+`src/genotype/score.rs` fitted on the tuning samples, the AUC leaving one
+sample out, on the test samples and on HG002).

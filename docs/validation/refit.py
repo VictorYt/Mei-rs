@@ -12,10 +12,11 @@ Labels come from `evaluate.py` run on the same calls: the PASS calls of its
 `--fp-out` file are false; those of its `--tp-out` file are true (true
 positives, and the few calls near an MEI of another sample or of a sample not
 genotyped there). A PASS call in neither file (outside the padded targets) is
-left out. The held-out sample is optional.
+left out. The test samples and the held-out sample (HG002) are optional.
 
 Usage:
     refit.py --fp fp.tsv --tp tp.tsv SAMPLE=calls.tsv ...
+             [--test SAMPLE=calls.tsv ... --test-fp fp.tsv --test-tp tp.tsv]
              [--held-out SAMPLE=calls.tsv --held-out-fp fp.tsv --held-out-tp tp.tsv]
 
 Only the Python standard library is used.
@@ -156,6 +157,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--fp", required=True, help="--fp-out of evaluate.py on the samples")
     parser.add_argument("--tp", required=True, help="--tp-out of evaluate.py on the samples")
+    parser.add_argument("--test", action="append", default=[], metavar="SAMPLE=FILE",
+                        help="calls of a test sample, not used to fit (repeat)")
+    parser.add_argument("--test-fp", help="--fp-out of evaluate.py on the test samples")
+    parser.add_argument("--test-tp", help="--tp-out of evaluate.py on the test samples")
     parser.add_argument("--held-out", metavar="SAMPLE=FILE", help="calls of a sample not used to fit")
     parser.add_argument("--held-out-fp", help="--fp-out of evaluate.py on the held-out sample")
     parser.add_argument("--held-out-tp", help="--tp-out of evaluate.py on the held-out sample")
@@ -184,6 +189,17 @@ def main():
     table("refit, in sample", rows, [score(model, r, SCORE) for r in rows])
     loo_rows, loo_scores = leave_one_out(rows, samples, SCORE)
     table("refit, leave-one-out", loo_rows, loo_scores)
+
+    if args.test:
+        test_fp, test_tp = read_keys(args.test_fp), read_keys(args.test_tp)
+        test = [r for s, p in (x.split("=", 1) for x in args.test) for r in read_calls(s, p, test_fp, test_tp)]
+        for r in test:
+            r["f"] = features(r)
+        test_scores = [score(model, r, SCORE) for r in test]
+        current = [number(r["qual"]) for r in test]
+        print(f"\n# test ({len(args.test)} samples): PASS {len(test)} true {sum(r['label'] for r in test)}, "
+              f"AUC {auc(test, test_scores):.3f} (QUAL of the scans: {auc(test, current):.3f})")
+        table("test", test, test_scores)
 
     if args.held_out:
         sample, path = args.held_out.split("=", 1)

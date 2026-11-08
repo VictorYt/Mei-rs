@@ -13,12 +13,21 @@ use predicates::prelude::*;
 const ROOT: &str = env!("CARGO_MANIFEST_DIR");
 
 /// Run `mei-rs scan` from the repository root, quietly, and return stdout.
+///
+/// The tests check the filters, so the quality threshold is off
+/// (`--profile discovery`) unless the arguments set one.
 fn scan(args: &[&str]) -> String {
+    let threshold = args.iter().any(|a| *a == "--profile" || *a == "--min-qual");
     let output = Command::cargo_bin("mei-rs")
         .unwrap()
         .current_dir(ROOT)
         .args(["-q", "scan"])
         .args(args)
+        .args(if threshold {
+            &[][..]
+        } else {
+            &["--profile", "discovery"][..]
+        })
         .assert()
         .success()
         .get_output()
@@ -540,6 +549,27 @@ fn same_output_with_any_thread_count() {
     let one = scan(&[&POSITIVE[..], &["--format", "json", "--threads", "1"]].concat());
     let eight = scan(&[&POSITIVE[..], &["--format", "json", "--threads", "8"]].concat());
     assert_eq!(normalize(&one), normalize(&eight));
+}
+
+#[test]
+fn exome_profile_flags_low_quality() {
+    // The default profile keeps the three insertions and flags the
+    // candidates of quality below 10, here the two artefacts.
+    let args = [&POSITIVE[..], &["--keep-filtered", "--profile", "exome"]].concat();
+    let tsv = scan(&args);
+    let filters: Vec<_> = rows(&tsv)
+        .iter()
+        .map(|r| column(&tsv, r, "filter").to_owned())
+        .collect();
+    assert_eq!(filters.iter().filter(|f| *f == "PASS").count(), 3, "{tsv}");
+    assert_eq!(
+        filters.iter().filter(|f| f.ends_with("low_qual")).count(),
+        2,
+        "{tsv}"
+    );
+    // `--profile exome` is `--min-qual 10` (the default, see `cli`).
+    let default = scan(&[&POSITIVE[..], &["--keep-filtered", "--min-qual", "10"]].concat());
+    assert_eq!(normalize(&default), normalize(&tsv));
 }
 
 #[test]

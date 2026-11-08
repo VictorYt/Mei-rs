@@ -159,14 +159,15 @@ pub struct ScanArgs {
         value_parser = parse_ratio, help_heading = "Clustering and filters")]
     pub min_signal_ratio: f64,
 
+    /// Preset of the thresholds: `exome` keeps the calls of quality 10 or
+    /// more (precision 0.91 on held-out exomes), `discovery` all of them
+    #[arg(long, value_enum, default_value_t = Profile::Exome, help_heading = "Clustering and filters")]
+    pub profile: Profile,
+
     /// Minimum quality score (fewer: `low_qual`; 0 turns the filter off)
-    #[arg(
-        long,
-        value_name = "QUAL",
-        default_value_t = 0,
-        help_heading = "Clustering and filters"
-    )]
-    pub min_qual: u32,
+    /// [default: set by `--profile`]
+    #[arg(long, value_name = "QUAL", help_heading = "Clustering and filters")]
+    pub min_qual: Option<u32>,
 
     /// Distance to a probe start or end within which a soft-clip stops at the
     /// probe edge (`probe_edge`, when no clip has a poly(A/T) tail and there
@@ -236,7 +237,7 @@ impl ScanArgs {
             min_clips: usize::try_from(self.min_clips).unwrap_or(usize::MAX),
             min_typed_clips: usize::try_from(self.min_typed_clips).unwrap_or(usize::MAX),
             min_mei_mate_fraction: self.min_mei_mate_fraction,
-            min_qual: self.min_qual,
+            min_qual: self.min_qual.unwrap_or_else(|| self.profile.min_qual()),
         }
     }
 }
@@ -268,6 +269,27 @@ fn parse_unit(s: &str) -> Result<f64, String> {
         Ok(value)
     } else {
         Err(format!("{value} is not in [0, 1]"))
+    }
+}
+
+/// Preset of the thresholds (see `docs/thresholds.md`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum Profile {
+    /// Exomes: quality 10 or more, chosen on the tuning exomes of the
+    /// validation for a precision of 0.95 (0.91 on the test exomes)
+    Exome,
+    /// Every candidate that passes the filters, whatever its quality
+    Discovery,
+}
+
+impl Profile {
+    /// Minimum quality score of the profile.
+    #[must_use]
+    pub fn min_qual(self) -> u32 {
+        match self {
+            Self::Exome => 10,
+            Self::Discovery => 0,
+        }
     }
 }
 
@@ -320,8 +342,32 @@ mod tests {
         assert_eq!(args.format, OutputFormat::Tsv);
         assert_eq!(args.extract_options(), ExtractOptions::default());
         assert_eq!(args.cluster_options(), ClusterOptions::default());
-        assert_eq!(args.filter_options(), FilterOptions::default());
+        assert_eq!(
+            args.filter_options(),
+            FilterOptions {
+                min_qual: 10,
+                ..FilterOptions::default()
+            }
+        );
         assert!(!args.keep_filtered);
+    }
+
+    #[test]
+    fn profiles() {
+        assert_eq!(scan(&[]).unwrap().filter_options().min_qual, 10);
+        let discovery = scan(&["--profile", "discovery"]).unwrap();
+        assert_eq!(discovery.filter_options().min_qual, 0);
+        // An explicit threshold wins over the profile.
+        let explicit = scan(&["--profile", "discovery", "--min-qual", "5"]).unwrap();
+        assert_eq!(explicit.filter_options().min_qual, 5);
+        assert_eq!(
+            scan(&["--min-qual", "0"])
+                .unwrap()
+                .filter_options()
+                .min_qual,
+            0
+        );
+        assert!(scan(&["--profile", "panel"]).is_err());
     }
 
     #[test]

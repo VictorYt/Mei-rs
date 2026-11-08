@@ -39,18 +39,26 @@ The whole evaluation is scripted and versioned here; `MANIFEST.md` lists every
 public input with its checksum.
 
 ```bash
-docs/validation/fetch-data.sh data/       # truth, references, 7 CRAMs + HG002, targets (~70 GB)
+docs/validation/fetch-data.sh data/       # truth, references, 36 CRAMs + HG002, targets (~160 GB)
 cargo build --release
 docs/validation/run.sh data/ out/         # scan, evaluate, refit
 ```
 
-`run.sh` runs `mei-rs scan --keep-filtered --reference` on each exome (the
-GRCh38 targets for the 1000 Genomes exomes, the GRCh37 targets and `hs37d5` for
-HG002), then `evaluate.py` and `refit.py`. By hand, for one sample:
+`run.sh` runs `mei-rs scan --profile discovery --keep-filtered --reference` on
+each exome of `split.tsv` (the GRCh38 targets for the 1000 Genomes exomes, the
+GRCh37 targets and `hs37d5` for HG002), one after the other with 4 threads at
+low priority, then `evaluate.py` on the tuning samples, the test samples and
+HG002, and `refit.py` (fitted on the tuning samples, reported on the test
+samples and HG002). `SET=tuning|test`, `SAMPLES`, `TEST_SAMPLES` and `THREADS`
+restrict or tune the run (see the header of the script); a sample whose TSV
+exists is not scanned again. To check the weights of `genotype::score`, which
+were fitted on the first seven exomes: `SAMPLES="HG00512 HG00513 HG00731
+HG00733 NA19238 NA19239 NA19240" SET=tuning run.sh data/ out/` (prior 0.501 on
+the v0.4.0 calls). By hand, for one sample:
 
 ```bash
 mei-rs scan --bam SAMPLE.exome.bam --bed exome_targets.hg38.bed \
-  --reference GRCh38_full_analysis_set_plus_decoy_hla.fa --keep-filtered -o SAMPLE.tsv
+  --reference GRCh38_full_analysis_set_plus_decoy_hla.fa --profile discovery --keep-filtered -o SAMPLE.tsv
 python3 docs/validation/evaluate.py \
   --truth MEI_Callset_GRCh38.ALL.20241211.csv.gz --bed exome_targets.hg38.bed \
   --min-qual 0,2,5,10,15 \
@@ -120,7 +128,8 @@ sample:
 By confidence: `high` 13 true of 14, `medium` 35 of 38, `low` 78 of 117. Recall
 (PASS) by distance to the target: inside 27 / 36, 1-100 bp 62 / 95, 101-300 bp
 36 / 240; by family: Alu 106 / 325, L1 16 / 32, SVA 3 / 14. Genotypes of the
-true PASS calls: 91 of 123 right. `--min-qual 2`: 125 / 15 (0.893; HG002
+true PASS calls: 91 of 123 right (107 of 123 once a PASS call is no longer
+genotyped `0/0`, #91; HG002 9 of 17 then 11 of 17). `--min-qual 2`: 125 / 15 (0.893; HG002
 17 / 13), `--min-qual 5`: 114 / 6 (0.950; HG002 15 / 11). The quality score
 was refit on these calls (#67): AUC 0.928 leaving one sample out, 0.787 on
 HG002. NA12878 (GRCh38, 12 cores): 23 PASS, BAM 120 s and 1.4 GB; HG00731:
@@ -299,6 +308,119 @@ removed from the annotation files (the hs37d5 contigs are `1`..`22`).
 * Run time and memory are not compared: both tools only run as linux/amd64
   images, emulated on this arm64 machine (and while other jobs were running),
   so their wall time says nothing about the tools.
+
+## Tuning and test sets (#88)
+
+`split.tsv` lists the 36 HGSVC3 samples that have a 1000 Genomes GRCh38 exome
+and fixes the split: 18 **tuning** samples, on which thresholds and weights
+are fitted or chosen, and 18 **test** samples, on which they are reported and
+never fitted. HG002 (GRCh37, lifted truth) stays a second held-out sample.
+
+The seven exomes used up to v0.4.1 are all in the tuning set. The other 11
+tuning samples were drawn from the 29 new ones by super-population (so that
+both sets hold 9-10 African, 3-4 East Asian, 2-3 European, 1-2 American and
+one South Asian sample) and, within each, evenly along the median depth of
+the candidates (column `median_candidate_depth`). A first split kept the 29 new
+samples as the test set; it was redrawn before anything was fitted on them,
+after the false-positive analysis below had been done on all 29.
+
+### v0.4.1 on the 29 new exomes
+
+`run.sh` with `SAMPLES` set to the test samples, `SKIP_HG002=1`,
+`ALIGNMENT_EXT=cram`, 4 threads: 3-6 minutes per sample, 9 GB peak resident set
+on macOS (CRAM, allocator cache included).
+
+| | tuning (7) | test (29) |
+| :--- | :--- | :--- |
+| PASS precision | 0.759 | 0.714 (95% CI 0.649-0.765) |
+| PASS recall | 0.337 | 0.238 (0.194-0.285) |
+| `--min-qual 2` precision / recall | 0.893 / 0.337 | 0.830 / 0.232 |
+| `--min-qual 5` precision / recall | 0.950 / 0.307 | 0.875 / 0.208 |
+| `--min-qual 10` precision / recall | 0.968 / 0.248 | 0.919 / 0.179 |
+| genotypes right (true PASS calls) | 107 / 123 | 310 / 372 |
+
+Recall by distance to the targets (test): in target 115/183, 1-100 bp 183/389,
+more than 100 bp 75/998. By family: Alu 0.237, L1 0.263, SVA 0.205. Fitting
+cost about 0.05 of precision at PASS and 0.03-0.06 with `--min-qual`; recall
+fell more (0.337 to 0.238), which this comparison does not explain.
+
+False positives (150): 54 are at 10 recurrent sites found in 3 to 13 samples
+(chr19:41807k AluY, chr19:52384k AluYb8, chr6:43687k SVA_F, chr7:77241k,
+chr20:26113k, chr19:38836k, chr8:38976k, chr17:80082k), all `low`. One sample,
+NA20355, has 24 of them (34 PASS calls, precision 0.29): mostly `low` L1 and
+mate-typed Alu calls and 8 `medium` Alu calls.
+
+### Logistic regression (#89)
+
+A logistic regression on the seven pieces of evidence of the quality score,
+fitted on the 358 labelled `PASS` calls of the tuning set (L2 penalty 1), ranks
+the test calls no better than the current score (AUC 0.887 against 0.891 on
+the 350 test calls; HG002 0.799 against 0.786), and ten more continuous
+features (support, identity, depth, assembly, mate fraction...) did not help
+either (fitted on the seven exomes, AUC on the 29 new ones: 0.894 with them,
+0.896 without, 0.888 for the current score).
+Its probability is roughly calibrated on the test set (calls predicted 0.8-1.0
+true are 0.89 true, 0.6-0.8 are 0.65), not on HG002 (0.8-1.0: 0.67). The
+current score was kept: the ranking is limited by the evidence, not by the
+model.
+
+### Default threshold (#90)
+
+Current score, `PASS` calls, true / false and precision:
+
+| QUAL >= | tuning (18) | test (18) | test precision, 95% CI | test recall, 95% CI |
+| :--- | :--- | :--- | :--- | :--- |
+| 0 | 278 / 80, 0.777 | 240 / 110, 0.686 | | 0.249 |
+| 2 | 273 / 33, 0.892 | 236 / 57, 0.805 | 0.743-0.855 | 0.245 (0.191-0.305) |
+| 3 | 271 / 21, 0.928 | 234 / 47, 0.833 | 0.765-0.882 | 0.242 |
+| 5 | 248 / 17, 0.936 | 212 / 36, 0.855 | 0.798-0.895 | 0.220 (0.169-0.274) |
+| 7 | 225 / 15, 0.938 | 201 / 27, 0.882 | 0.835-0.915 | 0.208 |
+| 10 | 205 / 10, 0.953 | 185 / 18, 0.911 | 0.873-0.946 | 0.192 (0.144-0.245) |
+
+The lowest threshold with a tuning precision of 0.9 (QUAL 3) gives 0.833 on
+the test set: the precision of a threshold drops by 0.05-0.10 on new samples.
+The `exome` profile uses QUAL 10, the lowest with a tuning precision of 0.95,
+which keeps 0.9 on the test set. HG002 at QUAL 10: 14 true / 8 false (0.636,
+recall 0.286).
+
+### Refit on the tuning set and mate-only rule (#82)
+
+The seven weights of the score refitted on the 358 `PASS` calls of the 18
+tuning exomes (previously 169 calls of seven) rank the 350 test calls as the
+current weights do: AUC 0.889 against 0.891 (HG002: 0.797 against 0.786;
+leaving one tuning sample out: 0.913). At QUAL 5 and 10 the refit keeps 226 /
+35 and 185 / 17 true / false test calls, the current score 212 / 36 and
+185 / 18; the difference is within the sampling noise of 18 samples, and the
+QUAL values would no longer mean what #90 chose, so the weights are kept.
+
+The evidence of the calls typed by their mates (typed by mates, reads clipped
+at the breakpoint, imprecise position, junction clips) does not raise the test
+AUC either (0.879-0.890 against 0.889); 8 or more MEI mates gives 0.901 on the
+test set but not on the tuning set (0.922 against 0.924). Among the 109 `PASS`
+calls typed by their mates (87 true), the false ones have a median of 3 MEI
+mates and a fraction of 0.4 (true: 13 and 0.8). Raising the thresholds of
+that rule (at least 4 MEI mates, fraction 0.5-0.6, identity 0.98) removes 5 of
+the 80 false calls of the tuning set for 1-4 true ones, and at QUAL 10, 2 of
+the 18 false calls of the test set for 3 true ones: the QUAL threshold already
+removes most of them, so the rule is kept. (The identity used is the one of
+the `identity` column; the mean mate identity of each candidate is not in the
+output.)
+
+## Genotypes (#91)
+
+Of the 123 true PASS calls with reads at the site (v0.4.0), 14 heterozygous
+insertions were called `0/0` and 15 `1/1`. A candidate that passed is an
+insertion: `0/0` is no longer a choice for it, and the heterozygous genotype
+has a prior of 0.77 (the share of heterozygous genotypes among the HGSVC3
+insertions of the seven exomes). Result on the same calls (unchanged): 107 of
+123 right on the seven exomes, 11 of 17 on HG002 (9 of 17 before). Six
+heterozygous insertions of HG002 and 13 of the seven exomes are still called
+`1/1`: their sites have no reference read (a probe edge, where the reads
+upstream are missing; the alternative reads start at the target start), which
+no count of the alternative allele corrects. Fitting the heterozygous fraction
+by candidate type, or a beta-binomial model, gave the same 105 of 123 in a
+leave-one-sample-out check (before the prior): the remaining errors are in the
+counts, not in the model.
 
 ## VCF with bcftools, tabix and VEP (#85)
 
