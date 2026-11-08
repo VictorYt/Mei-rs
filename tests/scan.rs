@@ -555,7 +555,16 @@ fn same_output_with_any_thread_count() {
 fn exome_profile_flags_low_quality() {
     // The default profile keeps the three insertions and flags the
     // candidates of quality below 10, here the two artefacts.
-    let args = [&POSITIVE[..], &["--keep-filtered", "--profile", "exome"]].concat();
+    let args = [
+        &POSITIVE[..],
+        &[
+            "--keep-filtered",
+            "--profile",
+            "exome",
+            "--allow-no-reference",
+        ],
+    ]
+    .concat();
     let tsv = scan(&args);
     let filters: Vec<_> = rows(&tsv)
         .iter()
@@ -568,7 +577,18 @@ fn exome_profile_flags_low_quality() {
         "{tsv}"
     );
     // `--profile exome` is `--min-qual 10` (the default, see `cli`).
-    let default = scan(&[&POSITIVE[..], &["--keep-filtered", "--min-qual", "10"]].concat());
+    let default = scan(
+        &[
+            &POSITIVE[..],
+            &[
+                "--keep-filtered",
+                "--min-qual",
+                "10",
+                "--allow-no-reference",
+            ],
+        ]
+        .concat(),
+    );
     assert_eq!(normalize(&default), normalize(&tsv));
 }
 
