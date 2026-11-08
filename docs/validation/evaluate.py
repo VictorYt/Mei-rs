@@ -430,7 +430,12 @@ def main():
         "--bootstrap",
         type=int,
         default=2000,
-        help="resamples of the samples for the confidence intervals; 0 to skip [2000]",
+        help="resamples of the families and loci for the confidence intervals; 0 to skip [2000]",
+    )
+    parser.add_argument(
+        "--families",
+        help="split.tsv: the `family_id` of each sample, resampled together in the "
+        "bootstrap (default: every sample is its own family)",
     )
     parser.add_argument(
         "runs",
@@ -497,14 +502,14 @@ def main():
         for c, s, t, _ in passing:
             if s == "tp" and c["genotype"] != ".":
                 genotypes[(unphased(t["genotypes"][sample]), c["genotype"])] += 1
-        quals = {}
+        levels = {"PASS": passing}
         for q in thresholds:
             kept = evaluate(sample, [c for c in calls if passes(c, q)], index, args.tolerance)
+            levels[f"QUAL>={q:g}"] = kept
             kept_status = count(kept)
-            quals[q] = (kept_status["tp"], kept_status["false"], len(found(kept)))
-            by_qual[(q, "tp")] += quals[q][0]
-            by_qual[(q, "fp")] += quals[q][1]
-            by_qual[(q, "found")] += quals[q][2]
+            by_qual[(q, "tp")] += kept_status["tp"]
+            by_qual[(q, "fp")] += kept_status["false"]
+            by_qual[(q, "found")] += len(found(kept))
         if args.fn_out:
             near_truth = collections.defaultdict(set)
             for c, _, _, own in evaluate(sample, calls, index, args.tolerance):
@@ -539,15 +544,18 @@ def main():
             "false": status["false"],
         }
         total.update(values)
-        per_sample.append((values, quals))
+        per_sample.append((sample, carried, levels))
         print(format_row(sample, values, per_tier))
     print(
         format_row(
             "all", total, [f"{total[f'tp_{t}']}/{total[f'n_{t}']}" for t in TIERS]
         )
     )
+    loci = Loci(per_sample)
+    print_units(per_sample, loci)
     if args.bootstrap and len(per_sample) > 1:
-        print_intervals(per_sample, thresholds, args.bootstrap)
+        families = read_families(args.families) if args.families else {}
+        print_intervals(per_sample, loci, families, args.bootstrap)
     print("\n# recall by distance to the target\tfound_any\tfound_pass")
     for _, _, name in strata:
         if strata_total[name]:
@@ -636,60 +644,163 @@ def print_tolerances(sample_calls, truth, index, tolerances):
             )
 
 
-def print_intervals(per_sample, thresholds, resamples):
-    """95% bootstrap intervals of precision and recall, resampling the samples.
+# Truth MEIs and false calls closer than this (bp) are one locus across samples.
+LOCUS_GAP = 100
 
-    The samples are the unit (calls of one sample are not independent: depth,
-    library and ancestry are shared), so the intervals are wide when few
-    samples are evaluated. The seed is fixed: the same input gives the same
-    intervals.
+
+class Loci:
+    """Loci of the evaluation: truth MEIs and false PASS calls of all samples, clustered by position.
+
+    An inherited insertion or a recurrent artefact is one locus seen in many
+    samples; the clusters join positions less than `LOCUS_GAP` apart on a contig.
+    """
+
+    def __init__(self, per_sample):
+        """Cluster the carried MEIs and the false calls of every level of `per_sample`."""
+        points = set()
+        for _, carried, levels in per_sample:
+            points.update((t["contig"], t["pos"]) for t in carried)
+            for rows in levels.values():
+                points.update((c["contig"], min(c["points"])) for c, s, _, _ in rows if s in FALSE)
+        self.index = {}
+        previous, locus = None, -1
+        for contig, pos in sorted(points):
+            if previous is None or previous[0] != contig or pos - previous[1] > LOCUS_GAP:
+                locus += 1
+            self.index[(contig, pos)] = locus
+            previous = (contig, pos)
+        self.count = locus + 1
+
+    def of_truth(self, t):
+        """Locus of a truth MEI."""
+        return self.index[(t["contig"], t["pos"])]
+
+    def of_call(self, c):
+        """Locus of a false call."""
+        return self.index[(c["contig"], min(c["points"]))]
+
+
+def outcomes(per_sample, loci, level):
+    """Count the true calls, false calls and missed MEIs per sample and locus at one level.
+
+    Returns `{(sample, locus): [tp, false, fn]}`; a true call counts at the
+    locus of its MEI, so that `tp + fn` is the number of MEIs carried there.
+    """
+    cells = collections.defaultdict(lambda: [0, 0, 0])
+    for sample, carried, levels in per_sample:
+        rows = levels[level]
+        hit = found(rows)
+        for t in carried:
+            cells[(sample, loci.of_truth(t))][0 if t["id"] in hit else 2] += 1
+        for c, s, _, _ in rows:
+            if s in FALSE:
+                cells[(sample, loci.of_call(c))][1] += 1
+    return cells
+
+
+def read_families(path):
+    """Read the `family_id` of each sample of a `split.tsv`."""
+    with open(path) as handle:
+        return {r["sample"]: r["family_id"] for r in csv.DictReader(handle, delimiter="\t")}
+
+
+def print_units(per_sample, loci):
+    """Print the carrier pairs and distinct sites behind the counts, and the recall per site.
+
+    A truth MEI is a site; each sample that carries it is a carrier pair.
+    Recall per pair is the usual recall; per site, a site counts as found
+    when at least one carrier has a PASS call of it.
+    """
+    pairs = sum(len(carried) for _, carried, _ in per_sample)
+    sites = {t["id"] for _, carried, _ in per_sample for t in carried}
+    found_sites = {i for _, _, levels in per_sample for i in found(levels["PASS"])}
+    every = collections.Counter()
+    for _, carried, levels in per_sample:
+        hit = found(levels["PASS"])
+        every.update(t["id"] for t in carried if t["id"] not in hit)
+    false_loci = {loci.of_call(c) for _, _, levels in per_sample for c, s, _, _ in levels["PASS"] if s in FALSE}
+    false_calls = sum(count(levels["PASS"])["false"] for _, _, levels in per_sample)
+    print(f"\n# units: {pairs} carrier pairs at {len(sites)} truth sites; {false_calls} false PASS calls "
+          f"at {len(false_loci)} loci")
+    if sites:
+        print(f"sites found (PASS) in at least one carrier\t{len(found_sites)}/{len(sites)}"
+              f"\t{len(found_sites) / len(sites):.3f}")
+        print(f"sites found (PASS) in every carrier\t{len(sites) - len(every)}/{len(sites)}"
+              f"\t{(len(sites) - len(every)) / len(sites):.3f}")
+
+
+def print_intervals(per_sample, loci, families, resamples):
+    """Print 95% two-way bootstrap intervals of precision and recall.
+
+    The families of the samples (`families`; an unlisted sample is its own
+    family) and the loci are resampled independently, and each sample-locus
+    cell is weighted by the product of the two counts (pigeonhole bootstrap,
+    Owen 2007): relatives share insertions, and one locus is called or missed
+    in many samples, so a bootstrap over the samples alone treats dependent
+    calls as independent and gives intervals that are too narrow. That one is
+    printed too, for comparison. The seed is fixed: the same input gives the
+    same intervals.
+    """
+    family_of = {sample: families.get(sample, sample) for sample, _, _ in per_sample}
+    groups = sorted(set(family_of.values()))
+    samples = [sample for sample, _, _ in per_sample]
+    print(
+        f"\n# 95% bootstrap intervals ({resamples} resamples): families x loci ({len(groups)} families, "
+        f"{loci.count} loci), and samples alone ({len(samples)})"
+    )
+    print("# level\tmetric\tvalue\tlow\thigh\tlow_samples\thigh_samples")
+    for level in per_sample[0][2]:
+        cells = [(family_of[s], s, locus, v) for (s, locus), v in outcomes(per_sample, loci, level).items()]
+        two_way = bootstrap(cells, groups, loci.count, resamples, by_locus=True)
+        by_sample = bootstrap([(s, s, locus, v) for _, s, locus, v in cells], samples, loci.count, resamples)
+        tp = sum(v[0] for *_, v in cells)
+        false = sum(v[1] for *_, v in cells)
+        fn = sum(v[2] for *_, v in cells)
+        for metric, value in (("precision", ratio(tp, tp + false)), ("recall", ratio(tp, tp + fn))):
+            print(
+                "\t".join(
+                    [level, metric, "." if value is None else f"{value:.3f}"]
+                    + list(two_way[metric])
+                    + list(by_sample[metric])
+                )
+            )
+
+
+def ratio(num, den):
+    """Divide, or return None when `den` is 0."""
+    return None if den == 0 else num / den
+
+
+def bootstrap(cells, groups, n_loci, resamples, by_locus=False):
+    """Draw the 2.5th and 97.5th percentiles of precision and recall.
+
+    `cells` are `(group, sample, locus, [tp, false, fn])`; every resample draws
+    the groups with replacement and, with `by_locus`, the loci too.
     """
     rng = random.Random(1)
-    n = len(per_sample)
-
-    def interval(stat):
-        draws = []
-        for _ in range(resamples):
-            pick = [per_sample[rng.randrange(n)] for _ in range(n)]
-            value = stat(pick)
+    draws = {"precision": [], "recall": []}
+    for _ in range(resamples):
+        group_weight = collections.Counter(rng.choice(groups) for _ in groups)
+        locus_weight = collections.Counter(rng.randrange(n_loci) for _ in range(n_loci)) if by_locus else None
+        tp = false = fn = 0
+        for group, _, locus, (c_tp, c_false, c_fn) in cells:
+            weight = group_weight[group] * (locus_weight[locus] if by_locus else 1)
+            if weight:
+                tp += weight * c_tp
+                false += weight * c_false
+                fn += weight * c_fn
+        for metric, value in (("precision", ratio(tp, tp + false)), ("recall", ratio(tp, tp + fn))):
             if value is not None:
-                draws.append(value)
-        draws.sort()
-        if not draws:
-            return ".", ".", "."
-        return (
-            f"{draws[int(0.025 * len(draws))]:.3f}",
-            f"{draws[min(int(0.975 * len(draws)), len(draws) - 1)]:.3f}",
-            f"{len(draws)}",
+                draws[metric].append(value)
+    out = {}
+    for metric, values in draws.items():
+        values.sort()
+        out[metric] = (
+            (f"{values[int(0.025 * len(values))]:.3f}", f"{values[min(int(0.975 * len(values)), len(values) - 1)]:.3f}")
+            if values
+            else (".", ".")
         )
-
-    def ratio(num, den):
-        return None if den == 0 else num / den
-
-    print(f"\n# 95% bootstrap intervals over {n} samples ({resamples} resamples)")
-    print("# level\tmetric\tlow\thigh")
-    stats = [
-        ("PASS", "precision", lambda p: ratio(sum(v["tp"] for v, _ in p), sum(v["tp"] + v["false"] for v, _ in p))),
-        ("PASS", "recall", lambda p: ratio(sum(v["found_pass"] for v, _ in p), sum(v["truth"] for v, _ in p))),
-    ]
-    for q in thresholds:
-        stats.append(
-            (
-                f"QUAL>={q:g}",
-                "precision",
-                lambda p, q=q: ratio(sum(x[q][0] for _, x in p), sum(x[q][0] + x[q][1] for _, x in p)),
-            )
-        )
-        stats.append(
-            (
-                f"QUAL>={q:g}",
-                "recall",
-                lambda p, q=q: ratio(sum(x[q][2] for _, x in p), sum(v["truth"] for v, _ in p)),
-            )
-        )
-    for level, metric, stat in stats:
-        low, high, _ = interval(stat)
-        print(f"{level}\t{metric}\t{low}\t{high}")
+    return out
 
 
 def format_row(name, v, per_tier):
