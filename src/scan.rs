@@ -448,7 +448,7 @@ fn genotype_candidates(
                 reference: counts.reference,
             })
             .collect();
-        c.genotype = genotype::genotype(&junctions, c.is_pass());
+        c.genotype = genotype::genotype(&junctions, c.passes_before_quality());
     }
     Ok(())
 }
