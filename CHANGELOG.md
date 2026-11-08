@@ -27,6 +27,13 @@ project follows [Semantic Versioning](https://semver.org/).
   target on a contig absent from the alignment or beyond the end of its
   contig, e.g. a BED of another genome build), instead of writing an empty
   output that reads as "no insertion" (#118).
+- `--reference` is checked against the `M5` checksums of the alignment
+  header (`@SQ`), for BAM as for CRAM: a reference with the same contig
+  lengths but other bases (another version of the build) now stops `scan`
+  with a message giving both checksums in hexadecimal, before any read is
+  decoded (#119). A BAM without `M5` tags gets a warning. The check reads
+  each scanned contig of the reference once (GRCh38 with a warm file cache:
+  +0.5 s wall, +4.6 s CPU).
 - Release workflow: the upload job downloads only the binary artifacts (it failed on the image digests still being written, #84); the v0.4.1 binaries were attached by hand from the same run.
 
 ## [0.4.1] - 2026-10-15
