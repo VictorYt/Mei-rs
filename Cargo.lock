@@ -694,6 +694,7 @@ dependencies = [
  "coitrees",
  "criterion",
  "flate2",
+ "md-5",
  "noodles",
  "noodles-util",
  "predicates",
