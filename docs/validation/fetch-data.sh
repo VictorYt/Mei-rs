@@ -34,6 +34,10 @@ get https://hgdownload.soe.ucsc.edu/goldenPath/hg38/liftOver/hg38ToHg19.over.cha
 REF=https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference
 get $REF/GRCh38_reference_genome/GRCh38_full_analysis_set_plus_decoy_hla.fa "$dir/ref/GRCh38_full_analysis_set_plus_decoy_hla.fa" 64b32de2fc934679c16e83a2bc072064
 get $REF/phase2_reference_assembly_sequence/hs37d5.fa.gz "$dir/ref/hs37d5.fa.gz" d10eebe06c0dbbcb04253e3294d63efc
+# Indexes read by `mei-rs` (`.fai`, and `.gzi` for the bgzipped GRCh37 reference).
+get $REF/GRCh38_reference_genome/GRCh38_full_analysis_set_plus_decoy_hla.fa.fai "$dir/ref/GRCh38_full_analysis_set_plus_decoy_hla.fa.fai" 5ccc91e56dc4a05448dd5b9507ec6bc6
+get $REF/phase2_reference_assembly_sequence/hs37d5.fa.gz.fai "$dir/ref/hs37d5.fa.gz.fai" bb77e60e9a492fd0172e2b11e6c16afd
+get $REF/phase2_reference_assembly_sequence/hs37d5.fa.gz.gzi "$dir/ref/hs37d5.fa.gz.gzi" e7727ae9437609bd7e059816388c602c
 
 # GENCODE v46 basic annotation (exons and coding sequences of the stratified recall, #114).
 GENCODE=https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_46

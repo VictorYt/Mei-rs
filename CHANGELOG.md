@@ -6,6 +6,12 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `fetch-data.sh` downloads the reference indexes (`.fai`, `.gzi`), and
+  `build-targets.sh` builds the CrossMap environment outside the data
+  directory, which failed on exFAT volumes under macOS (#115).
+
 ## [0.5.0] - 2026-11-08
 
 Defensible numbers and genotypes: thresholds chosen on a tuning set and
