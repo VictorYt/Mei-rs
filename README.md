@@ -80,7 +80,7 @@ error.
 |---|---|
 | `--bam` | BAM or CRAM, coordinate-sorted and indexed (`.bam.bai`, `.bam.csi`, `.bai`, `.cram.crai` or `.crai`). The sample name is the `SM` of the read groups, or else the file name. |
 | `--bed` | capture targets: at least 3 columns (contig, 0-based start, end), tabs or spaces, plain or gzipped. `#`, `track` and `browser` lines are skipped. The contig names must match the alignment (`chr1` vs `1` is reported). |
-| `--reference` | reference genome indexed with `samtools faidx` (`.fai`); required for CRAM, and recommended for BAM: without it, the `tandem_repeat` filter is off, mapped mates are not checked against the MEI consensus sequences and the junctions are not assembled (TSD estimated from the clips). When given, its contigs must match the lengths of the alignment header. |
+| `--reference` | reference genome indexed with `samtools faidx` (`.fai`); required for CRAM and with `--profile exome` (the default). Without it, the `tandem_repeat` filter is off, mapped mates are not checked against the MEI consensus sequences and the junctions are not assembled (TSD estimated from the clips): this mode was never validated, and needs `--profile discovery` or `--allow-no-reference`. When given, its contigs must match the lengths of the alignment header and, when the header has them (`M5` tags of the `@SQ` lines, always present in CRAM), their MD5 checksums. |
 | `--consensus` | MEI consensus sequences (FASTA, headers `>name#SINE/Alu`, `>name#LINE/L1`, `>name#Retroposon/SVA`). Default: the Alu, young LINE-1 and SVA consensus sequences of Dfam (CC0) built into mei-rs, see [data/consensus](data/consensus/README.md). |
 
 Inconsistent inputs fail early with a message that says how to fix them.
@@ -113,11 +113,13 @@ skipped with a warning.
 | `--min-signal-ratio` | 0.05 | minimum number of supporting reads per read of local depth |
 | `--profile` | `exome` | preset of the thresholds: `exome` keeps the calls of quality 10 or more, `discovery` all the calls that pass the filters (see [Profiles](#profiles-and---min-qual)) |
 | `--min-qual` | from `--profile` | minimum quality score (`low_qual` below; 0 turns the filter off); overrides the profile |
+| `--allow-no-reference` | off | run `--profile exome` without `--reference` (precision not measured: every published number was computed with the reference) |
 | `--probe-edge-tolerance` | 2 | distance in bp to a probe start or end within which a soft-clip stops at the probe edge |
 | `--keep-filtered` | off | also write the candidates flagged `no_junction`, `no_tail`, `untyped`, `non_mei_mates`, `tandem_repeat`, `probe_edge`, `low_ratio` or `low_qual` |
 | **Output** | | |
-| `-o`, `--output` | stdout | output file |
+| `-o`, `--output` | stdout | output file, written under a temporary name and renamed once complete; compressed (BGZF, readable by any gzip reader) when it ends with `.gz` |
 | `--format` | `tsv` | `tsv`, `bed`, `json` (with every signal of every candidate) or `vcf` (VCF 4.2; bgzipped and indexed, `.tbi`, when `--output` ends with `.gz`) |
+| `--anonymize` | off | input paths reduced to their file names in the command line written in the outputs, read names of the JSON replaced (see [what the outputs contain](docs/output.md#what-the-outputs-contain)) |
 | **Global** | | |
 | `-t`, `--threads` | all cores | worker threads |
 | `-v`, `-q` | | more (`-v`, `-vv`) or fewer (`-q`) logs; `RUST_LOG` takes precedence |

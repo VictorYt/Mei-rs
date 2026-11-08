@@ -21,8 +21,50 @@ project follows [Semantic Versioning](https://semver.org/).
   calls are unchanged. `evaluate.py --tp-out` gives the truth genotype of each
   call.
 
+- `--profile exome` (the default) requires `--reference`, unless
+  `--allow-no-reference` is given (#120): its quality threshold and every
+  published precision were measured with the reference, which turns on the
+  `tandem_repeat` filter, the mapped mate checks and the assembly; without
+  it the precision is not known. `--profile discovery` still runs without a
+  reference.
+
+### Added
+
+- Every output carries a research-use notice (`##note` in the TSV, a `#`
+  line in the BED, `note` in the JSON, `##mei-rsNote` in the VCF): not a
+  validated diagnostic test, calls to confirm, absence of a call does not
+  exclude an insertion (#121). The BED output now starts with this comment
+  line.
+- `--anonymize` (#121): file names only in the command line written in the
+  outputs, read names of the JSON replaced by `read_1`, `read_2`...
+  `docs/output.md` lists what each output and the log contain.
+
 ### Fixed
 
+- Genotype quality (#117): `gq` is the probability of a wrong genotype given
+  the reads alone (equal priors over `0/0`, `0/1` and `1/1`); the prior that
+  excludes `0/0` for a candidate that passed still chooses the call but no
+  longer raises its quality, so a call without alternative read has a `gq`
+  of 0 instead of 99 (the `mateonly` fixture). The genotype of a candidate
+  flagged only `low_qual` no longer depends on the profile: it is genotyped
+  as an insertion.
+- `scan` fails (exit code 1) when no target of the BED can be scanned (every
+  target on a contig absent from the alignment or beyond the end of its
+  contig, e.g. a BED of another genome build), instead of writing an empty
+  output that reads as "no insertion" (#118).
+- `--reference` is checked against the `M5` checksums of the alignment
+  header (`@SQ`), for BAM as for CRAM: a reference with the same contig
+  lengths but other bases (another version of the build) now stops `scan`
+  with a message giving both checksums in hexadecimal, before any read is
+  decoded (#119). A BAM without `M5` tags gets a warning. The check reads
+  each scanned contig of the reference once (GRCh38 with a warm file cache:
+  +0.5 s wall, +4.6 s CPU).
+- Small fixes (#123): an output path ending in `.gz` is compressed for every
+  format (TSV, BED and JSON were written uncompressed); outputs are written
+  under a temporary name and renamed once complete, so an interrupted run
+  leaves no truncated file; `--min-qual` above the largest quality the score
+  can give (26) gets a warning; two unsigned subtractions of the filters
+  saturate; `__pycache__/` is ignored.
 - Release workflow: the upload job downloads only the binary artifacts (it failed on the image digests still being written, #84); the v0.4.1 binaries were attached by hand from the same run.
 
 ## [0.4.1] - 2026-10-15

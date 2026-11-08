@@ -1,4 +1,5 @@
 ##mei-rs {version}
+##note: research use only: not a validated diagnostic test; a call is a candidate to confirm with an orthogonal method, and the absence of a call does not exclude an insertion
 ##command: {command}
 ##sample: positive
 ##positions: 1-based; a position p means the insertion is right after base p

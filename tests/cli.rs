@@ -24,6 +24,7 @@ fn scan_help_lists_every_option() {
         "--bam",
         "--bed",
         "--reference",
+        "--allow-no-reference",
         "--consensus",
         "--padding",
         "--region",
@@ -37,6 +38,7 @@ fn scan_help_lists_every_option() {
         "--min-typed-clips",
         "--output",
         "--format",
+        "--anonymize",
         "--threads",
         "--verbose",
         "--quiet",
@@ -80,9 +82,10 @@ fn scan_logs_a_summary() {
     ] {
         let mut cmd = mei_rs();
         cmd.args(["scan", "--bam", &data(bam), "--bed", &data("targets.bed")]);
-        if let Some(reference) = reference {
-            cmd.args(["--reference", &data(reference)]);
-        }
+        match reference {
+            Some(reference) => cmd.args(["--reference", &data(reference)]),
+            None => cmd.arg("--allow-no-reference"),
+        };
         cmd.assert()
             .success()
             .stderr(predicate::str::contains("sample positive"))
@@ -141,10 +144,134 @@ fn scan_region() {
             "--bed",
             &data("targets.bed"),
         ])
-        .args(["--region", "chr1:1-100"])
+        .args(["--region", "chr1:1-100", "--allow-no-reference"])
         .assert()
         .code(1)
         .stderr(predicate::str::contains(
             "--region chr1:1-100 holds no target",
         ));
+}
+
+#[test]
+fn scan_fails_without_any_usable_target() {
+    // A BED of another build: an empty output would read as "no insertion".
+    let dir = std::env::temp_dir().join(format!("mei-rs-cli-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let bed = dir.join("other-build.bed");
+    std::fs::write(&bed, "chr1\t30000\t30050\nchrZZ\t1\t10\n").unwrap();
+    mei_rs()
+        .args([
+            "scan",
+            "--bam",
+            &data("positive.bam"),
+            "--allow-no-reference",
+            "--bed",
+        ])
+        .arg(&bed)
+        .assert()
+        .code(1)
+        .stderr(
+            predicate::str::contains("no target of ").and(predicate::str::contains("positive.bam")),
+        );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn compressed_output_and_no_partial_file() {
+    use std::io::Read;
+
+    let dir = std::env::temp_dir().join(format!("mei-rs-gz-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let base = [
+        "scan",
+        "--bam",
+        &data("positive.bam"),
+        "--bed",
+        &data("targets.bed"),
+        "--profile",
+        "discovery",
+    ];
+    for format in ["tsv", "json", "bed"] {
+        let plain = dir.join(format!("calls.{format}"));
+        let gz = dir.join(format!("calls.{format}.gz"));
+        for path in [&plain, &gz] {
+            mei_rs()
+                .args(base)
+                .args(["--format", format, "-o"])
+                .arg(path)
+                .assert()
+                .success();
+        }
+        let mut decoded = String::new();
+        flate2::read::MultiGzDecoder::new(std::fs::File::open(&gz).unwrap())
+            .read_to_string(&mut decoded)
+            .unwrap();
+        // Only the command line in the header differs.
+        let body = |text: &str| -> String {
+            text.lines()
+                .filter(|l| !l.contains("calls."))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        assert_eq!(
+            body(&decoded),
+            body(&std::fs::read_to_string(&plain).unwrap()),
+            "{format}"
+        );
+    }
+    // The outputs were written under a temporary name and renamed.
+    let left: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".part"))
+        .collect();
+    assert!(left.is_empty(), "{left:?}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn unreachable_quality_threshold_warns() {
+    mei_rs()
+        .args([
+            "scan",
+            "--bam",
+            &data("positive.bam"),
+            "--bed",
+            &data("targets.bed"),
+        ])
+        .args(["--profile", "discovery", "--min-qual", "30"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "--min-qual 30 is above the largest quality the score can give (26)",
+        ));
+}
+
+#[test]
+fn exome_profile_requires_a_reference() {
+    let base = [
+        "scan",
+        "--bam",
+        &data("positive.bam"),
+        "--bed",
+        &data("targets.bed"),
+    ];
+    mei_rs()
+        .args(base)
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "--profile exome (the default) needs --reference",
+        ));
+    mei_rs()
+        .args(base)
+        .arg("--allow-no-reference")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("its precision is not known"));
+    mei_rs()
+        .args(base)
+        .args(["--profile", "discovery"])
+        .assert()
+        .success();
 }

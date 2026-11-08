@@ -7,13 +7,15 @@
 //! and `1 - ERROR` for `1/1`. With two junctions, the log-likelihoods are
 //! averaged: a reference read usually spans both junctions (they are a TSD
 //! apart) and would count twice. The genotype is the most likely one, and
-//! its quality (GQ) the phred-scaled probability that it is wrong, with
-//! equal priors, at most [`MAX_QUALITY`].
+//! its quality (GQ) the phred-scaled probability that it is wrong given the
+//! reads alone (the three genotypes, equal priors), at most [`MAX_QUALITY`].
 //!
 //! A candidate that passed the filters is an insertion in the sample: its
 //! genotype is `0/1` or `1/1` (never `0/0`), with a prior that favours the
 //! heterozygous genotype ([`HET_PRIOR`]). `0/0` stays possible for the
-//! candidates that did not pass (`--keep-filtered`).
+//! candidates that did not pass (`--keep-filtered`). The prior only chooses
+//! the call: GQ measures the reads, so a call the reads do not support (no
+//! alternative read at a mate-only insertion) has a GQ of 0 (#117).
 
 pub mod score;
 
@@ -134,10 +136,10 @@ pub fn genotype(junctions: &[AlleleCounts], present: bool) -> Option<Genotype> {
     let best = (0..3)
         .max_by(|&a, &b| posteriors[a].total_cmp(&posteriors[b]))
         .unwrap_or(0);
-    // Posterior of the other genotypes.
-    let total: f64 = posteriors
+    // Probability of the other genotypes from the reads alone, `0/0` included.
+    let total: f64 = log_likelihoods
         .iter()
-        .map(|ll| 10f64.powf(ll - posteriors[best]))
+        .map(|ll| 10f64.powf(ll - log_likelihoods[best]))
         .sum();
     let wrong = 1.0 - 1.0 / total;
     Some(Genotype {
@@ -206,6 +208,22 @@ mod tests {
         assert!(g.quality <= MAX_QUALITY);
         // Without reference reads, the homozygous genotype is still called.
         assert_eq!(genotype(&[counts(15, 0)], true).unwrap().call, Call::HomAlt);
+    }
+
+    #[test]
+    fn the_quality_of_a_passed_candidate_measures_the_reads() {
+        // No alternative read, or one of 57: the call stays `0/1` but the
+        // reads do not support it.
+        for reads in [counts(0, 30), counts(1, 56)] {
+            let g = genotype(&[reads], true).unwrap();
+            assert_eq!((g.call, g.quality), (Call::Het, 0), "{reads:?}");
+        }
+        // Alternative and reference reads at a heterozygous fraction do.
+        let g = genotype(&[counts(10, 20)], true).unwrap();
+        assert_eq!((g.call, g.quality), (Call::Het, 88));
+        // Huge counts do not overflow into NaN.
+        let g = genotype(&[counts(0, 100_000)], true).unwrap();
+        assert_eq!((g.call, g.quality), (Call::Het, 0));
     }
 
     #[test]

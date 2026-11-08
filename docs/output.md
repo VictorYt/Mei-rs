@@ -7,6 +7,26 @@ those flagged `no_junction`, `no_tail`, `untyped`, `non_mei_mates`,
 `tandem_repeat`, `probe_edge` or `low_ratio`. Clusters with fewer than
 `--min-support` distinct reads are never written.
 
+Every output starts with a research-use notice: `mei-rs` is not a validated
+diagnostic test, a call is a candidate to confirm with an orthogonal method,
+and the absence of a call does not exclude an insertion (`##note:` in the TSV,
+a `#` line in the BED, `note` in the JSON, `##mei-rsNote` in the VCF).
+
+## What the outputs contain
+
+The outputs, and the log on standard error, may identify a patient:
+
+| Output | Identifying content | With `--anonymize` |
+|---|---|---|
+| TSV, JSON, VCF | sample name (`SM` of the read groups, or the file name) and the command line, with the input paths | input paths reduced to their file names; the sample name is kept |
+| JSON | read names and clipped read sequences of every signal | read names replaced by `read_1`, `read_2`... (one name per read pair); sequences kept |
+| BED | candidate positions only | unchanged |
+| log (standard error) | sample name and input paths | unchanged: do not keep the log with the outputs if this matters |
+
+The VCF `##reference` line holds the file name of the reference only.
+A file name can itself be an identifier: rename the inputs before the run if
+it is.
+
 ## Coordinates
 
 TSV and JSON positions are **1-based**: a position `p` means the insertion is
@@ -17,8 +37,8 @@ The BED output is 0-based half-open, like every BED file.
 
 ## TSV (`--format tsv`, default)
 
-Header lines start with `##` (version, command line, sample, coordinate
-convention), then one `#` line names the columns:
+Header lines start with `##` (version, research-use notice, command line,
+sample, coordinate convention), then one `#` line names the columns:
 
 | Column | Description |
 |---|---|
@@ -60,7 +80,7 @@ convention), then one `#` line names the columns:
 | `polya_length` | Length of the poly(A) (or poly(T)) tail at an assembled junction: the run of A (T) from the junction, when the contig holds its end (`.` otherwise). |
 | `qual` | Quality score: phred-scaled probability that the candidate is not a mobile element insertion, from its evidence (naive Bayes: a poly(A/T) tail, mostly MEI mates (60%), typed clips of 98% identity, distinct fragment starts (70% of the supporting reads), `signal_ratio` of 0.2, signals on both sides, a TSD), with likelihood ratios measured on the `PASS` candidates of 7 HGSVC3 exomes. It ranks the candidates better than it estimates the probability. |
 | `genotype` | `0/0`, `0/1` or `1/1`: the most likely genotype from `alt_reads` and `ref_reads` at each junction (binomial: 2% of alternative reads for `0/0`, 30% for `0/1`, as alternative reads are under-counted, 98% for `1/1`; with two junctions, their log-likelihoods are averaged). `.` without junction or without any counted read. |
-| `gq` | Genotype quality: phred-scaled probability that `genotype` is wrong, equal priors, at most 99. |
+| `gq` | Genotype quality: phred-scaled probability that `genotype` is wrong given the reads alone (`0/0`, `0/1` and `1/1` with equal priors), at most 99. The prior that excludes `0/0` for a candidate that passed chooses `genotype` but does not enter `gq`: a call without alternative read has a `gq` of 0. |
 | `alt_reads` | Reads clipped at a junction (within 5 bp) by at least `--min-short-clip-len` bases of median quality at least `--min-clip-quality`, summed over the junctions. |
 | `ref_reads` | Reads aligned over the whole site (both junctions) with at least `--min-short-clip-len` bases on each side, counted at each junction (twice with two junctions). |
 | `typed_by` | What typed the element: `clips` (junction soft-clips) or `mates` (no clip typed; see `family`); `.` if untyped. |

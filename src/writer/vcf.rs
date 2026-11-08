@@ -210,6 +210,7 @@ pub fn write_vcf(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
     writeln!(out, "##fileformat=VCFv4.2")?;
     writeln!(out, "##source=mei-rs {}", env!("CARGO_PKG_VERSION"))?;
     writeln!(out, "##mei-rsCommand={}", report.command)?;
+    writeln!(out, "##mei-rsNote={}", super::NOTICE)?;
     if let Some(reference) = report.reference {
         writeln!(out, "##reference={reference}")?;
     }
