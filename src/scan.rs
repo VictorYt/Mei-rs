@@ -138,7 +138,7 @@ fn report(
     candidates: &[Candidate],
 ) -> Result<()> {
     let contigs: Vec<String> = header_contigs.iter().map(|c| c.name.clone()).collect();
-    let command = command_line();
+    let command = command_line(args.anonymize);
     let contig_lengths: Vec<u64> = header_contigs.iter().map(|c| c.length).collect();
     let reference_bases = match (&args.reference, args.format) {
         (Some(reference), OutputFormat::Vcf) => {
@@ -159,6 +159,7 @@ fn report(
         reference: reference_name.as_deref(),
         reference_bases: reference_bases.as_deref(),
         candidates,
+        anonymize: args.anonymize,
     };
     write_output(&report, args)
 }
@@ -680,9 +681,15 @@ fn reference_bases(
         .collect()
 }
 
-/// The command line, with the program name only (not its path).
-fn command_line() -> String {
-    let mut args = std::env::args();
+/// The command line, with the program name only (not its path); with
+/// `anonymize`, every argument that is a path (or `--option=path`) keeps
+/// its file name only.
+fn command_line(anonymize: bool) -> String {
+    command_line_of(std::env::args(), anonymize)
+}
+
+/// [`command_line`] of the given arguments.
+fn command_line_of(mut args: impl Iterator<Item = String>, anonymize: bool) -> String {
     let program = args
         .next()
         .map(|p| {
@@ -691,8 +698,21 @@ fn command_line() -> String {
                 .map_or(p.clone(), |name| name.to_string_lossy().into_owned())
         })
         .unwrap_or_default();
+    let file_name = |arg: String| -> String {
+        if !anonymize || !arg.contains(std::path::MAIN_SEPARATOR) {
+            return arg;
+        }
+        let (option, value) = match arg.split_once('=') {
+            Some((option, value)) if option.starts_with("--") => (Some(option), value),
+            _ => (None, arg.as_str()),
+        };
+        let name = Path::new(value)
+            .file_name()
+            .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+        option.map_or_else(|| name.clone(), |o| format!("{o}={name}"))
+    };
     std::iter::once(program)
-        .chain(args)
+        .chain(args.map(file_name))
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -735,6 +755,36 @@ fn log_extraction(extraction: &Extraction, (short, kept): (usize, usize), clip: 
             "{short} short soft-clips ({} to {} bp): {kept} kept with a poly(A/T) tail or MEI sequence",
             clip.min_short_length,
             clip.min_length - 1
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::command_line_of;
+
+    fn line(args: &[&str], anonymize: bool) -> String {
+        command_line_of(args.iter().map(|a| (*a).to_owned()), anonymize)
+    }
+
+    #[test]
+    fn command_line_keeps_file_names_only_when_anonymized() {
+        let args = [
+            "/opt/bin/mei-rs",
+            "scan",
+            "--bam",
+            "/data/patients/P123/P123.bam",
+            "--bed=/data/kits/v5.bed",
+            "--min-qual",
+            "10",
+        ];
+        assert_eq!(
+            line(&args, false),
+            "mei-rs scan --bam /data/patients/P123/P123.bam --bed=/data/kits/v5.bed --min-qual 10"
+        );
+        assert_eq!(
+            line(&args, true),
+            "mei-rs scan --bam P123.bam --bed=v5.bed --min-qual 10"
         );
     }
 }
