@@ -25,3 +25,6 @@ rustc-ice-*.txt
 
 # Local assistant instructions (not versioned)
 CLAUDE.md
+
+# Python bytecode of the evaluation scripts
+__pycache__/

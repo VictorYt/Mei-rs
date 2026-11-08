@@ -27,6 +27,12 @@ project follows [Semantic Versioning](https://semver.org/).
   target on a contig absent from the alignment or beyond the end of its
   contig, e.g. a BED of another genome build), instead of writing an empty
   output that reads as "no insertion" (#118).
+- Small fixes (#123): an output path ending in `.gz` is compressed for every
+  format (TSV, BED and JSON were written uncompressed); outputs are written
+  under a temporary name and renamed once complete, so an interrupted run
+  leaves no truncated file; `--min-qual` above the largest quality the score
+  can give (26) gets a warning; two unsigned subtractions of the filters
+  saturate; `__pycache__/` is ignored.
 - Release workflow: the upload job downloads only the binary artifacts (it failed on the image digests still being written, #84); the v0.4.1 binaries were attached by hand from the same run.
 
 ## [0.4.1] - 2026-10-15
