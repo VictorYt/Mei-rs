@@ -38,6 +38,19 @@ pub const HET_FRACTION: f64 = 0.3;
 /// against 2,654 `1|1`). Used for the candidates that passed.
 pub const HET_PRIOR: f64 = 0.77;
 
+/// Smallest fraction of alternative reads among the reads at the site
+/// (local depth) for a homozygous call when no reference read is counted.
+///
+/// Reference reads are counted only when they span the site by 15 bases on
+/// each side; next to a probe edge, the reads of the reference allele end
+/// at the site and none is counted, so a heterozygous insertion looks
+/// homozygous. Its alternative reads are then a smaller part of the reads
+/// at the site: among the true calls without reference read of the 18
+/// tuning exomes, median 0.18 for the 27 heterozygous ones and 0.38 for the
+/// 63 homozygous ones (#91). The value is the best of 0.15 to 0.3 there
+/// (235 of 263 genotypes right, 229 before).
+pub const HOM_MIN_ALT_FRACTION: f64 = 0.2;
+
 /// Highest genotype quality.
 pub const MAX_QUALITY: u32 = 99;
 
@@ -93,10 +106,12 @@ pub struct Genotype {
 /// reads of the site at each junction); `None` without any read.
 ///
 /// `present` is true for a candidate that passed the filters: the genotype
-/// is then `0/1` or `1/1`, with [`HET_PRIOR`]. Otherwise the three genotypes
-/// have equal priors.
+/// is then `0/1` or `1/1`, with [`HET_PRIOR`]; a homozygous call without
+/// reference read is heterozygous when the alternative reads are less than
+/// [`HOM_MIN_ALT_FRACTION`] of `depth`, the reads at the site. Otherwise the
+/// three genotypes have equal priors.
 #[must_use]
-pub fn genotype(junctions: &[AlleleCounts], present: bool) -> Option<Genotype> {
+pub fn genotype(junctions: &[AlleleCounts], present: bool, depth: Option<u64>) -> Option<Genotype> {
     let alternative: u32 = junctions.iter().map(|c| c.alternative).sum();
     let reference: u32 = junctions.iter().map(|c| c.reference).sum();
     if alternative + reference == 0 {
@@ -133,9 +148,17 @@ pub fn genotype(junctions: &[AlleleCounts], present: bool) -> Option<Genotype> {
         .zip(priors)
         .map(|(ll, prior)| ll + prior)
         .collect();
-    let best = (0..3)
+    let mut best = (0..3)
         .max_by(|&a, &b| posteriors[a].total_cmp(&posteriors[b]))
         .unwrap_or(0);
+    #[allow(clippy::cast_precision_loss)]
+    if present
+        && best == 2
+        && reference == 0
+        && depth.is_some_and(|d| d > 0 && f64::from(alternative) < HOM_MIN_ALT_FRACTION * d as f64)
+    {
+        best = 1;
+    }
     // Probability of the other genotypes from the reads alone, `0/0` included.
     let total: f64 = log_likelihoods
         .iter()
@@ -179,20 +202,20 @@ mod tests {
 
     #[test]
     fn calls() {
-        let g = genotype(&[counts(10, 12), counts(11, 12)], false).unwrap();
+        let g = genotype(&[counts(10, 12), counts(11, 12)], false, None).unwrap();
         assert_eq!((g.call, g.alternative, g.reference), (Call::Het, 21, 24));
         assert_eq!(g.quality, MAX_QUALITY);
         assert_eq!(
-            genotype(&[counts(15, 0), counts(14, 1)], false)
+            genotype(&[counts(15, 0), counts(14, 1)], false, None)
                 .unwrap()
                 .call,
             Call::HomAlt
         );
         assert_eq!(
-            genotype(&[counts(0, 30)], false).unwrap().call,
+            genotype(&[counts(0, 30)], false, None).unwrap().call,
             Call::HomRef
         );
-        assert_eq!(genotype(&[counts(0, 0)], false), None);
+        assert_eq!(genotype(&[counts(0, 0)], false, None), None);
     }
 
     #[test]
@@ -200,14 +223,17 @@ mod tests {
         // Few alternative reads among many reference reads: `0/0` without the
         // filters, a heterozygous insertion for a candidate that passed.
         assert_eq!(
-            genotype(&[counts(1, 56)], false).unwrap().call,
+            genotype(&[counts(1, 56)], false, None).unwrap().call,
             Call::HomRef
         );
-        let g = genotype(&[counts(1, 56)], true).unwrap();
+        let g = genotype(&[counts(1, 56)], true, None).unwrap();
         assert_eq!(g.call, Call::Het);
         assert!(g.quality <= MAX_QUALITY);
         // Without reference reads, the homozygous genotype is still called.
-        assert_eq!(genotype(&[counts(15, 0)], true).unwrap().call, Call::HomAlt);
+        assert_eq!(
+            genotype(&[counts(15, 0)], true, None).unwrap().call,
+            Call::HomAlt
+        );
     }
 
     #[test]
@@ -215,20 +241,44 @@ mod tests {
         // No alternative read, or one of 57: the call stays `0/1` but the
         // reads do not support it.
         for reads in [counts(0, 30), counts(1, 56)] {
-            let g = genotype(&[reads], true).unwrap();
+            let g = genotype(&[reads], true, None).unwrap();
             assert_eq!((g.call, g.quality), (Call::Het, 0), "{reads:?}");
         }
         // Alternative and reference reads at a heterozygous fraction do.
-        let g = genotype(&[counts(10, 20)], true).unwrap();
+        let g = genotype(&[counts(10, 20)], true, None).unwrap();
         assert_eq!((g.call, g.quality), (Call::Het, 88));
         // Huge counts do not overflow into NaN.
-        let g = genotype(&[counts(0, 100_000)], true).unwrap();
+        let g = genotype(&[counts(0, 100_000)], true, None).unwrap();
         assert_eq!((g.call, g.quality), (Call::Het, 0));
     }
 
     #[test]
+    fn missing_reference_reads_next_to_a_probe_edge() {
+        // 9 alternative reads, none of the reference, 68 reads at the site:
+        // the reference reads end at the site, the insertion is heterozygous.
+        let g = genotype(&[counts(9, 0)], true, Some(68)).unwrap();
+        assert_eq!(g.call, Call::Het);
+        // The reads do not tell it: the quality stays low.
+        assert!(g.quality < 10, "{g:?}");
+        // Most reads at the site are alternative: homozygous.
+        assert_eq!(
+            genotype(&[counts(9, 0)], true, Some(28)).unwrap().call,
+            Call::HomAlt
+        );
+        // Without depth, or for a filtered candidate, the reads decide.
+        assert_eq!(
+            genotype(&[counts(9, 0)], true, None).unwrap().call,
+            Call::HomAlt
+        );
+        assert_eq!(
+            genotype(&[counts(9, 0)], false, Some(68)).unwrap().call,
+            Call::HomAlt
+        );
+    }
+
+    #[test]
     fn few_reads_give_a_low_quality() {
-        let g = genotype(&[counts(1, 0)], false).unwrap();
+        let g = genotype(&[counts(1, 0)], false, None).unwrap();
         assert_eq!(g.call, Call::HomAlt);
         assert!(g.quality < 10, "{g:?}");
     }
