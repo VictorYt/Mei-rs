@@ -50,6 +50,8 @@ FAMILIES = {
     "LINE/L1": "L1",
     "Retroposon/SVA": "SVA",
 }
+# Family of a call: `family` column of the TSV, last field of a symbolic ALT (`<INS:ME:ALU>`).
+CALL_FAMILIES = {"ALU": "Alu", "LINE1": "L1", "SVA": "SVA"}
 TIERS = ["high", "medium", "low"]
 
 
@@ -248,6 +250,8 @@ def load_tsv(path):
                     "confidence": row["confidence"],
                     "qual": int(row["qual"]) if row.get("qual", ".") != "." else None,
                     "genotype": row.get("genotype", "."),
+                    "family": CALL_FAMILIES.get(row.get("family", ".")),
+                    "imprecise": row.get("cipos", ".") != ".",
                     "row": row,
                 }
             )
@@ -280,6 +284,8 @@ def load_vcf(path):
                     "confidence": info.get("CONFIDENCE", "."),
                     "qual": None if fields[5] == "." else float(fields[5]),
                     "genotype": genotype,
+                    "family": CALL_FAMILIES.get(fields[4].strip("<>").split(":")[-1]),
+                    "imprecise": "CIPOS" in info or "IMPRECISE" in info,
                     "row": {"contig": fields[0], "position": fields[1], "info": fields[7]},
                 }
             )
@@ -291,46 +297,93 @@ def load_calls(path):
     return load_vcf(path) if path.endswith((".vcf", ".vcf.gz")) else load_tsv(path)
 
 
-def evaluate(sample, calls, truth, tolerance):
-    """Match the calls of one sample against the truth MEIs."""
-    by_contig = collections.defaultdict(list)
-    for t in truth:
-        by_contig[t["contig"]].append(t)
-    for items in by_contig.values():
-        items.sort(key=lambda t: t["pos"])
-    positions = {c: [t["pos"] for t in items] for c, items in by_contig.items()}
+class TruthIndex:
+    """Truth MEIs sorted by position on each contig, for the searches within a tolerance."""
 
-    def near(call):
-        items = by_contig.get(call["contig"], [])
-        pos = positions.get(call["contig"], [])
+    def __init__(self, truth):
+        """Index the truth MEIs `truth`."""
+        self.by_contig = collections.defaultdict(list)
+        for t in truth:
+            self.by_contig[t["contig"]].append(t)
+        for items in self.by_contig.values():
+            items.sort(key=lambda t: t["pos"])
+        self.positions = {c: [t["pos"] for t in items] for c, items in self.by_contig.items()}
+
+    def near(self, call, tolerance):
+        """List the truth MEIs within `tolerance` of the position or a junction of `call`."""
+        items = self.by_contig.get(call["contig"], [])
+        pos = self.positions.get(call["contig"], [])
         lo = bisect.bisect_left(pos, min(call["points"]) - tolerance)
         hi = bisect.bisect_right(pos, max(call["points"]) + tolerance)
-        return [
-            t
-            for t in items[lo:hi]
-            if any(abs(p - t["pos"]) <= tolerance for p in call["points"])
-        ]
+        return [t for t in items[lo:hi] if distance(call, t) <= tolerance]
 
-    rows = []
-    for c in calls:
-        hits = near(c)
+
+def distance(call, t):
+    """Distance from the nearest point (position, junctions) of a call to a truth MEI."""
+    return min(abs(p - t["pos"]) for p in call["points"])
+
+
+def same_family(call, t):
+    """Tell whether the family of a call agrees with a truth MEI (an untyped call or an `other` MEI always does)."""
+    return call["family"] is None or t["family"] == "other" or call["family"] == t["family"]
+
+
+def evaluate(sample, calls, index, tolerance):
+    """Match the calls of one sample one to one with the truth MEIs it carries.
+
+    Pairs of a call and a truth MEI of the sample within `tolerance` are taken
+    closest first, each call and each MEI at most once. A matched pair is `tp`
+    when the families agree, `wrong_family` otherwise; a call left with only
+    matched MEIs of the sample nearby is a `duplicate`. Both are false calls.
+    A call near no MEI of the sample is `unknown` when the sample is not
+    genotyped at an MEI nearby, `other_sample` when another sample carries one,
+    `fp` otherwise. Returns `(call, status, matched MEI or None, MEIs of the
+    sample nearby)` for each call.
+    """
+    nearby = []
+    pairs = []
+    for i, c in enumerate(calls):
+        hits = index.near(c, tolerance)
         own = [t for t in hits if carries(t["genotypes"][sample])]
-        if own:
-            status = "tp"
-        elif any(missing(t["genotypes"][sample]) for t in hits):
+        nearby.append((hits, own))
+        pairs += [(distance(c, t), i, t["id"], t) for t in own]
+    matched = {}
+    used = set()
+    for _, i, truth_id, t in sorted(pairs, key=lambda p: p[:3]):
+        if i not in matched and truth_id not in used:
+            matched[i] = t
+            used.add(truth_id)
+    rows = []
+    for i, c in enumerate(calls):
+        hits, own = nearby[i]
+        t = matched.get(i)
+        if t is not None:
+            status = "tp" if same_family(c, t) else "wrong_family"
+        elif own:
+            status = "duplicate"
+        elif any(missing(h["genotypes"][sample]) for h in hits):
             status = "unknown"
-        elif any(any(carries(g) for g in t["genotypes"].values()) for t in hits):
+        elif any(any(carries(g) for g in h["genotypes"].values()) for h in hits):
             status = "other_sample"
         else:
             status = "fp"
-        rows.append((c, status, own))
-    carried = [t for t in truth if carries(t["genotypes"][sample])]
-    return rows, carried
+        rows.append((c, status, t, own))
+    return rows
 
 
-def found(rows, keep):
-    """Truth ids matched by the calls kept by `keep`."""
-    return {t["id"] for c, _, own in rows if keep(c) for t in own}
+FALSE = ("fp", "wrong_family", "duplicate")
+
+
+def found(rows):
+    """Ids of the truth MEIs matched by a call of the right family."""
+    return {t["id"] for _, s, t, _ in rows if s == "tp"}
+
+
+def count(rows):
+    """Count the calls of each status, and in `false` the false calls of every kind."""
+    status = collections.Counter(s for _, s, _, _ in rows)
+    status["false"] = sum(status[s] for s in FALSE)
+    return status
 
 
 def main():
@@ -354,13 +407,24 @@ def main():
     parser.add_argument(
         "--fn-out", help="write the missed truth MEIs (PASS level) to this TSV"
     )
-    parser.add_argument("--fp-out", help="write the PASS false positives to this TSV")
+    parser.add_argument(
+        "--fp-out",
+        help="write the false PASS calls to this TSV, with a `status` column: fp, "
+        "wrong_family (matched to an MEI of another family) or duplicate (a second "
+        "call of an MEI already matched)",
+    )
     parser.add_argument(
         "--tp-out",
-        help="write the PASS calls that are not false positives to this TSV, with a "
+        help="write the PASS calls that are not false to this TSV, with a "
         "`status` column: tp, other_sample (near an MEI of another sample) or "
         "unknown (a truth MEI nearby is not genotyped in the sample), and the truth "
         "genotype (0/1 or 1/1) of the matched MEI",
+    )
+    parser.add_argument(
+        "--tolerances",
+        default="",
+        help="comma-separated breakpoint distances: precision and recall of the PASS "
+        "calls at each, precise and imprecise (mate-only) calls apart",
     )
     parser.add_argument(
         "--bootstrap",
@@ -406,38 +470,46 @@ def main():
         f"tolerance {args.tolerance} bp{lifted}"
     )
     print(
-        "sample\ttruth\tfound_any\tfound_pass\tpass\ttp\tfp\tother_sample\tunknown"
+        "sample\ttruth\tfound_any\tfound_pass\tpass\ttp\tfp\twrong_family\tduplicate\tother_sample\tunknown"
         "\tprecision\trecall_pass\trecall_any\t"
         + "\t".join(f"tp_{t}/{t}" for t in TIERS)
     )
+    index = TruthIndex(truth)
+    sample_calls = []
     for sample, path in runs:
         calls = [
             c
             for c in load_calls(path)
             if any(in_targets(targets, c["contig"], p) for p in c["points"])
         ]
-        rows, carried = evaluate(sample, calls, truth, args.tolerance)
-        found_any = found(rows, lambda c: True)
-        found_pass = found(rows, lambda c: c["pass"])
-        passing = [(c, s, own) for c, s, own in rows if c["pass"]]
-        status = collections.Counter(s for _, s, _ in passing)
+        sample_calls.append((sample, calls))
+        carried = [t for t in truth if carries(t["genotypes"][sample])]
+        found_any = found(evaluate(sample, calls, index, args.tolerance))
+        passing = evaluate(sample, [c for c in calls if c["pass"]], index, args.tolerance)
+        found_pass = found(passing)
+        status = count(passing)
         per_tier = []
         for t in TIERS:
-            in_tier = [s for c, s, _ in passing if c["confidence"] == t]
+            in_tier = [s for c, s, _, _ in passing if c["confidence"] == t]
             per_tier.append(f"{in_tier.count('tp')}/{len(in_tier)}")
             total[f"tp_{t}"] += in_tier.count("tp")
             total[f"n_{t}"] += len(in_tier)
-        for c, s, own in passing:
+        for c, s, t, _ in passing:
             if s == "tp" and c["genotype"] != ".":
-                nearest = min(own, key=lambda t: min(abs(p - t["pos"]) for p in c["points"]))
-                genotypes[(unphased(nearest["genotypes"][sample]), c["genotype"])] += 1
+                genotypes[(unphased(t["genotypes"][sample]), c["genotype"])] += 1
+        quals = {}
         for q in thresholds:
-            def kept(c, q=q):
-                return c["pass"] and c["qual"] is not None and c["qual"] >= q
-
-            by_qual[(q, "tp")] += sum(kept(c) and s == "tp" for c, s, _ in rows)
-            by_qual[(q, "fp")] += sum(kept(c) and s == "fp" for c, s, _ in rows)
-            by_qual[(q, "found")] += len(found(rows, kept))
+            kept = evaluate(sample, [c for c in calls if passes(c, q)], index, args.tolerance)
+            kept_status = count(kept)
+            quals[q] = (kept_status["tp"], kept_status["false"], len(found(kept)))
+            by_qual[(q, "tp")] += quals[q][0]
+            by_qual[(q, "fp")] += quals[q][1]
+            by_qual[(q, "found")] += quals[q][2]
+        if args.fn_out:
+            near_truth = collections.defaultdict(set)
+            for c, _, _, own in evaluate(sample, calls, index, args.tolerance):
+                for o in own:
+                    near_truth[o["id"]].add(c["confidence"] if c["pass"] else c["row"].get("filter", "filtered"))
         for t in carried:
             for lo, hi, name in strata:
                 if lo <= t["distance"] <= hi:
@@ -447,23 +519,12 @@ def main():
             family_total[t["family"]] += 1
             family_found[t["family"]] += t["id"] in found_pass
             if t["id"] not in found_pass and args.fn_out:
-                tiers = sorted(
-                    {
-                        c["confidence"] if c["pass"] else c["row"].get("filter", "filtered")
-                        for c, _, own in rows
-                        if any(o["id"] == t["id"] for o in own)
-                    }
-                )
-                fn_rows.append((sample, t["id"], t["family"], ",".join(tiers) or "."))
-        for c, s, own in passing:
-            if s == "fp" and args.fp_out:
-                fp_rows.append((sample, c))
-            if s != "fp" and args.tp_out:
-                truth_genotype = "."
-                if own:
-                    nearest = min(own, key=lambda t: min(abs(p - t["pos"]) for p in c["points"]))
-                    truth_genotype = unphased(nearest["genotypes"][sample])
-                tp_rows.append((sample, s, c, truth_genotype))
+                fn_rows.append((sample, t["id"], t["family"], ",".join(sorted(near_truth[t["id"]])) or "."))
+        for c, s, t, _ in passing:
+            if s in FALSE:
+                fp_rows.append((sample, s, c))
+            else:
+                tp_rows.append((sample, s, c, unphased(t["genotypes"][sample]) if t else "."))
         values = {
             "truth": len(carried),
             "found_any": len(found_any),
@@ -471,18 +532,13 @@ def main():
             "pass": len(passing),
             "tp": status["tp"],
             "fp": status["fp"],
+            "wrong_family": status["wrong_family"],
+            "duplicate": status["duplicate"],
             "other_sample": status["other_sample"],
             "unknown": status["unknown"],
+            "false": status["false"],
         }
         total.update(values)
-        quals = {
-            q: (
-                sum(c["pass"] and c["qual"] is not None and c["qual"] >= q and s == "tp" for c, s, _ in rows),
-                sum(c["pass"] and c["qual"] is not None and c["qual"] >= q and s == "fp" for c, s, _ in rows),
-                len(found(rows, lambda c, q=q: c["pass"] and c["qual"] is not None and c["qual"] >= q)),
-            )
-            for q in thresholds
-        }
         per_sample.append((values, quals))
         print(format_row(sample, values, per_tier))
     print(
@@ -515,12 +571,15 @@ def main():
         for (t, c), n in sorted(genotypes.items()):
             print(f"{t}\t{c}\t{n}")
     if thresholds:
-        print("\n# PASS calls with QUAL >= threshold\ttp\tfp\tprecision\trecall_pass")
+        print("\n# PASS calls with QUAL >= threshold\ttp\tfalse\tprecision\trecall_pass")
         for q in thresholds:
             tp, fp = by_qual[(q, "tp")], by_qual[(q, "fp")]
             precision = f"{tp / (tp + fp):.3f}" if tp + fp else "."
             recall = by_qual[(q, "found")] / total["truth"] if total["truth"] else 0
             print(f"{q:g}\t{tp}\t{fp}\t{precision}\t{recall:.3f}")
+    tolerances = [int(t) for t in args.tolerances.split(",") if t]
+    if tolerances:
+        print_tolerances(sample_calls, truth, index, tolerances)
     if args.fn_out:
         with open(args.fn_out, "w") as out:
             out.write("sample\ttruth_id\tfamily\tcall_tiers\n")
@@ -538,10 +597,43 @@ def main():
                 )
     if args.fp_out:
         with open(args.fp_out, "w") as out:
-            keys = list(fp_rows[0][1]["row"]) if fp_rows else []
-            out.write("sample\t" + "\t".join(keys) + "\n")
-            for sample, c in fp_rows:
-                out.write(sample + "\t" + "\t".join(c["row"].get(k, ".") for k in keys) + "\n")
+            keys = list(fp_rows[0][2]["row"]) if fp_rows else []
+            out.write("sample\tstatus\t" + "\t".join(keys) + "\n")
+            for sample, status, c in fp_rows:
+                out.write(f"{sample}\t{status}\t" + "\t".join(c["row"].get(k, ".") for k in keys) + "\n")
+
+
+def passes(call, q):
+    """Tell whether a call is PASS with a QUAL of at least `q`."""
+    return call["pass"] and call["qual"] is not None and call["qual"] >= q
+
+
+def print_tolerances(sample_calls, truth, index, tolerances):
+    """Print precision and recall of the PASS calls at each tolerance, precise and imprecise calls apart.
+
+    Imprecise calls are the mate-only insertions (a `cipos` interval in the
+    TSV, `CIPOS` in a VCF); recall counts the MEIs matched by either kind.
+    """
+    print("\n# PASS calls by tolerance (bp)\tcalls\ttp\tfalse\twrong_family\tduplicate\tprecision\trecall_pass")
+    carried = sum(carries(t["genotypes"][s]) for s, _ in sample_calls for t in truth)
+    for tolerance in tolerances:
+        status = {kind: collections.Counter() for kind in ("all", "precise", "imprecise")}
+        n_found = 0
+        for sample, calls in sample_calls:
+            rows = evaluate(sample, [c for c in calls if c["pass"]], index, tolerance)
+            n_found += len(found(rows))
+            for c, s, _, _ in rows:
+                for kind in ("all", "imprecise" if c["imprecise"] else "precise"):
+                    status[kind][s] += 1
+                    status[kind]["calls"] += 1
+        for kind, v in status.items():
+            false = sum(v[s] for s in FALSE)
+            precision = f"{v['tp'] / (v['tp'] + false):.3f}" if v["tp"] + false else "."
+            recall = f"{n_found / carried:.3f}" if kind == "all" and carried else "."
+            print(
+                f"{tolerance} {kind}\t{v['calls']}\t{v['tp']}\t{false}\t{v['wrong_family']}"
+                f"\t{v['duplicate']}\t{precision}\t{recall}"
+            )
 
 
 def print_intervals(per_sample, thresholds, resamples):
@@ -577,7 +669,7 @@ def print_intervals(per_sample, thresholds, resamples):
     print(f"\n# 95% bootstrap intervals over {n} samples ({resamples} resamples)")
     print("# level\tmetric\tlow\thigh")
     stats = [
-        ("PASS", "precision", lambda p: ratio(sum(v["tp"] for v, _ in p), sum(v["tp"] + v["fp"] for v, _ in p))),
+        ("PASS", "precision", lambda p: ratio(sum(v["tp"] for v, _ in p), sum(v["tp"] + v["false"] for v, _ in p))),
         ("PASS", "recall", lambda p: ratio(sum(v["found_pass"] for v, _ in p), sum(v["truth"] for v, _ in p))),
     ]
     for q in thresholds:
@@ -602,7 +694,7 @@ def print_intervals(per_sample, thresholds, resamples):
 
 def format_row(name, v, per_tier):
     """One line of the results table."""
-    decided = v["tp"] + v["fp"]
+    decided = v["tp"] + v["false"]
     precision = f"{v['tp'] / decided:.3f}" if decided else "."
     recall_pass = f"{v['found_pass'] / v['truth']:.3f}" if v["truth"] else "."
     recall_any = f"{v['found_any'] / v['truth']:.3f}" if v["truth"] else "."
@@ -617,6 +709,8 @@ def format_row(name, v, per_tier):
                 "pass",
                 "tp",
                 "fp",
+                "wrong_family",
+                "duplicate",
                 "other_sample",
                 "unknown",
             )

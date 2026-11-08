@@ -8,7 +8,7 @@ SPLIT = pathlib.Path(__file__).resolve().parents[1] / "split.tsv"
 
 
 def row(sample, set_, family):
-    """One row of `split.tsv`."""
+    """Make one row of `split.tsv`."""
     return {"sample": sample, "set": set_, "family_id": family}
 
 
