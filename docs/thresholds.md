@@ -33,7 +33,7 @@ Origins:
 | `--min-mei-mate-fraction` | 0.3 | chosen (#31) |
 | `--min-signal-ratio` | 0.05 | design (v0.1.0) |
 | `--probe-edge-tolerance` | 2 bp | design (#29) |
-| `--profile`, `--min-qual` | `exome`: 10 (`discovery`: 0) | chosen (#90) on the 18 tuning exomes of `docs/validation/split.tsv`: lowest quality with a precision of 0.95 there (0.911 on the 18 test exomes); 0 until v0.4.1 |
+| `--profile`, `--min-qual` | `exome`: 10 (`discovery`: 0); `exome` requires `--reference` (#120) | chosen (#90) on the 18 tuning exomes of `docs/validation/split.tsv`: lowest quality with a precision of 0.95 there (0.911 on the 18 test exomes); 0 until v0.4.1 |
 
 ## Internal constants
 

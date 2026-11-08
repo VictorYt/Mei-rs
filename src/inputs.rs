@@ -16,7 +16,7 @@ use rayon::prelude::*;
 use thiserror::Error;
 use tracing::warn;
 
-use crate::cli::ScanArgs;
+use crate::cli::{Profile, ScanArgs};
 use crate::reader::alignment::{AlignmentError, AlignmentFile};
 use crate::regions::Region;
 use crate::regions::bed::{self, BedError, Probe};
@@ -106,6 +106,11 @@ pub enum InputError {
         /// Length in the reference.
         reference_length: u64,
     },
+    /// `--profile exome` without `--reference`.
+    #[error(
+        "--profile exome (the default) needs --reference: its quality threshold was chosen with the reference (tandem_repeat filter, mate checks, assembly); give --reference, or --profile discovery, or --allow-no-reference to run without it (precision not measured)"
+    )]
+    ReferenceRequired,
     /// A target contig of the reference differs from the `M5` checksum of the
     /// alignment header.
     #[error(
@@ -177,6 +182,14 @@ impl Inputs {
 
         let probes = bed::read(&args.bed)?;
         let probes = check_probes(probes, &contigs, &args.bed, alignment.path())?;
+        if args.reference.is_none() && args.profile == Profile::Exome {
+            if !args.allow_no_reference {
+                return Err(InputError::ReferenceRequired);
+            }
+            warn!(
+                "--allow-no-reference: --profile exome without --reference was never validated; its precision is not known"
+            );
+        }
         if let Some(reference) = &args.reference {
             check_reference(reference, &probes, &contigs, alignment.path())?;
         }
@@ -557,6 +570,7 @@ mod tests {
             bam.as_os_str(),
             "--bed".as_ref(),
             bed.as_os_str(),
+            "--allow-no-reference".as_ref(),
         ])
         .unwrap();
         let Command::Scan(args) = cli.command;
@@ -579,6 +593,19 @@ mod tests {
             assert_eq!(inputs.targets.probe_bases(), 4 * 300 + 200);
             assert_eq!(inputs.targets.scanned_bases(), 4 * 900 + 800);
         }
+    }
+
+    #[test]
+    fn exome_profile_requires_a_reference() {
+        let mut args = args(&data("targets.bed"));
+        args.allow_no_reference = false;
+        let err = Inputs::load(&args).unwrap_err();
+        assert!(matches!(err, InputError::ReferenceRequired), "{err}");
+        args.profile = Profile::Discovery;
+        Inputs::load(&args).unwrap();
+        args.profile = Profile::Exome;
+        args.reference = Some(data("reference.fa"));
+        Inputs::load(&args).unwrap();
     }
 
     #[test]
