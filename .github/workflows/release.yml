@@ -8,6 +8,11 @@
 # (workflow_dispatch) build everything and keep the binaries as artifacts, and
 # push nothing. So do the release pull requests into `main`, which check the
 # builds before the tag exists.
+#
+# On a release, the tarballs and the image get a build provenance
+# attestation (`gh attestation verify`), the release an SPDX SBOM of the
+# dependencies, and the image an SBOM and provenance from BuildKit (#132).
+# Actions are pinned by commit.
 
 name: Release
 
@@ -37,8 +42,8 @@ jobs:
           - { os: macos-latest, target: aarch64-apple-darwin }
           - { os: macos-latest, target: x86_64-apple-darwin }
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           targets: ${{ matrix.target }}
       - name: Install cargo-zigbuild (links against glibc 2.17)
@@ -46,7 +51,7 @@ jobs:
         run: |
           python3 -m pip install --user --break-system-packages cargo-zigbuild ziglang
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           key: ${{ matrix.target }}
       - name: Build
@@ -83,7 +88,7 @@ jobs:
           tar czf "$name.tar.gz" "$name"
           shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"
           echo "name=$name" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ steps.package.outputs.name }}
           path: |
@@ -97,12 +102,27 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           path: dist
           pattern: mei-rs-v*
           merge-multiple: true
+      - name: Build provenance of the tarballs
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: dist/*.tar.gz
+      - name: SBOM of the dependencies (Cargo.lock)
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: dist/mei-rs-${{ github.event.release.tag_name }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
       - name: Upload
         env:
           GH_TOKEN: ${{ github.token }}
@@ -124,9 +144,9 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         if: github.event_name == 'release'
         with:
           registry: ghcr.io
@@ -134,11 +154,13 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build, and push by digest on a release
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           platforms: ${{ matrix.platform }}
           outputs: type=image,name=ghcr.io/victoryt/mei-rs,push-by-digest=true,name-canonical=true,push=${{ github.event_name == 'release' }}
+          sbom: ${{ github.event_name == 'release' }}
+          provenance: ${{ github.event_name == 'release' && 'mode=max' || 'false' }}
       - name: Keep the digest
         if: github.event_name == 'release'
         run: |
@@ -146,7 +168,7 @@ jobs:
           touch "/tmp/digests/${DIGEST#sha256:}"
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: github.event_name == 'release'
         with:
           name: digests-${{ strategy.job-index }}
@@ -160,14 +182,16 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           path: /tmp/digests
           pattern: digests-*
           merge-multiple: true
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -183,6 +207,20 @@ jobs:
           docker buildx imagetools create \
             -t "$IMAGE:$version" -t "$IMAGE:latest" \
             $(printf "$IMAGE@sha256:%s " *)
+      - name: Digest of the multi-platform image
+        id: index
+        env:
+          IMAGE: ghcr.io/victoryt/mei-rs
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          digest=$(docker buildx imagetools inspect "$IMAGE:${TAG#v}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Build provenance of the image
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-name: ghcr.io/victoryt/mei-rs
+          subject-digest: ${{ steps.index.outputs.digest }}
+          push-to-registry: true
       - name: Check
         env:
           IMAGE: ghcr.io/victoryt/mei-rs

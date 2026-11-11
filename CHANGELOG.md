@@ -18,6 +18,10 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Supply chain: `deny.toml` (`cargo deny check` in CI: licences, bans,
+  sources), GitHub Actions pinned by commit, base images pinned by digest,
+  a non-root container user, and on a release a build provenance attestation
+  of the tarballs and the image and an SPDX SBOM (#132).
 - **The VCF has no `SVLEN` any more**: short reads do not tell the inserted
   length, the part of the consensus the reads align to is not a lower bound
   of it (820 bases for a 600 bp SVA), and VEP annotated each insertion over

@@ -1,0 +1,43 @@
+# cargo-deny configuration (`cargo deny check`): licences, advisories, bans
+# and sources of the dependencies (#132). Mei-rs is AGPL-3.0-or-later; every
+# licence below is compatible with it.
+
+[graph]
+all-features = true
+
+[advisories]
+# RustSec advisories, as `cargo audit`: unmaintained crates of the tree warn.
+unmaintained = "workspace"
+yanked = "deny"
+
+[licenses]
+confidence-threshold = 0.9
+allow = [
+    "AGPL-3.0-or-later",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "0BSD",
+    "Zlib",
+    "Unlicense",
+    "Unicode-3.0",
+    # libbz2-rs-sys, the Rust port of bzip2 (CRAM blocks): the permissive
+    # BSD-style licence of bzip2.
+    "bzip2-1.0.6",
+]
+
+# coitrees declares `license-file = "LICENSE"` (no SPDX expression); the file
+# is the MIT licence.
+[[licenses.clarify]]
+crate = "coitrees"
+expression = "MIT"
+license-files = [{ path = "LICENSE", hash = 0x4d0bf72f }]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
