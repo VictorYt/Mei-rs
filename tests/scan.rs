@@ -554,9 +554,32 @@ fn bam_and_cram_give_the_same_output() {
 
 #[test]
 fn same_output_with_any_thread_count() {
-    let one = scan(&[&POSITIVE[..], &["--format", "json", "--threads", "1"]].concat());
-    let eight = scan(&[&POSITIVE[..], &["--format", "json", "--threads", "8"]].concat());
-    assert_eq!(normalize(&one), normalize(&eight));
+    // Every fixture, BAM and CRAM, with the reference (all the phases run)
+    // and the filtered candidates; 8 threads twice, to catch an order that
+    // depends on scheduling.
+    for sample in ["positive", "negative", "homozygous", "tailonly", "mateonly"] {
+        for extension in ["bam", "cram"] {
+            let path = format!("tests/data/{sample}.{extension}");
+            let run = |threads: &str| {
+                normalize(&scan(&[
+                    "--bam",
+                    &path,
+                    "--bed",
+                    "tests/data/targets.bed",
+                    "--reference",
+                    "tests/data/reference.fa",
+                    "--keep-filtered",
+                    "--format",
+                    "json",
+                    "--threads",
+                    threads,
+                ]))
+            };
+            let one = run("1");
+            assert_eq!(one, run("8"), "{path}");
+            assert_eq!(one, run("8"), "{path}, second run");
+        }
+    }
 }
 
 #[test]

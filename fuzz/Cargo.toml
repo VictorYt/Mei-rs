@@ -10,7 +10,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 mei-rs = { path = ".." }
-noodles = { version = "0.117", features = ["sam"] }
+noodles = { version = "0.117", features = ["sam", "vcf"] }
 
 # Not part of the workspace of the crate: fuzzing needs a nightly toolchain.
 [workspace]
@@ -53,6 +53,27 @@ bench = false
 [[bin]]
 name = "clip_lengths"
 path = "fuzz_targets/clip_lengths.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "assembly"
+path = "fuzz_targets/assembly.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "mates"
+path = "fuzz_targets/mates.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "writers"
+path = "fuzz_targets/writers.rs"
 test = false
 doc = false
 bench = false
