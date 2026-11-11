@@ -38,10 +38,17 @@ mei-rs-vX.Y.Z-x86_64-unknown-linux-gnu/mei-rs --version
 From the container image (Linux x86_64 and aarch64):
 
 ```bash
-docker run --rm -v "$PWD":/data -w /data ghcr.io/victoryt/mei-rs:latest \
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD":/data -w /data ghcr.io/victoryt/mei-rs:0.5.0 \
   scan --bam sample.bam --bed targets.bed --reference genome.fa -o sample.tsv
 # or build it from a clone: docker build -t mei-rs .
 ```
+
+Use a versioned tag (`latest` follows the newest release). The image runs as
+a non-root user: `--user` lets it write into the mounted directory.
+From the release after v0.5.0, the tarballs and the image carry a build
+provenance attestation (`gh attestation verify mei-rs-vX.Y.Z-….tar.gz -R
+VictorYt/Mei-rs`, or `oci://ghcr.io/victoryt/mei-rs:X.Y.Z`), and the release an
+SPDX SBOM of the dependencies.
 
 From source, with Rust 1.91 or later:
 
