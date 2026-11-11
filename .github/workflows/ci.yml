@@ -5,6 +5,8 @@
 #   features); Linux only, without the MSRV and audit jobs.
 # - Manual runs (workflow_dispatch): full CI, macOS optional.
 # - Pushes do not trigger CI, nor do documentation-only changes.
+#
+# The scripts of docs/validation have their own workflow (validation.yml).
 
 name: CI
 
@@ -95,18 +97,6 @@ jobs:
       - name: Install bcftools, tabix and the VCF validator
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends bcftools tabix vcftools
       - run: tests/vcf_tools.sh
-
-  # The evaluation scripts of docs/validation (no data needed).
-  validation:
-    name: Validation scripts
-    needs: lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
-      - run: uvx ruff check docs/validation
-      - run: uv run --no-project --with pytest pytest -q docs/validation/tests
-      - run: python3 docs/validation/check_split.py docs/validation/split.tsv
 
   msrv:
     name: MSRV (1.91)
