@@ -69,7 +69,7 @@ sample, coordinate convention), then one `#` line names the columns:
 | `family` | Family of the inserted element, typed from the junction soft-clips: `ALU`, `LINE1` or `SVA`. When no clip is typed, a candidate with a poly(A/T) tail clip is typed by its mates if at least 2 checked mates are of one family (`typed_by` `mates`); `.` otherwise. |
 | `subfamily` | Best-scoring consensus of that family, e.g. `AluYa5`, `L1HS_3end`, `SVA_F`. Close subfamilies differ by a few bases: short clips often cannot tell them apart. Typed by its mates, the consensus with more than half of the family score, else the family name (mapped mates stand for reference copies, often of older subfamilies). |
 | `element_strand` | Strand of the element on the reference: `+` when the clips match the consensus, `-` when they match its reverse complement. It should agree with `strand` (from the tails) when both are known. Typed by its mates, from the tails (`-` with more poly(T) clips). |
-| `element_start`, `element_end` | Part of the `subfamily` consensus covered by its clips (by its mates when typed by them), 1-based inclusive (e.g. `1` for a clip of the 5' end of the element). |
+| `element_start`, `element_end` | Part of the `subfamily` consensus covered by its clips (by its mates when typed by them), 1-based inclusive (e.g. `1` for a clip of the 5' end of the element). Not the inserted length: short reads only see the ends of the element, and a clip can align to a repeated part of the consensus, so the span can be shorter or longer than the insertion (820 bases for the 600 bp SVA of the test fixture). |
 | `identity` | Mean identity of the clips (or mates) aligned to the `subfamily` consensus (3 decimals). |
 | `typed_clips` | Junction soft-clips typed to `family`. |
 | `short_typed_clips` | Of these, short soft-clips. |
@@ -149,7 +149,6 @@ than 2^29 bp).
 | Field | Content |
 |---|---|
 | `SVTYPE` | `INS`. |
-| `SVLEN` | `element_end - element_start + 1`: the part of the consensus covered by the reads, a lower bound of the inserted length (typed candidates). |
 | `MEINFO` | `subfamily,element_start,element_end,element_strand` (typed candidates). |
 | `IMPRECISE` | No junction assembled: the junctions are estimated from the soft-clips, or the position from the mates. |
 | `CIPOS` | `cipos`, for a candidate placed by its mate signals only. |
@@ -166,3 +165,15 @@ than 2^29 bp).
 | `TYPED_BY` | `typed_by` (typed candidates). |
 | `MATES` | `unmapped_mates,discordant_mates`. |
 | `MEI_MATES` | `checked_mates,mei_mates`. |
+
+There is no `SVLEN`: short reads do not tell the inserted length (`MEINFO`
+gives the part of the consensus the reads align to, which can be shorter or
+longer than the insertion), and annotation tools read `SVLEN` as a span of the
+reference. Ensembl VEP annotates each record at its insertion point
+(`chr1:28571787` for `POS` 28571786) with the consequences of an insertion
+there (`<INS:ME:ALU>` and `<INS:ME:LINE1>` become the alleles `Alu_insertion`
+and `LINE1_insertion`; no SVA record has been annotated yet):
+
+```bash
+vep --database --assembly GRCh38 -i sample.mei.vcf.gz -o sample.vep.txt --symbol
+```

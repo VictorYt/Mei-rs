@@ -323,6 +323,7 @@ fn vcf_output() {
     let (header, records) = parse_vcf(vcf.as_bytes());
     // Every INFO, FORMAT and FILTER key used is declared in the header.
     assert!(header.infos().contains_key("MEINFO"));
+    assert!(!header.infos().contains_key("SVLEN"));
     assert!(header.formats().contains_key(key::GENOTYPE));
     assert!(header.filters().contains_key("no_junction"));
     assert_eq!(header.contigs().len(), 2);
@@ -338,6 +339,30 @@ fn vcf_output() {
         assert_eq!(info(record, "ASSEMBLED").as_deref(), Some("both"));
         assert_eq!(info(record, "CONFIDENCE").as_deref(), Some("high"));
         assert!(info(record, "MEINFO").unwrap().contains(truth[6]));
+        // No SVLEN: the inserted length is unknown (#128); on the SVA, whose
+        // 600 inserted bases hold repeats, the reads align over 820 bases of
+        // the consensus.
+        assert!(info(record, "SVLEN").is_none());
+        if truth[7] == "SVA" {
+            let line = vcf.lines().find(|l| l.contains("<INS:ME:SVA>")).unwrap();
+            let meinfo = line
+                .split("MEINFO=")
+                .nth(1)
+                .unwrap()
+                .split(';')
+                .next()
+                .unwrap();
+            let span: Vec<usize> = meinfo
+                .split(',')
+                .skip(1)
+                .take(2)
+                .map(|x| x.parse().unwrap())
+                .collect();
+            assert!(
+                span[1] - span[0] + 1 > truth[8].parse::<usize>().unwrap(),
+                "{meinfo}"
+            );
+        }
         // The base before the insertion, from the reference.
         assert_ne!(record.reference_bases(), "N");
         let sample = record.samples().values().next().unwrap();
