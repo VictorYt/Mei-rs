@@ -1,0 +1,43 @@
+# The evaluation scripts of docs/validation (no data needed): ruff, pytest and
+# the check of the tuning/test split. A workflow of its own because ci.yml
+# ignores documentation-only changes (`docs/**`), which would skip these
+# scripts when only they change (#154). Same policy as ci.yml: pull requests
+# into `main`, pull requests into `develop` labelled `run-ci`, manual runs.
+
+name: Validation scripts
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
+    paths:
+      - "docs/validation/**"
+      - ".github/workflows/validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: >-
+    ${{ github.workflow }}-${{ github.ref }}${{
+    github.event.action == 'labeled' && github.event.label.name != 'run-ci'
+    && format('-label-{0}', github.run_id) || '' }}
+  cancel-in-progress: true
+
+jobs:
+  validation:
+    name: Validation scripts
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (!github.event.pull_request.draft
+          && (github.event.action != 'labeled' || github.event.label.name == 'run-ci')
+          && (github.base_ref == 'main'
+              || contains(github.event.pull_request.labels.*.name, 'run-ci')))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uvx ruff@0.17.4 check docs/validation
+      - run: uv run --no-project --with pytest pytest -q docs/validation/tests
+      - run: python3 docs/validation/check_split.py docs/validation/split.tsv
