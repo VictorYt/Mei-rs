@@ -540,6 +540,15 @@ counts, not in the model.
   301 bp, with or without an `END` INFO field), so a long element is annotated
   against every transcript of a window as long as the element, not at one
   point. AnnotSV was not tried.
+* Without `SVLEN` (#128): NA12878 at the default profile (12 `PASS`
+  records), VEP 116.3 in database mode on the same calls with and without
+  `SVLEN` (the old value, `MEINFO` end - start + 1, added back for the
+  comparison): 346 consequence lines and 15 genes either way, but with
+  `SVLEN` two intronic insertions also get `coding_sequence_variant` (24
+  lines), `3_prime_UTR_variant` (50) and `feature_elongation` (60), from the
+  exons their window overlaps. Without it, each insertion is one position
+  (`chr1:28571787`) and every consequence is intronic, non-coding, NMD,
+  upstream or downstream, as at the site. AnnotSV was still not tried.
 
 ## History
 

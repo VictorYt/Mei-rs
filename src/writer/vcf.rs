@@ -48,19 +48,18 @@ const FILTERS: [(Filter, &str); 8] = [
 ];
 
 /// `INFO` lines of the header: ID, number, type, description.
-const INFO: [(&str, &str, &str, &str); 22] = [
+///
+/// There is no `SVLEN`: short reads do not tell the inserted length, and the
+/// part of the consensus their alignments cover can be longer than the
+/// insertion (a clip aligned to a repeated part of an SVA, #128); annotation
+/// tools such as VEP span the insertion over `SVLEN` reference bases.
+const INFO: [(&str, &str, &str, &str); 21] = [
     ("SVTYPE", "1", "String", "Type of structural variant"),
-    (
-        "SVLEN",
-        "1",
-        "Integer",
-        "Length of the element consensus covered by the reads (MEINFO end - start + 1): a lower bound of the inserted length",
-    ),
     (
         "MEINFO",
         "4",
         "String",
-        "Mobile element info of the form NAME,START,END,POLARITY: subfamily, part of its consensus covered by the reads (1-based), strand",
+        "Mobile element info of the form NAME,START,END,POLARITY: subfamily, part of its consensus the reads align to (1-based; not the inserted length), strand",
     ),
     (
         "IMPRECISE",
@@ -279,7 +278,6 @@ pub fn write_vcf(report: &Report<'_>, out: &mut dyn Write) -> io::Result<()> {
 fn info(c: &Candidate) -> Vec<String> {
     let mut fields = vec!["SVTYPE=INS".to_owned()];
     if let Some(t) = &c.typing {
-        fields.push(format!("SVLEN={}", t.element_end - t.element_start));
         fields.push(format!(
             "MEINFO={},{},{},{}",
             t.subfamily,

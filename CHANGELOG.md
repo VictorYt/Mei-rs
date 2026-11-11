@@ -21,6 +21,14 @@ project follows [Semantic Versioning](https://semver.org/).
   of the X against the autosomes when a candidate lies on the X or the Y
   (#127).
 
+### Changed
+
+- **The VCF has no `SVLEN` any more**: short reads do not tell the inserted
+  length, the part of the consensus the reads align to is not a lower bound
+  of it (820 bases for a 600 bp SVA), and VEP annotated each insertion over
+  `SVLEN` reference bases instead of at its site. The span stays in `MEINFO`
+  (#128).
+
 ### Fixed
 
 - `fetch-data.sh` downloads the reference indexes (`.fai`, `.gzi`), and
