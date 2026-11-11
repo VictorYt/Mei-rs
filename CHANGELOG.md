@@ -18,6 +18,11 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The recall per stratum has a clustered lower bound (Clopper-Pearson on the
+  effective number of carrier pairs, from the bootstrap over families and
+  loci) and its number of distinct sites; the README claims those bounds
+  (inside a target 0.377 instead of 0.463, coding sequence +/- 20 bp 0.306
+  instead of 0.406) (#153).
 - **The VCF has no `SVLEN` any more**: short reads do not tell the inserted
   length, the part of the consensus the reads align to is not a lower bound
   of it (820 bases for a 600 bp SVA), and VEP annotated each insertion over
