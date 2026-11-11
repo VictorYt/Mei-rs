@@ -14,7 +14,7 @@ seconds=${1:-30}
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-for target in bed_parse consensus_parse type_sequence align_local poly_tail clip_lengths; do
+for target in bed_parse consensus_parse type_sequence align_local poly_tail clip_lengths assembly mates writers; do
     corpus="$work/corpus/$target"
     mkdir -p "$corpus"
     case $target in

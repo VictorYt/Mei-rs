@@ -439,9 +439,17 @@ cargo build --release
 cargo test                  # unit, property and end-to-end tests on synthetic fixtures
 cargo bench                 # criterion benchmarks (extraction, clustering, typing)
 fuzz/run.sh 30              # cargo-fuzz targets, 30 s each (nightly toolchain, cargo-fuzz)
+cargo mutants -f src/cluster/filters.rs -f src/genotype/score.rs -f src/genotype/mod.rs   # mutation testing (cargo-mutants)
 tests/data/generate.sh      # regenerate the fixtures (python3, samtools, perl)
 UPDATE_EXPECTED=1 cargo test --test scan   # update the expected outputs
 ```
+
+Mutation testing of the filters, the score and the genotypes (cargo-mutants
+27.1, 2026-11-11): 186 of 197 viable mutants caught (94%). Of the 11 missed,
+the boundary changes that cannot alter a result (a fraction compared once its
+denominator is known to be positive, the quality capped at its maximum) are
+expected; the others are in the order of the filter list and in the mate-only
+thresholds of `cluster::filters`.
 
 See [CHANGELOG.md](CHANGELOG.md) for the release history.
 

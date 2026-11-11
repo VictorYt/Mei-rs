@@ -277,6 +277,44 @@ mod tests {
     }
 
     #[test]
+    fn the_prior_favours_heterozygous_insertions() {
+        // 4 alternative reads and 1 reference read: `1/1` from the reads
+        // alone, `0/1` once the prior of a passed candidate is applied.
+        assert_eq!(
+            genotype(&[counts(4, 1)], false, None).unwrap().call,
+            Call::HomAlt
+        );
+        assert_eq!(
+            genotype(&[counts(4, 1)], true, None).unwrap().call,
+            Call::Het
+        );
+    }
+
+    #[test]
+    fn likelihoods_are_averaged_over_the_junctions() {
+        // A read spanning the site counts at both junctions: the same counts
+        // at two junctions give the genotype and quality of one.
+        let one = genotype(&[counts(3, 4)], false, None).unwrap();
+        let two = genotype(&[counts(3, 4), counts(3, 4)], false, None).unwrap();
+        assert!(one.quality < MAX_QUALITY);
+        assert_eq!((two.call, two.quality), (one.call, one.quality));
+    }
+
+    #[test]
+    fn homozygous_at_the_minimum_alternative_fraction() {
+        // Exactly `HOM_MIN_ALT_FRACTION` of the reads at the site are
+        // alternative: still homozygous.
+        assert_eq!(
+            genotype(&[counts(2, 0)], true, Some(10)).unwrap().call,
+            Call::HomAlt
+        );
+        assert_eq!(
+            genotype(&[counts(2, 0)], true, Some(11)).unwrap().call,
+            Call::Het
+        );
+    }
+
+    #[test]
     fn few_reads_give_a_low_quality() {
         let g = genotype(&[counts(1, 0)], false, None).unwrap();
         assert_eq!(g.call, Call::HomAlt);
