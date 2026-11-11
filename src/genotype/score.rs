@@ -154,6 +154,27 @@ mod tests {
     }
 
     #[test]
+    fn duplicated_fragments_lower_the_score() {
+        // Four reads from as many fragments, or from fewer (PCR duplicates:
+        // distinct starts below `MIN_DISTINCT_STARTS` of the support).
+        let reads: Vec<_> = (0..4)
+            .map(|i| clip(1_000, Side::Left, &format!("r{i}"), Some(b'A')))
+            .collect();
+        let options = ClusterOptions {
+            require_tail: false,
+            ..ClusterOptions::default()
+        };
+        let mut candidate = cluster(reads, &options).remove(0);
+        // MEI mates, so that the score is not at its floor.
+        candidate.checked_mates = 10;
+        candidate.mei_mates = 8;
+        candidate.distinct_starts = 4;
+        let distinct = quality(&candidate);
+        candidate.distinct_starts = 2;
+        assert!(quality(&candidate) < distinct);
+    }
+
+    #[test]
     fn largest_quality() {
         // 0.501 + 0.184 + 0.560 + 0.056 + 0.276 + 0.156 + 0.665 + 0.156.
         assert_eq!(max_quality(), 26);

@@ -6,6 +6,16 @@ project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Fuzz targets for the local assembly, the mate logic (typing by the mates,
+  tail mates, filters, genotype, score) and the four output formats, the VCF
+  read back by noodles; the thread-count determinism test runs on every
+  fixture, BAM and CRAM; mutation testing of the filters, the score and the
+  genotypes, with new unit tests for the mutants it found (#130).
+- The validation scripts (ruff, pytest, split check) run on pull requests that
+  only change `docs/validation` (#154).
+
 ### Fixed
 
 - `fetch-data.sh` downloads the reference indexes (`.fai`, `.gzi`), and
