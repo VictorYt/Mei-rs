@@ -142,3 +142,11 @@ def test_clopper_pearson_lower_bound():
 def test_bins():
     """Half-open bins named by their bounds."""
     assert [evaluate.bins(v, [100, 150]) for v in (99, 100, 149, 150)] == ["< 100", "100-149", "100-149", ">= 150"]
+
+
+def test_haploid_calls_agree_with_any_carrier():
+    """A haploid `1` on the X of a male agrees with the truth whatever its zygosity."""
+    assert evaluate.concordant("0/1", "0/1")
+    assert not evaluate.concordant("1/1", "0/1")
+    assert evaluate.concordant("0/1", "1") and evaluate.concordant("1/1", "1")
+    assert not evaluate.concordant("0/1", "0")

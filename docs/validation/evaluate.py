@@ -227,6 +227,17 @@ def unphased(genotype):
     return "1/1" if genotype.split("|")[:2] == ["1", "1"] else "0/1"
 
 
+def concordant(truth, called):
+    """Whether a call agrees with the unphased truth genotype of a true insertion.
+
+    A diploid call must equal it; a haploid `1` (the X or Y of a male, #127) agrees with any
+    genotype that carries the insertion, and a haploid `0` never does.
+    """
+    if called in ("0", "1"):
+        return called == "1"
+    return truth == called
+
+
 def load_tsv(path):
     """Read the calls of a `mei-rs scan` TSV (written with `--keep-filtered`)."""
     calls = []
@@ -587,7 +598,7 @@ def main():
                 f"\t{family_found[family] / family_total[family]:.3f}"
             )
     if genotypes:
-        right = sum(n for (t, c), n in genotypes.items() if t == c)
+        right = sum(n for (t, c), n in genotypes.items() if concordant(t, c))
         print(
             f"\n# genotypes of the true PASS calls (truth, called): "
             f"{right}/{sum(genotypes.values())} right"
@@ -808,7 +819,7 @@ def print_strata(per_sample, annotation, samples, strata_qual):
                 kinds["imprecise (mate-only)" if c["imprecise"] else "precise"] += 1
                 if c["genotype"] != ".":
                     depth = bins(int(info["median_candidate_depth"]), [100, 150]) if info else "all"
-                    genotypes[depth][0] += unphased(t["genotypes"][sample]) == c["genotype"]
+                    genotypes[depth][0] += concordant(unphased(t["genotypes"][sample]), c["genotype"])
                     genotypes[depth][1] += 1
         for t in carried:
             if t["distance"] == 0:

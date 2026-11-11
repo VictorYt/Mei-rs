@@ -1,4 +1,4 @@
-//! Local read depth at candidate breakpoints.
+//! Local read depth at candidate breakpoints, and reads on regions.
 
 use super::alignment::{AlignmentError, AlignmentFile};
 use super::batch;
@@ -21,21 +21,37 @@ pub fn local_depths(
     boundaries: &[(String, u64)],
     filter: &ReadFilter,
 ) -> Result<Vec<u64>, AlignmentError> {
-    // Windows of the two bases around each boundary, sorted by contig and
-    // position (contigs in header order are not needed: any grouping works).
-    let mut order: Vec<usize> = (0..boundaries.len()).collect();
-    order.sort_by(|&a, &b| boundaries[a].cmp(&boundaries[b]));
-    let windows: Vec<ScanRegion> = order
+    let windows: Vec<ScanRegion> = boundaries
         .iter()
-        .map(|&i| {
-            let (contig, boundary) = &boundaries[i];
-            ScanRegion {
-                contig: contig.clone(),
-                start: boundary.saturating_sub(1),
-                end: boundary + 1,
-            }
+        .map(|(contig, boundary)| ScanRegion {
+            contig: contig.clone(),
+            start: boundary.saturating_sub(1),
+            end: boundary + 1,
         })
         .collect();
+    read_counts(file, &windows, filter)
+}
+
+/// Number of reads passing `filter` that overlap each region, indexed like
+/// `regions` (in any order). Neighbouring regions are read in batches (see
+/// [`super::batch`]); each read counts for every region it overlaps.
+///
+/// # Errors
+///
+/// Fails if the alignment file cannot be read.
+pub fn read_counts(
+    file: &AlignmentFile,
+    regions: &[ScanRegion],
+    filter: &ReadFilter,
+) -> Result<Vec<u64>, AlignmentError> {
+    // Sorted by contig and position (contigs in header order are not
+    // needed: any grouping works).
+    let mut order: Vec<usize> = (0..regions.len()).collect();
+    order.sort_by(|&a, &b| {
+        let (a, b) = (&regions[a], &regions[b]);
+        (&a.contig, a.start, a.end).cmp(&(&b.contig, b.start, b.end))
+    });
+    let windows: Vec<ScanRegion> = order.iter().map(|&i| regions[i].clone()).collect();
     let counts = batch::fold(
         file,
         &batch::batches(&windows, file.format()),
@@ -62,13 +78,13 @@ pub fn local_depths(
             a
         },
     )?;
-    let mut depths = vec![0; boundaries.len()];
+    let mut result = vec![0; regions.len()];
     for (first, counts) in counts {
         for (offset, count) in counts.into_iter().enumerate() {
-            depths[order[first + offset]] = count;
+            result[order[first + offset]] = count;
         }
     }
-    Ok(depths)
+    Ok(result)
 }
 
 #[cfg(test)]

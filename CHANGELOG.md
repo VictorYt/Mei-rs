@@ -15,6 +15,11 @@ project follows [Semantic Versioning](https://semver.org/).
   genotypes, with new unit tests for the mutants it found (#130).
 - The validation scripts (ruff, pytest, split check) run on pull requests that
   only change `docs/validation` (#154).
+- Haploid genotypes (`0`, `1`) on the X and Y of a male outside the
+  pseudoautosomal regions of GRCh37 and GRCh38: `--sex female|male`, or
+  `auto` (the default), which infers the sex from the reads per targeted base
+  of the X against the autosomes when a candidate lies on the X or the Y
+  (#127).
 
 ### Fixed
 

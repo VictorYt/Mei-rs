@@ -15,7 +15,7 @@ simulation and regenerate.
 
 | File | Content |
 |---|---|
-| `reference.fa`, `.fai` | Two random contigs: `chr1` (20 kb) and `chr2` (10 kb). `chr2:7001-7281` holds a reference copy of the Alu; `chr2:1961-2012` the last 40 bp of the Alu and a 12 bp poly(A) tract. |
+| `reference.fa`, `.fai` | Four random contigs: `chr1` (20 kb), `chr2` (10 kb), `chrX` (20 kb) and `chrY` (10 kb). `chr2:7001-7281` holds a reference copy of the Alu; `chr2:1961-2012` the last 40 bp of the Alu and a 12 bp poly(A) tract. The samples other than `female` and `male` have only `chr1` and `chr2` in their header. |
 | `targets.bed` | Five capture targets (see below). |
 | `targets_tiled.bed` | The same, with `target_insertion` tiled with two overlapping probes (see below). |
 | `targets_tract.bed` | One target around a reference poly(A) tract on `chr2` (see below). |
@@ -24,7 +24,10 @@ simulation and regenerate.
 | `homozygous.bam`, `.bai`, `.cram`, `.crai` | The Alu insertion on both haplotypes (`1/1`), in its target only. |
 | `tailonly.bam`, `.bai`, `.cram`, `.crai` | The Alu insertion (`0/1`), in its target only, aligned so that its junction soft-clips are the poly(A) tail and at most 2 element bases (too few to type): reads crossing the 5' junction and longer clips are unmapped. Only its mates type it. |
 | `mateonly.bam`, `.bai`, `.cram`, `.crai` | The Alu insertion (`0/1`), in its target only, whose junction reads are aligned with soft-clips of at most 10 bases (below the 15 of an extracted clip) or left unmapped: no junction clip is extracted, the insertion is found by its mates (inside the element) and placed at the breakpoint by the short clips (#58, #59, #66). Its alternative reads are not counted (the clips are too short), yet it is genotyped `0/1` as a passed candidate (#91). |
-| `truth.tsv` | The simulated insertions, machine-readable. |
+| `targets_xy.bed` | The four targets of `chr1`, five on `chrX` (`target_x_insertion`: `chrX:9851-10150`) and two on `chrY`. |
+| `female.bam`, `.bai`, `.cram`, `.crai` | The Alu insertion after `chrX:10000` (TSD of 12 bp, as on `chr1`) on one of two X (`0/1`); `chr1` and `chrX` at the same depth, no `chrY` read (#127). |
+| `male.bam`, `.bai`, `.cram`, `.crai` | The same insertion on the single X (haploid `1`); `chrX` and `chrY` at half the depth of `chr1`. |
+| `truth.tsv` | The simulated insertions of `chr1`, machine-readable. |
 
 BAM and CRAM hold the same records (samtools adds `MD`/`NM` when decoding the
 CRAM). The CRAM needs `reference.fa`.
