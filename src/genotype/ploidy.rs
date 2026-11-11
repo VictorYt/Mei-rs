@@ -104,8 +104,10 @@ pub fn is_haploid(sex: Option<Sex>, contig: &str, length: u64, pos: u64) -> bool
 pub const MIN_SEX_READS: u64 = 200;
 
 /// Reads per targeted base of the X against the autosomes below which the
-/// sample is male: halfway between 0.5 (one X) and 1 (two X).
-pub const MALE_MAX_X_RATIO: f64 = 0.75;
+/// sample is male. One X does not give half the reads of the autosomes on
+/// every capture: on 36 1000 Genomes exomes, the 22 males had 0.61 to 0.84
+/// (4 of them above 0.8) and the 14 females 1.12 to 1.63.
+pub const MALE_MAX_X_RATIO: f64 = 0.95;
 
 /// Sex from the reads and bases of the targets of the autosomes and of the
 /// X: male when the X has fewer than [`MALE_MAX_X_RATIO`] of the reads per
@@ -180,6 +182,8 @@ mod tests {
         // Same targeted bases; half the reads per base on the X: male.
         assert_eq!(infer((10_000, 1_000), (500, 100)).0, Some(Sex::Male));
         assert_eq!(infer((10_000, 1_000), (1_000, 100)).0, Some(Sex::Female));
+        // The highest ratio of a male exome seen.
+        assert_eq!(infer((10_000, 1_000), (840, 100)).0, Some(Sex::Male));
         let (_, ratio) = infer((10_000, 1_000), (500, 100));
         assert!((ratio.unwrap() - 0.5).abs() < 1e-9);
         // Too few reads: unknown.

@@ -116,7 +116,7 @@ skipped with a warning.
 | `--profile` | `exome` | preset of the thresholds: `exome` keeps the calls of quality 10 or more, `discovery` all the calls that pass the filters (see [Profiles](#profiles-and---min-qual)) |
 | `--min-qual` | from `--profile` | minimum quality score (`low_qual` below; 0 turns the filter off); overrides the profile |
 | `--allow-no-reference` | off | run `--profile exome` without `--reference` (precision not measured: every published number was computed with the reference) |
-| `--sex` | `auto` | `female`, `male` (haploid genotypes `0`/`1` on the X and Y outside the pseudoautosomal regions of GRCh37 and GRCh38) or `auto`: inferred from the reads per targeted base of the X against the autosomes (below 0.75: male), when a candidate lies on the X or the Y; diploid when too few reads tell |
+| `--sex` | `auto` | `female`, `male` (haploid genotypes `0`/`1` on the X and Y outside the pseudoautosomal regions of GRCh37 and GRCh38) or `auto`: inferred from the reads per targeted base of the X against the autosomes (below 0.95: male), when a candidate lies on the X or the Y; diploid when too few reads tell |
 | `--probe-edge-tolerance` | 2 | distance in bp to a probe start or end within which a soft-clip stops at the probe edge |
 | `--keep-filtered` | off | also write the candidates flagged `no_junction`, `no_tail`, `untyped`, `non_mei_mates`, `tandem_repeat`, `probe_edge`, `low_ratio` or `low_qual` |
 | **Output** | | |
