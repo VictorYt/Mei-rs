@@ -142,3 +142,31 @@ def test_clopper_pearson_lower_bound():
 def test_bins():
     """Half-open bins named by their bounds."""
     assert [evaluate.bins(v, [100, 150]) for v in (99, 100, 149, 150)] == ["< 100", "100-149", "100-149", ">= 150"]
+
+
+def test_beta_quantile_matches_clopper_pearson():
+    """With the variance of independent pairs, the clustered bound is the exact one."""
+    for found, total in ((5, 10), (33, 64), (57, 104)):
+        p = found / total
+        lower = evaluate.clustered_lower(found, total, p * (1 - p) / total, total)
+        assert abs(lower - evaluate.clopper_pearson_lower(found, total)) < 1e-6
+
+
+def test_clustered_bound_is_lower_for_shared_sites():
+    """Pairs that share sites (a larger variance) give a lower bound; all found falls back to the sites."""
+    independent = evaluate.clustered_lower(33, 64, 0.516 * 0.484 / 64, 64)
+    clustered = evaluate.clustered_lower(33, 64, 0.516 * 0.484 / 16, 16)
+    assert clustered < independent
+    assert abs(clustered - evaluate.clopper_pearson_lower(round(0.516 * 16), 16)) < 0.03
+    # 10 of 10 pairs at 2 sites: the bound of 2 of 2, not of 10 of 10.
+    assert abs(evaluate.clustered_lower(10, 10, 0.0, 2) - evaluate.clopper_pearson_lower(2, 2)) < 1e-6
+
+
+def test_stratum_variances_grow_with_clustering():
+    """Pairs whose outcome is shared by their locus vary more than pairs at independent loci."""
+    one_locus = {"s": [(f"F{i}", 0, True) for i in range(20)] + [(f"F{i}", 1, False) for i in range(20, 40)]}
+    spread = {"s": [(f"F{i}", i, i % 2 == 0) for i in range(40)]}
+    groups = [f"F{i}" for i in range(40)]
+    clustered = evaluate.stratum_variances(one_locus, groups, 2, 300)["s"]
+    independent = evaluate.stratum_variances(spread, groups, 40, 300)["s"]
+    assert clustered > independent
