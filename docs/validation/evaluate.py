@@ -577,12 +577,12 @@ def main():
     )
     loci = Loci(per_sample)
     print_units(per_sample, loci)
+    families = read_families(args.families) if args.families else {}
     if args.bootstrap and len(per_sample) > 1:
-        families = read_families(args.families) if args.families else {}
         print_intervals(per_sample, loci, families, args.bootstrap)
     annotation = load_annotation(args.annotation) if args.annotation else None
     samples = read_samples(args.families) if args.families else {}
-    print_strata(per_sample, annotation, samples, args.strata_qual)
+    print_strata(per_sample, annotation, samples, args.strata_qual, loci, families, args.bootstrap)
     print("\n# recall by distance to the target\tfound_any\tfound_pass")
     for _, _, name in strata:
         if strata_total[name]:
@@ -783,6 +783,87 @@ def clopper_pearson_lower(found, total, alpha=0.05):
     return low
 
 
+def regularized_beta(x, a, b):
+    """Regularized incomplete beta function I_x(a, b), by its continued fraction (Lentz)."""
+    if x <= 0.0:
+        return 0.0
+    if x >= 1.0:
+        return 1.0
+    if x > (a + 1) / (a + b + 2):
+        return 1.0 - regularized_beta(1.0 - x, b, a)
+    front = math.exp(math.lgamma(a + b) - math.lgamma(a) - math.lgamma(b) + a * math.log(x) + b * math.log1p(-x)) / a
+    tiny = 1e-300
+    c, d = 1.0, 1.0 - (a + b) * x / (a + 1)
+    d = 1.0 / (d if abs(d) > tiny else tiny)
+    f = d
+    for m in range(1, 300):
+        for numerator in (
+            m * (b - m) * x / ((a + 2 * m - 1) * (a + 2 * m)),
+            -(a + m) * (a + b + m) * x / ((a + 2 * m) * (a + 2 * m + 1)),
+        ):
+            d = 1.0 + numerator * d
+            d = 1.0 / (d if abs(d) > tiny else tiny)
+            c = 1.0 + numerator / c
+            c = c if abs(c) > tiny else tiny
+            f *= c * d
+        if abs(c * d - 1.0) < 1e-12:
+            break
+    return front * f
+
+
+def clustered_lower(found, total, variance, sites, alpha=0.05):
+    """Return a one-sided lower bound of a proportion of clustered units (Korn and Graubard 1998).
+
+    The carrier pairs of one site, and of one family, are not independent: the
+    Clopper-Pearson bound is taken on the effective number of pairs,
+    `p (1 - p) / variance` with `variance` the bootstrap variance of the
+    proportion over families and loci, at most `total`. When the proportion
+    is 0 or 1 the variance tells nothing, and the number of distinct `sites`
+    is used instead. The bound is the `alpha` quantile of a beta distribution,
+    which allows a non-integer number of successes.
+    """
+    if total == 0 or found == 0:
+        return 0.0
+    p = found / total
+    n_eff = min(total, p * (1 - p) / variance) if 0 < p < 1 and variance > 0 else min(total, sites)
+    a, b = p * n_eff, n_eff * (1 - p) + 1
+    low, high = 0.0, 1.0
+    for _ in range(60):
+        middle = (low + high) / 2
+        if regularized_beta(middle, a, b) < alpha:
+            low = middle
+        else:
+            high = middle
+    return low
+
+
+def stratum_variances(cells, groups, n_loci, resamples):
+    """Bootstrap variance of the recall of each stratum, over families and loci.
+
+    `cells` maps a stratum to its `(group, locus, found)` carrier pairs; each
+    resample draws the groups and the loci with replacement (as `bootstrap`),
+    the same draws for every stratum. The seed is fixed.
+    """
+    rng = random.Random(1)
+    sums = collections.defaultdict(lambda: [0, 0.0, 0.0])
+    for _ in range(resamples):
+        group_weight = collections.Counter(rng.choice(groups) for _ in groups)
+        locus_weight = collections.Counter(rng.randrange(n_loci) for _ in range(n_loci))
+        for stratum, pairs in cells.items():
+            hit = total = 0
+            for group, locus, found_it in pairs:
+                weight = group_weight[group] * locus_weight[locus]
+                hit += weight * found_it
+                total += weight
+            if total:
+                value = hit / total
+                acc = sums[stratum]
+                acc[0] += 1
+                acc[1] += value
+                acc[2] += value * value
+    return {k: max(0.0, sq / n - (sm / n) ** 2) for k, (n, sm, sq) in sums.items() if n > 1}
+
+
 def bins(value, edges, unit=""):
     """Name of the bin of `value` among the half-open bins split at `edges`."""
     for low, high in zip([None] + edges, edges + [None]):
@@ -793,21 +874,27 @@ def bins(value, edges, unit=""):
     return "."
 
 
-def print_strata(per_sample, annotation, samples, strata_qual):
-    """Print the recall per stratum at the default QUAL, with its one-sided 95% exact lower bound.
+def print_strata(per_sample, annotation, samples, strata_qual, loci=None, families=None, resamples=0):
+    """Print the recall per stratum at the default QUAL, with one-sided 95% lower bounds.
 
     The unit is the carrier pair (a truth MEI in one sample). Strata: distance
     to the target, to a coding sequence and to an exon (with `annotation`),
     family, number of HGSVC3 carriers, median candidate depth and read length
     of the sample (with `samples`, from `split.tsv`). The genotype errors of
-    the true calls are counted by depth. The lower bound is the sensitivity
-    that can be claimed for a stratum; it ignores the dependence between the
-    pairs of one site, so it is optimistic for strata of few sites.
+    the true calls are counted by depth. Each stratum gets its number of
+    distinct sites and two lower bounds: Clopper-Pearson on the pairs, which
+    treats them as independent and is optimistic for strata of few sites,
+    and the clustered bound (`clustered_lower`, with `resamples` two-way
+    bootstrap draws over the `families` and the `loci`, #153), the
+    sensitivity that can be claimed for the stratum.
     """
     level = f"QUAL>={strata_qual:g}"
     if level not in per_sample[0][2]:
         return
     strata = collections.defaultdict(lambda: [0, 0, 0])
+    sites = collections.defaultdict(set)
+    cells = collections.defaultdict(list)
+    families = families or {}
     genotypes = collections.defaultdict(lambda: [0, 0])
     kinds = collections.Counter()
     for sample, carried, levels in per_sample:
@@ -843,11 +930,24 @@ def print_strata(per_sample, annotation, samples, strata_qual):
                 cell = strata[(group, name)]
                 cell[0] += t["id"] in hit
                 cell[1] += 1
-    print(f"\n# recall at {level} by stratum (carrier pairs)\tfound\ttotal\trecall\tlower_95")
-    for (group, name), (n_found, total, _) in sorted(strata.items()):
+                sites[(group, name)].add(t["id"])
+                if loci is not None:
+                    cells[(group, name)].append((families.get(sample, sample), loci.of_truth(t), t["id"] in hit))
+    variances = {}
+    if loci is not None and resamples:
+        groups = sorted({families.get(sample, sample) for sample, _, _ in per_sample})
+        variances = stratum_variances(cells, groups, loci.count, resamples)
+    print(
+        f"\n# recall at {level} by stratum (carrier pairs)\tfound\ttotal\tsites\trecall\tlower_95\tlower_95_clustered"
+    )
+    for key, (n_found, total, _) in sorted(strata.items()):
+        group, name = key
+        clustered = "."
+        if key in variances:
+            clustered = f"{clustered_lower(n_found, total, variances[key], len(sites[key])):.3f}"
         print(
-            f"{group}: {name}\t{n_found}\t{total}\t{n_found / total:.3f}"
-            f"\t{clopper_pearson_lower(n_found, total):.3f}"
+            f"{group}: {name}\t{n_found}\t{total}\t{len(sites[key])}\t{n_found / total:.3f}"
+            f"\t{clopper_pearson_lower(n_found, total):.3f}\t{clustered}"
         )
     print(f"\n# true calls at {level} by kind\t" + "\t".join(f"{k} {n}" for k, n in sorted(kinds.items())))
     if genotypes:

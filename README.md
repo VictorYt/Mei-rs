@@ -38,10 +38,17 @@ mei-rs-vX.Y.Z-x86_64-unknown-linux-gnu/mei-rs --version
 From the container image (Linux x86_64 and aarch64):
 
 ```bash
-docker run --rm -v "$PWD":/data -w /data ghcr.io/victoryt/mei-rs:latest \
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD":/data -w /data ghcr.io/victoryt/mei-rs:0.5.0 \
   scan --bam sample.bam --bed targets.bed --reference genome.fa -o sample.tsv
 # or build it from a clone: docker build -t mei-rs .
 ```
+
+Use a versioned tag (`latest` follows the newest release). The image runs as
+a non-root user: `--user` lets it write into the mounted directory.
+From the release after v0.5.0, the tarballs and the image carry a build
+provenance attestation (`gh attestation verify mei-rs-vX.Y.Z-….tar.gz -R
+VictorYt/Mei-rs`, or `oci://ghcr.io/victoryt/mei-rs:X.Y.Z`), and the release an
+SPDX SBOM of the dependencies.
 
 From source, with Rust 1.91 or later:
 
@@ -336,16 +343,18 @@ kit, is the only fully external sample, and its precision is much lower: on
 other data than the 1000 Genomes exomes, expect lower precision than above.
 
 Recall depends on where the insertion is (17 test exomes, `exome` profile;
-the lower bound is the one-sided 95% exact bound, the sensitivity that can
-be claimed):
+a carrier pair is a truth insertion in one sample, and pairs of one site or
+one family are not independent: the lower bound is the one-sided 95% bound
+on the effective number of pairs, from a bootstrap over families and loci,
+the sensitivity that can be claimed, #153):
 
-| Insertion | Recall | Lower bound |
-|---|---|---|
-| inside a target | 57 / 104 (0.548) | 0.463 |
-| 1 to 100 bp from a target | 84 / 222 (0.378) | 0.324 |
-| 101 to 300 bp from a target | 27 / 592 (0.046) | 0.032 |
-| within 20 bp of a coding sequence | 33 / 64 (0.516) | 0.406 |
-| Alu / LINE-1 / SVA | 0.187 / 0.159 / 0.157 | 0.164 / 0.092 / 0.081 |
+| Insertion | Recall (pairs) | Sites | Lower bound |
+|---|---|---|---|
+| inside a target | 57 / 104 (0.548) | 28 | 0.377 |
+| 1 to 100 bp from a target | 84 / 222 (0.378) | 60 | 0.233 |
+| 101 to 300 bp from a target | 27 / 592 (0.046) | 156 | 0.020 |
+| within 20 bp of a coding sequence | 33 / 64 (0.516) | 16 | 0.306 |
+| Alu / LINE-1 / SVA | 0.187 / 0.159 / 0.157 | 207 / 20 / 17 | 0.124 / 0.030 / 0.031 |
 
 Recall is also lower on 76 and 101 bp reads (0.10) than on 90 and 100 bp
 reads (0.26 to 0.28) and on shallow samples; the full table is in

@@ -120,13 +120,18 @@ release (prior 0.501, AUC 0.928 and 0.787).
   independent. HG002 alone has no interval;
 * precision and recall at several tolerances (`--tolerances` 5, 20, 50 and
   100 bp), mate-only (imprecise) calls apart (#112);
-* recall at the default profile (`--strata-qual`, QUAL 10) by stratum, each
-  with its one-sided 95% Clopper-Pearson lower bound, the sensitivity that
-  can be claimed for it (#114): distance to the target, coding sequence
-  +/- 20 bp and exon (GENCODE v46 basic, `--annotation`), family, number of
-  HGSVC3 carriers, median candidate depth and read length of the sample
-  (`split.tsv`); and the genotype errors by depth. The bound treats the
-  carrier pairs as independent, so it is optimistic for strata of few sites;
+* recall at the default profile (`--strata-qual`, QUAL 10) by stratum
+  (#114): distance to the target, coding sequence +/- 20 bp and exon
+  (GENCODE v46 basic, `--annotation`), family, number of HGSVC3 carriers,
+  median candidate depth and read length of the sample (`split.tsv`); and
+  the genotype errors by depth. Each stratum has its number of distinct
+  sites and two one-sided 95% lower bounds: Clopper-Pearson on the carrier
+  pairs, which treats them as independent and is optimistic for strata of
+  few sites, and the clustered bound (#153), the sensitivity that can be
+  claimed: Clopper-Pearson on the effective number of pairs
+  `p (1 - p) / v` (Korn and Graubard 1998), `v` the variance of the recall
+  of the stratum over the two-way bootstrap of families and loci (the
+  number of sites when the recall is 0 or 1);
 * `--fp-out`, `--tp-out` (true positives, with calls near an MEI of another
   sample or of a sample not genotyped there under their own status) and
   `--fn-out` list the PASS false positives, the PASS calls that are not, and
@@ -166,22 +171,25 @@ Changes of the method, on the same calls (test set):
   14 / 12 (0.538) instead of 14 / 8 (0.636).
 
 Recall at QUAL 10 by stratum (test, carrier pairs; lower: one-sided 95%
-Clopper-Pearson bound, which treats the pairs as independent and is
-optimistic for strata of few sites):
+bounds, Clopper-Pearson on the pairs and clustered over families and loci,
+#153; the clustered one is the claimable sensitivity):
 
-| Stratum | Found / pairs | Recall | Lower |
-|---|---|---|---|
-| inside a target | 57 / 104 | 0.548 | 0.463 |
-| 1-100 bp from a target | 84 / 222 | 0.378 | 0.324 |
-| 101-300 bp | 27 / 592 | 0.046 | 0.032 |
-| coding sequence +/- 20 bp | 33 / 64 | 0.516 | 0.406 |
-| in an exon | 15 / 42 | 0.357 | 0.235 |
-| Alu | 149 / 798 | 0.187 | 0.164 |
-| LINE-1 | 11 / 69 | 0.159 | 0.092 |
-| SVA | 8 / 51 | 0.157 | 0.081 |
-| fewer than 4 HGSVC3 carriers | 15 / 94 | 0.160 | 0.101 |
-| reads 76 / 90 / 100 / 101 bp | 28/277, 48/173, 75/290, 17/178 | 0.101, 0.277, 0.259, 0.096 | |
-| median candidate depth < 100 / 100-149 / >= 150 | 35/295, 53/342, 80/281 | 0.119, 0.155, 0.285 | |
+| Stratum | Found / pairs | Sites | Recall | Lower (pairs) | Lower (clustered) |
+|---|---|---|---|---|---|
+| inside a target | 57 / 104 | 28 | 0.548 | 0.463 | 0.377 |
+| 1-100 bp from a target | 84 / 222 | 60 | 0.378 | 0.324 | 0.233 |
+| 101-300 bp | 27 / 592 | 156 | 0.046 | 0.032 | 0.020 |
+| coding sequence +/- 20 bp | 33 / 64 | 16 | 0.516 | 0.406 | 0.306 |
+| in an exon | 15 / 42 | 14 | 0.357 | 0.235 | 0.153 |
+| Alu | 149 / 798 | 207 | 0.187 | 0.164 | 0.124 |
+| LINE-1 | 11 / 69 | 20 | 0.159 | 0.092 | 0.030 |
+| SVA | 8 / 51 | 17 | 0.157 | 0.081 | 0.031 |
+| fewer than 4 HGSVC3 carriers | 15 / 94 | 86 | 0.160 | 0.101 | 0.065 |
+| reads 76 / 90 / 100 / 101 bp | 28/277, 48/173, 75/290, 17/178 | 150, 85, 143, 116 | 0.101, 0.277, 0.259, 0.096 | | 0.043, 0.182, 0.165, 0.046 |
+| median candidate depth < 100 / 100-149 / >= 150 | 35/295, 53/342, 80/281 | 150, 169, 125 | 0.119, 0.155, 0.285 | | 0.065, 0.070, 0.203 |
+
+The clustered bounds come from the same calls (the evaluation of the
+v0.5.0 run redone with `evaluate.py` after #153).
 
 All 168 true calls at QUAL 10 have a precise position (3 `PASS` calls of the
 37 exomes are imprecise, `CIPOS`).
