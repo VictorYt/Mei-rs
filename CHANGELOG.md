@@ -20,6 +20,9 @@ project follows [Semantic Versioning](https://semver.org/).
   `auto` (the default), which infers the sex from the reads per targeted base
   of the X against the autosomes when a candidate lies on the X or the Y
   (#127).
+- `examples/clip_typing.rs` and a table in `docs/thresholds.md`: false typing
+  rate of real non-insertion soft-clips by length, about 3% at 15 bp and 1%
+  at 19-20 bp on two 1000 Genomes exomes (#133).
 
 ### Changed
 

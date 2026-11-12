@@ -198,8 +198,9 @@ fn best_band(diagonals: &mut [i64]) -> Band {
 /// poly(A/T) tail, or its sequence is typed to an MEI consensus
 /// ([`type_sequence`]). Short clips must be (see
 /// [`crate::reader::signals::ClipOptions::is_short`]): a random 15 bp
-/// sequence is typed about once in a hundred times with the default set,
-/// and short clips are far more frequent than long ones. Other signals are
+/// sequence is typed 2% of the time with the default set, and a real 15 bp
+/// clip that is not an insertion about 3% of the time (`docs/thresholds.md`),
+/// while short clips are far more frequent than long ones. Other signals are
 /// not soft-clips: `false`.
 #[must_use]
 pub fn is_mei_clip(set: &ConsensusSet, kind: &SignalKind) -> bool {
