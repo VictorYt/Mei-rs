@@ -178,3 +178,23 @@ def test_stratum_variances_grow_with_clustering():
     clustered = evaluate.stratum_variances(one_locus, groups, 2, 300)["s"]
     independent = evaluate.stratum_variances(spread, groups, 40, 300)["s"]
     assert clustered > independent
+
+
+def test_gq_table_counts_kept_calls_and_calibration():
+    """GQ thresholds keep calls by their GQ; the calibration compares wrong genotypes with the claimed rate."""
+    rows = [
+        ("tp", "0/1", "0/1", 5),
+        ("tp", "1/1", "0/1", 5),
+        ("tp", "0/1", "1/1", 40),
+        ("tp", "0/1", "0/1", 40),
+        ("tp", "1/1", ".", None),
+        ("fp", ".", "0/1", 30),
+        ("unknown", ".", "0/1", 99),
+    ]
+    kept, calibration = evaluate.gq_table(rows)
+    assert kept[0] == (0, 5, 5, 1, 1, 2)
+    assert kept[3] == (30, 2, 5, 1, 1, 1)
+    low, high = calibration
+    assert low[:3] == ("< 10", 3, 2)
+    assert high[:4] == ("30-49", 2, 1, 0.5)
+    assert abs(high[4] - 1e-4) < 1e-9

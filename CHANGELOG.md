@@ -23,6 +23,9 @@ project follows [Semantic Versioning](https://semver.org/).
 - `examples/clip_typing.rs` and a table in `docs/thresholds.md`: false typing
   rate of real non-insertion soft-clips by length, about 3% at 15 bp and 1%
   at 19-20 bp on two 1000 Genomes exomes (#133).
+- `evaluate.py` prints the calls kept at each GQ threshold and a GQ
+  calibration against the truth genotypes; GQ is documented as not
+  calibrated, with a usage note (#156).
 
 ### Changed
 

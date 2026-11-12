@@ -197,7 +197,9 @@ All 168 true calls at QUAL 10 have a precise position (3 `PASS` calls of the
 Genotypes of the true `PASS` calls: test 183 of 215 right (178 before #91),
 tuning 237 of 263 (229), HG00732 12 of 14, HG002 14 of 19. GQ measures the
 reads only (#117): median GQ of the true test calls 21 (93 before), of the
-false ones 1 (57); no call without alternative read has a GQ above 0.
+false ones 1 (57); no call without alternative read has a GQ above 0. GQ is
+not calibrated against the truth genotypes: see
+[Genotype quality](#genotype-quality-156).
 
 Score (refit on the tuning calls, for reference; the weights of the release
 are kept): AUC 0.894 leaving one tuning sample out, 0.895 on the test calls,
@@ -529,6 +531,45 @@ no count of the alternative allele corrects. Fitting the heterozygous fraction
 by candidate type, or a beta-binomial model, gave the same 105 of 123 in a
 leave-one-sample-out check (before the prior): the remaining errors are in the
 counts, not in the model.
+
+### Genotype quality (#156)
+
+`evaluate.py` prints, for the calls at QUAL 10 (the `exome` profile), the
+true and false calls kept at each GQ threshold with the genotypes right among
+the true ones, and the GQ calibration: in each GQ bin, the share of wrong
+genotypes against the error rate the GQ claims (mean of 10^(-GQ/10)). Calls
+of the v0.5.0 run (`run.sh`, identical with #127):
+
+| GQ >= | Tuning: true, false kept | Genotypes right | Test: true, false kept | Genotypes right | HG002: true, false | Genotypes right |
+|---|---|---|---|---|---|---|
+| 0 | 196, 11 | 171 / 196 (0.872) | 168, 17 | 139 / 168 (0.827) | 14, 12 | 11 / 14 |
+| 10 | 132, 8 | 123 / 132 (0.932) | 108, 10 | 93 / 108 (0.861) | 10, 7 | 7 / 10 |
+| 20 | 110, 7 | 103 / 110 (0.936) | 82, 8 | 69 / 82 (0.841) | 7, 3 | 5 / 7 |
+| 30 | 94, 6 | 87 / 94 (0.926) | 60, 8 | 51 / 60 (0.850) | 6, 2 | 4 / 6 |
+
+| GQ bin | Tuning: calls, wrong | Test: calls, wrong | Wrong rate (tuning, test) | Claimed |
+|---|---|---|---|---|
+| < 10 | 64, 16 | 60, 14 | 0.250, 0.233 | 0.72-0.74 |
+| 10-19 | 22, 2 | 26, 2 | 0.091, 0.077 | 0.04 |
+| 20-29 | 16, 0 | 22, 4 | 0, 0.182 | 0.004 |
+| 30-49 | 33, 2 | 29, 6 | 0.061, 0.207 | < 0.001 |
+| >= 50 | 61, 5 | 31, 3 | 0.082, 0.097 | < 0.001 |
+
+GQ is not a calibrated probability. Below 10 it is pessimistic (a quarter of
+the genotypes wrong, three quarters claimed); from 10 on it is overconfident:
+about one genotype in ten is wrong whatever the GQ, where GQ 30 or more
+claims fewer than one in a thousand. On the test set, all 15 wrong genotypes
+at GQ 10 or more are heterozygous insertions called `1/1` with no reference
+read counted (2 to 24 alternative reads): the site has no reference read
+(see above), the binomial model takes it as certain, and no GQ threshold
+removes these errors. GQ does not separate true from false calls either: at
+GQ 30, 36% of the true test calls and 47% of the false ones are kept.
+
+Usage: do not filter calls on GQ. A GQ below 10 marks a genotype that is
+often wrong (mostly `1/1` insertions called `0/1`); above 10, treat the
+genotype as right about nine times in ten. Recalibrating GQ is left until the
+reference reads are counted at these sites (#158): the errors are in the
+counts, and a calibration fitted now would change with them.
 
 ## VCF with bcftools, tabix and VEP (#85)
 

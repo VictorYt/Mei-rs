@@ -408,8 +408,9 @@ Other limitations:
   `0/1` or `1/1` (never `0/0`); without reference read at the site, `1/1`
   needs the alternative reads to be at least 0.2 of the local depth (#91).
   Genotypes of the true calls right: 183 of 215 on the 17 test exomes
-  (85%), 14 of 19 on HG002. `gq` measures the reads only (#117): most calls
-  of exome depth have a `gq` well below 99.
+  (85%), 14 of 19 on HG002. `gq` measures the reads only (#117) and is not
+  calibrated (#156): below 10, a quarter of the genotypes are wrong; from 10
+  on, about one in ten, whatever the value. Do not filter calls on `gq`.
 - Candidates closer than `--window` are merged into one.
 - On older data, most soft-clips fall below `--min-clip-quality` (read ends
   masked by the base caller); the log reports how many are set aside (#25).
