@@ -44,7 +44,7 @@ Origins:
 | `MIN_IDENTITY`, `MIN_COVERAGE` (typing) | 0.9, 0.7 | `typer` | design (#30) |
 | Seed `K`, `BAND`, `ALIGNED_STRANDS` (typing) | 11, 20 bp, 8 | `typer` | design |
 | Smith-Waterman scores | +2 / -3, gap 5 + 2k | `typer::align` | design |
-| `MIN_TYPED_LENGTH` | 15 bp | `typer` | design |
+| `MIN_TYPED_LENGTH` | 15 bp | `typer` | design; false typing rate measured below (#133) |
 | `JUNCTION_TOLERANCE` | 2 bp | `cluster` | design |
 | `MATE_SPAN`, `MATE_OVERLAP` | 300, 20 bp | `cluster` | design |
 | `MIN_MATE_IDENTITY` | 0.96 | `cluster::filters` | chosen (#57; true candidates typed by mates at 0.96 or more, most false ones at 0.90-0.95) |
@@ -62,9 +62,52 @@ Origins:
 | `HOM_MIN_ALT_FRACTION` | 0.2 | `genotype` | fitted (#91) on the 18 tuning exomes: without reference read at the site, a `1/1` call needs this fraction of alternative reads among the reads at the site (best of 0.15 to 0.3) |
 | `HET_FRACTION` | 0.3 | `genotype` | fitted (#34; median alternative fraction of the true heterozygous calls 0.28; 76 of 91 genotypes right, 68 with 0.5) |
 | `PRIOR` and the 14 log10 likelihood ratios of the score | see `genotype::score` | `genotype::score` | fitted (#34, refit in #67 on 129 true and 40 false `PASS` calls) |
+| `MIN_SEX_READS`, `MALE_MAX_X_RATIO` | 200 reads, 0.95 | `genotype::ploidy` | chosen (#127: reads per targeted base of the X against the autosomes, 0.61 to 0.84 in the 22 male and 1.12 to 1.63 in the 14 female 1000 Genomes exomes of the evaluation) |
 | Score cutoffs: identity 0.98, distinct starts 0.7, MEI mates 0.6, signal ratio 0.2 | | `genotype::score` | chosen (#34) |
 
 The quality score is a naive Bayes model on seven binary pieces of evidence:
 its 15 parameters (prior and two ratios per piece) are the most exposed to the
 seven exomes; see the intervals and the HG002 result in
 [docs/validation](validation/README.md).
+
+## False typing of short clips
+
+A short clip (15 to 19 bp, `--min-short-clip-len`) is kept when it has a
+poly(A/T) tail or is typed to an MEI consensus, and counts towards
+`no_junction` and `untyped` only when the candidate has an MEI mate (#32).
+How often does a clip that is not an insertion get typed? `examples/clip_typing.rs`
+(#133) takes the soft-clips of 40 bases or more without a tail from a scan
+(`--profile discovery --keep-filtered --format json`) whose origin is known:
+
+* **local**: found in the reference within 1 kb of the junction, on either
+  strand and without gaps, with at most 10% of the bases different (a local
+  rearrangement or an alignment artefact), and the matched reference not
+  itself typed to an MEI (clips from a reference copy are left out: other
+  filters handle them, #42, #71);
+* **adapter**: holding the start of the Illumina adapter (read-through of a
+  short fragment).
+
+It types the bases next to the junction (what a shorter clip of that read
+would hold) at each length, with the default consensus set, and random
+sequences of the same lengths for comparison. Two 1000 Genomes exomes:
+NA12878 (76 bp reads; 242 local and 745 adapter clips) and NA19331 (100 bp
+reads; 2,141 local and 104 adapter clips).
+
+| Length (bp) | Local, typed | Rate | Adapter, typed | Rate | Random (20,000) |
+|---|---|---|---|---|---|
+| 15 | 76 / 2,383 | 0.032 | 7 / 849 | 0.008 | 0.020 |
+| 17 | 42 / 2,383 | 0.018 | 4 / 849 | 0.005 | 0.009 |
+| 19 | 26 / 2,383 | 0.011 | 4 / 849 | 0.005 | 0.003 |
+| 20 | 30 / 2,383 | 0.013 | 4 / 849 | 0.005 | 0.004 |
+| 25 | 11 / 2,383 | 0.005 | 3 / 849 | 0.004 | 0.0001 |
+| 30 | 10 / 2,383 | 0.004 | 0 / 849 | 0 | 0.0001 |
+| 35, 40 | 1 / 2,383 | 0.0004 | 0 / 849 | 0 | 0 |
+
+Real clips are typed more often than random sequences: about 3% at 15 bp
+and 1% at 19-20 bp for local clips, against 2% and 0.3-0.4% at random. A likely
+reason (not checked clip by clip): genomic sequence is closer to old repeats
+than uniform bases are, and the piece next to the junction can hold a
+fragment of an element too short or diverged for the whole matched reference
+to be typed. The rate
+falls below 0.5% only from 25 bp. A single typed short clip is therefore weak
+evidence, which is why short clips count only with an MEI mate.
