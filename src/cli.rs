@@ -65,6 +65,13 @@ pub struct ScanArgs {
     #[arg(long, help_heading = "Input")]
     pub allow_no_reference: bool,
 
+    /// Sex of the sample, for haploid genotypes (`0`, `1`) on the X and Y of
+    /// a male outside the pseudoautosomal regions; `auto` infers it from the
+    /// reads on the targets of the X and of the autosomes, and keeps diploid
+    /// genotypes when they do not tell
+    #[arg(long, value_enum, default_value_t = SexArg::Auto, help_heading = "Input")]
+    pub sex: SexArg,
+
     /// MEI consensus sequences (FASTA, headers `>name#SINE/Alu`,
     /// `>name#LINE/L1` or `>name#Retroposon/SVA`) [default: the Dfam Alu,
     /// LINE-1 and SVA consensus sequences built into mei-rs]
@@ -305,6 +312,17 @@ impl Profile {
             Self::Discovery => 0,
         }
     }
+}
+
+/// Sex of the sample (`--sex`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum SexArg {
+    /// Inferred from the depth of the X against the autosomes
+    Auto,
+    /// Two X: diploid everywhere
+    Female,
+    /// One X and one Y: haploid outside their pseudoautosomal regions
+    Male,
 }
 
 /// Format of the candidate list.

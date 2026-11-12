@@ -144,6 +144,14 @@ def test_bins():
     assert [evaluate.bins(v, [100, 150]) for v in (99, 100, 149, 150)] == ["< 100", "100-149", "100-149", ">= 150"]
 
 
+def test_haploid_calls_agree_with_any_carrier():
+    """A haploid `1` on the X of a male agrees with the truth whatever its zygosity."""
+    assert evaluate.concordant("0/1", "0/1")
+    assert not evaluate.concordant("1/1", "0/1")
+    assert evaluate.concordant("0/1", "1") and evaluate.concordant("1/1", "1")
+    assert not evaluate.concordant("0/1", "0")
+
+
 def test_beta_quantile_matches_clopper_pearson():
     """With the variance of independent pairs, the clustered bound is the exact one."""
     for found, total in ((5, 10), (33, 64), (57, 104)):

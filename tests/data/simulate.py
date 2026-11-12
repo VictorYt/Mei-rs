@@ -1,7 +1,8 @@
 """Simulate the synthetic test fixtures (see README.md).
 
 Writes, into the directory given as the only argument:
-- reference.fa: two random contigs; chr2 holds a reference copy of the Alu;
+- reference.fa: four random contigs: chr1, chr2 (with a reference copy of
+  the Alu), and chrX and chrY for the sex chromosome fixtures;
 - targets.bed: five capture targets;
 - targets_tiled.bed: the same, with the insertion target split into two
   overlapping probes whose edges fall on the insertion junctions;
@@ -20,7 +21,10 @@ Writes, into the directory given as the only argument:
   bases (below the 15 bases of an extracted clip) or left unmapped: no
   junction clip is extracted, and the insertion is found by its mates (inside
   the element) and placed at the breakpoint by the short clips (#58, #59, #66);
-- truth.tsv: the simulated insertions.
+- female.sam, male.sam: the Alu insertion on chrX (targets_xy.bed), on one
+  of the two X of a female and on the single X of a male (half the depth of
+  chr1 on chrX and chrY): `0/1` and the haploid `1` (#127);
+- truth.tsv: the simulated insertions (of chr1).
 
 The elements are Dfam consensus sequences (data/consensus/mei_consensus.fa,
 CC0), without their poly(A) tail. Reads are paired-end 2x100 bp and are
@@ -63,6 +67,9 @@ ALU = consensus("AluY")
 POLYA = "A" * 30
 
 CONTIGS = [("chr1", 20000), ("chr2", 10000)]
+# Sex chromosomes, drawn after the contigs above with their own random
+# generator: the other fixtures do not change.
+SEX_CONTIGS = [("chrX", 20000), ("chrY", 10000)]
 
 
 class Insertion:
@@ -117,6 +124,20 @@ TILED_TARGETS = [
     ("chr1", 9850, INS_POS + TSD_LEN, "target_insertion_left"),
     ("chr1", INS_POS, 10150, "target_insertion_right"),
 ] + TARGETS[1:]
+
+# The Alu insertion on chrX, and the targets of the sex chromosome fixtures:
+# the targets of chr1 (reference only) and five on chrX, two on chrY, for the
+# depth of the X against the autosomes.
+X_INSERTION = Insertion("AluY", ALU, 10000, 12, "+", "target_x_insertion")
+XY_TARGETS = [t for t in TARGETS if t[0] == "chr1"] + [
+    ("chrX", 2000, 2300, "target_x1"),
+    ("chrX", 5000, 5300, "target_x2"),
+    ("chrX", 9850, 10150, "target_x_insertion"),
+    ("chrX", 13000, 13300, "target_x3"),
+    ("chrX", 16000, 16300, "target_x4"),
+    ("chrY", 2000, 2300, "target_y1"),
+    ("chrY", 5000, 5300, "target_y2"),
+]
 
 # Reference poly(A) tract at the end of an Alu fragment on chr2 (outside the
 # targets above), expanded by TRACT_EXPANSION bases on one haplotype of
@@ -324,13 +345,13 @@ def qualities(rng, n):
 
 
 class Writer:
-    def __init__(self, path, sample, rng):
+    def __init__(self, path, sample, rng, contigs=CONTIGS):
         self.out = open(path, "w")
         self.sample = sample
         self.rng = rng
         self.count = 0
         self.out.write("@HD\tVN:1.6\tSO:unsorted\n")
-        for name, length in CONTIGS:
+        for name, length in contigs:
             self.out.write(f"@SQ\tSN:{name}\tLN:{length}\n")
         self.out.write(f"@RG\tID:{sample}\tSM:{sample}\tPL:ILLUMINA\n")
 
@@ -472,9 +493,11 @@ def main(out_dir):
     tract = TRACT_FLANK + "A" * TRACT_LEN
     start = TRACT_POS - len(TRACT_FLANK)
     reference["chr2"] = chr2[:start] + tract + chr2[start + len(tract) :]
+    sex_rng = Rng(SEED + 6)
+    reference.update((name, sex_rng.sequence(length)) for name, length in SEX_CONTIGS)
 
     with open(os.path.join(out_dir, "reference.fa"), "w") as fa:
-        for name, _ in CONTIGS:
+        for name, _ in CONTIGS + SEX_CONTIGS:
             fa.write(f">{name}\n")
             seq = reference[name]
             for i in range(0, len(seq), 60):
@@ -484,6 +507,7 @@ def main(out_dir):
         ("targets.bed", TARGETS),
         ("targets_tiled.bed", TILED_TARGETS),
         ("targets_tract.bed", [TRACT_TARGET]),
+        ("targets_xy.bed", XY_TARGETS),
     ):
         with open(os.path.join(out_dir, file_name), "w") as bed:
             for contig, start, end, name in targets:
@@ -554,6 +578,25 @@ def main(out_dir):
     fragments(rng, Haplotype(contig, reference[contig]), TARGETS[0], writer)
     fragments(rng, MateOnlyHaplotype(contig, reference[contig], INSERTIONS[0]), TARGETS[0], writer)
     writer.close()
+
+    # The Alu insertion on chrX of a female (one of two X) and of a male (his
+    # single X; one Y), with their own random generators.
+    for sample, seed in (("female", SEED + 7), ("male", SEED + 8)):
+        rng = Rng(seed)
+        writer = Writer(os.path.join(out_dir, f"{sample}.sam"), sample, rng, CONTIGS + SEX_CONTIGS)
+        for target in XY_TARGETS:
+            contig = target[0]
+            ref_hap = Haplotype(contig, reference[contig])
+            alt_hap = Haplotype(contig, reference[contig], X_INSERTION) if target[3] == X_INSERTION.target else ref_hap
+            if contig == "chr1":
+                haplotypes = [ref_hap, ref_hap]
+            elif contig == "chrX":
+                haplotypes = [ref_hap, alt_hap] if sample == "female" else [alt_hap]
+            else:
+                haplotypes = [] if sample == "female" else [ref_hap]
+            for haplotype in haplotypes:
+                fragments(rng, haplotype, target, writer)
+        writer.close()
 
 
 if __name__ == "__main__":

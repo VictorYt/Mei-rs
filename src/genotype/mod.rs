@@ -16,7 +16,11 @@
 //! candidates that did not pass (`--keep-filtered`). The prior only chooses
 //! the call: GQ measures the reads, so a call the reads do not support (no
 //! alternative read at a mate-only insertion) has a GQ of 0 (#117).
+//!
+//! On the X and Y of a male, outside the pseudoautosomal regions
+//! ([`ploidy`]), the genotype is haploid ([`haploid`]): `0` or `1`.
 
+pub mod ploidy;
 pub mod score;
 
 /// Fraction of alternative reads at a site without the insertion (reads
@@ -72,16 +76,22 @@ pub enum Call {
     Het,
     /// Homozygous insertion.
     HomAlt,
+    /// Haploid site without the insertion.
+    HaploidRef,
+    /// Haploid site with the insertion.
+    HaploidAlt,
 }
 
 impl Call {
-    /// VCF notation: `0/0`, `0/1` or `1/1`.
+    /// VCF notation: `0/0`, `0/1`, `1/1`, or `0`, `1` at a haploid site.
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
             Self::HomRef => "0/0",
             Self::Het => "0/1",
             Self::HomAlt => "1/1",
+            Self::HaploidRef => "0",
+            Self::HaploidAlt => "1",
         }
     }
 }
@@ -98,7 +108,8 @@ pub struct Genotype {
     /// Reference reads, summed over the junctions (a read spanning the site
     /// counts at each junction).
     pub reference: u32,
-    /// log10 likelihoods of `0/0`, `0/1` and `1/1`.
+    /// log10 likelihoods of `0/0`, `0/1` and `1/1` (of `0`, impossible and
+    /// `1` at a haploid site: the middle one is negative infinity).
     pub log_likelihoods: [f64; 3],
 }
 
@@ -171,6 +182,46 @@ pub fn genotype(junctions: &[AlleleCounts], present: bool, depth: Option<u64>) -
         alternative,
         reference,
         log_likelihoods,
+    })
+}
+
+/// Haploid genotype from the reads of each allele at the junctions, as
+/// [`genotype`] with two calls: `0` (alternative reads at the rate
+/// [`ERROR`]) and `1` (at `1 - ERROR`). A candidate that passed the filters
+/// is `1`; GQ measures the reads alone.
+#[must_use]
+pub fn haploid(junctions: &[AlleleCounts], present: bool) -> Option<Genotype> {
+    let alternative: u32 = junctions.iter().map(|c| c.alternative).sum();
+    let reference: u32 = junctions.iter().map(|c| c.reference).sum();
+    if alternative + reference == 0 {
+        return None;
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let n = junctions.len() as f64;
+    let log_likelihood = |p: f64| {
+        junctions
+            .iter()
+            .map(|c| {
+                f64::from(c.alternative) * p.log10() + f64::from(c.reference) * (1.0 - p).log10()
+            })
+            .sum::<f64>()
+            / n
+    };
+    let (absent, carried) = (log_likelihood(ERROR), log_likelihood(1.0 - ERROR));
+    let alt = present || carried >= absent;
+    let (call, other) = if alt {
+        (Call::HaploidAlt, absent - carried)
+    } else {
+        (Call::HaploidRef, carried - absent)
+    };
+    // Probability of the other call from the reads alone.
+    let wrong = 1.0 - 1.0 / (1.0 + 10f64.powf(other));
+    Some(Genotype {
+        call,
+        quality: phred(wrong).min(MAX_QUALITY),
+        alternative,
+        reference,
+        log_likelihoods: [absent, f64::NEG_INFINITY, carried],
     })
 }
 
@@ -274,6 +325,23 @@ mod tests {
             genotype(&[counts(9, 0)], false, Some(68)).unwrap().call,
             Call::HomAlt
         );
+    }
+
+    #[test]
+    fn haploid_calls() {
+        let g = haploid(&[counts(12, 0)], true).unwrap();
+        assert_eq!((g.call.name(), g.quality), ("1", MAX_QUALITY));
+        assert_eq!(
+            haploid(&[counts(0, 20)], false).unwrap().call,
+            Call::HaploidRef
+        );
+        // A passed candidate is `1` even without alternative read; the reads
+        // do not support it.
+        let g = haploid(&[counts(0, 20)], true).unwrap();
+        assert_eq!((g.call, g.quality), (Call::HaploidAlt, 0));
+        // Mixed reads (a heterozygous-looking site): low quality.
+        assert!(haploid(&[counts(5, 5)], false).unwrap().quality < 10);
+        assert_eq!(haploid(&[counts(0, 0)], true), None);
     }
 
     #[test]

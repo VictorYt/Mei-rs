@@ -11,8 +11,9 @@ use rayon::prelude::*;
 use tracing::{info, warn};
 
 use crate::assembly::{self, Assembly};
-use crate::cli::{OutputFormat, ScanArgs};
+use crate::cli::{OutputFormat, ScanArgs, SexArg};
 use crate::cluster::{Candidate, Confidence, Filter, cluster, filters, tracts};
+use crate::genotype::ploidy::{self, Chromosome, Sex};
 use crate::genotype::{self, AlleleCounts, score};
 use crate::inputs::Inputs;
 use crate::reader::alleles::Site;
@@ -24,7 +25,7 @@ use crate::reader::junctions::JunctionRequest;
 use crate::reader::signals::{ClipOptions, Signal, SignalKind};
 use crate::reader::{self, alignment::AlignmentFile, depth::local_depths, mates::MateRequest};
 use crate::regions::targets::Contig;
-use crate::regions::targets::ScanRegion;
+use crate::regions::targets::{ScanRegion, TargetSet};
 use crate::typer::{
     self,
     consensus::{ConsensusSet, Family},
@@ -129,8 +130,9 @@ pub fn run(args: &ScanArgs) -> Result<()> {
     }
     genotype_candidates(
         &mut candidates,
-        &inputs.alignment,
-        &contigs,
+        args,
+        &inputs,
+        &header_contigs,
         &extract_options,
     )?;
 
@@ -419,14 +421,24 @@ fn flag_tandem_repeats(
 /// bases on each side.
 fn genotype_candidates(
     candidates: &mut [Candidate],
-    alignment: &AlignmentFile,
-    contigs: &[String],
+    args: &ScanArgs,
+    inputs: &Inputs,
+    contigs: &[Contig],
     options: &ExtractOptions,
 ) -> Result<()> {
+    let alignment = &inputs.alignment;
+    let sex = sex(
+        args,
+        candidates,
+        alignment,
+        &inputs.targets,
+        contigs,
+        options,
+    )?;
     let sites: Vec<Site> = candidates
         .iter()
         .map(|c| Site {
-            contig: contigs[c.contig].clone(),
+            contig: contigs[c.contig].name.clone(),
             left: c.left_junction,
             right: c.right_junction,
         })
@@ -448,9 +460,87 @@ fn genotype_candidates(
                 reference: counts.reference,
             })
             .collect();
-        c.genotype = genotype::genotype(&junctions, c.passes_before_quality(), c.depth);
+        let contig = &contigs[c.contig];
+        c.genotype = if ploidy::is_haploid(sex, &contig.name, contig.length, c.breakpoint) {
+            genotype::haploid(&junctions, c.passes_before_quality())
+        } else {
+            genotype::genotype(&junctions, c.passes_before_quality(), c.depth)
+        };
     }
     Ok(())
+}
+
+/// Most targets of the autosomes, and of the X, whose reads are counted to
+/// infer the sex: evenly spaced among them.
+const SEX_TARGETS: usize = 300;
+
+/// Sex of the sample (`--sex`), inferred only when a candidate lies on the X
+/// or the Y ([`ploidy::infer`]). On an assembly whose pseudoautosomal regions
+/// are unknown, the whole X and Y of a male are haploid: said in a warning.
+fn sex(
+    args: &ScanArgs,
+    candidates: &[Candidate],
+    alignment: &AlignmentFile,
+    targets: &TargetSet,
+    contigs: &[Contig],
+    options: &ExtractOptions,
+) -> Result<Option<Sex>> {
+    let sex_chromosome =
+        |name: &str| ploidy::chromosome(name).is_some_and(|c| c != Chromosome::Autosome);
+    let on_xy: Vec<&Contig> = candidates
+        .iter()
+        .map(|c| &contigs[c.contig])
+        .filter(|c| sex_chromosome(&c.name))
+        .collect();
+    let sex = match args.sex {
+        SexArg::Female => Some(Sex::Female),
+        SexArg::Male => Some(Sex::Male),
+        SexArg::Auto if on_xy.is_empty() => None,
+        SexArg::Auto => {
+            let sample = |kind: Chromosome| {
+                let regions: Vec<&ScanRegion> = targets
+                    .regions()
+                    .iter()
+                    .filter(|r| ploidy::chromosome(&r.contig) == Some(kind))
+                    .collect();
+                let step = regions.len().div_ceil(SEX_TARGETS).max(1);
+                regions
+                    .into_iter()
+                    .step_by(step)
+                    .cloned()
+                    .collect::<Vec<_>>()
+            };
+            let (autosomes, x) = (sample(Chromosome::Autosome), sample(Chromosome::X));
+            let reads = |regions: &[ScanRegion]| -> Result<(u64, u64)> {
+                let counts = reader::depth::read_counts(alignment, regions, &options.filter)?;
+                Ok((
+                    counts.iter().sum(),
+                    regions.iter().map(ScanRegion::len).sum(),
+                ))
+            };
+            let (sex, ratio) = ploidy::infer(reads(&autosomes)?, reads(&x)?);
+            if let (Some(sex), Some(ratio)) = (sex, ratio) {
+                info!(
+                    "sex: {} (reads per targeted base of the X: {ratio:.2} of the autosomes; --sex to set it)",
+                    sex.name()
+                );
+            } else {
+                warn!(
+                    "sex: too few reads on the targets of the X and the autosomes to infer it; diploid genotypes on the X and the Y (--sex to set it)"
+                );
+            }
+            sex
+        }
+    };
+    if sex == Some(Sex::Male)
+        && let Some(contig) = on_xy.iter().find(|c| !ploidy::known_par(c.length))
+    {
+        warn!(
+            "{} ({} bp) is not the X or Y of GRCh37 or GRCh38: its pseudoautosomal regions are unknown, so it is haploid throughout",
+            contig.name, contig.length
+        );
+    }
+    Ok(sex)
 }
 
 /// Bases added on each side of a candidate to the window read again for its

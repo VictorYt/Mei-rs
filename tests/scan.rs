@@ -196,6 +196,55 @@ fn genotypes() {
 }
 
 #[test]
+fn haploid_genotypes_on_the_x_of_a_male() {
+    // The Alu on chrX: on one of the two X of `female`, on the single X of
+    // `male` (#127). The sex is inferred from the depth of the X, or given.
+    let xy = |sample: &str, sex: Option<&str>| {
+        let bam = format!("tests/data/{sample}.bam");
+        let mut args = vec![
+            "--bam",
+            &bam,
+            "--bed",
+            "tests/data/targets_xy.bed",
+            "--reference",
+            "tests/data/reference.fa",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+        if let Some(sex) = sex {
+            args.extend(["--sex".to_owned(), sex.to_owned()]);
+        }
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        let tsv = scan(&args);
+        let rows = rows(&tsv);
+        assert_eq!(rows.len(), 1, "{tsv}");
+        assert_eq!(column(&tsv, &rows[0], "contig"), "chrX");
+        column(&tsv, &rows[0], "genotype").to_owned()
+    };
+    assert_eq!(xy("female", None), "0/1");
+    assert_eq!(xy("male", None), "1");
+    assert_eq!(xy("male", Some("male")), "1");
+    assert_eq!(xy("male", Some("female")), "1/1");
+    assert_eq!(xy("female", Some("male")), "1");
+    // The VCF genotype is haploid too.
+    let vcf = scan(&[
+        "--bam",
+        "tests/data/male.cram",
+        "--bed",
+        "tests/data/targets_xy.bed",
+        "--reference",
+        "tests/data/reference.fa",
+        "--format",
+        "vcf",
+    ]);
+    let (_, records) = parse_vcf(vcf.as_bytes());
+    assert_eq!(records.len(), 1, "{vcf}");
+    let line = vcf.lines().find(|l| l.starts_with("chrX")).unwrap();
+    assert!(line.split('\t').nth(9).unwrap().starts_with("1:"), "{line}");
+}
+
+#[test]
 fn tail_only_clips_typed_by_mates() {
     // The junction clips of the Alu of `tailonly` are its poly(A) tail with
     // too few element bases to be typed (tests/data/README.md): its mates
