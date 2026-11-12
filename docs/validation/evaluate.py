@@ -263,6 +263,7 @@ def load_tsv(path):
                     "confidence": row["confidence"],
                     "qual": int(row["qual"]) if row.get("qual", ".") != "." else None,
                     "genotype": row.get("genotype", "."),
+                    "gq": int(row["gq"]) if row.get("gq", ".") != "." else None,
                     "family": CALL_FAMILIES.get(row.get("family", ".")),
                     "imprecise": row.get("cipos", ".") != ".",
                     "row": row,
@@ -285,10 +286,11 @@ def load_vcf(path):
             points = [int(fields[1])] + [
                 int(info[k]) for k in ("LEFT_JUNCTION", "RIGHT_JUNCTION") if k in info
             ]
-            genotype = "."
+            genotype, gq = ".", None
             if len(fields) > 9:
-                keys, values = fields[8].split(":"), fields[9].split(":")
-                genotype = dict(zip(keys, values)).get("GT", ".").replace("|", "/")
+                sample = dict(zip(fields[8].split(":"), fields[9].split(":")))
+                genotype = sample.get("GT", ".").replace("|", "/")
+                gq = int(sample["GQ"]) if sample.get("GQ", ".") != "." else None
             calls.append(
                 {
                     "contig": contig_name(fields[0]),
@@ -297,6 +299,7 @@ def load_vcf(path):
                     "confidence": info.get("CONFIDENCE", "."),
                     "qual": None if fields[5] == "." else float(fields[5]),
                     "genotype": genotype,
+                    "gq": gq,
                     "family": CALL_FAMILIES.get(fields[4].strip("<>").split(":")[-1]),
                     "imprecise": "CIPOS" in info or "IMPRECISE" in info,
                     "row": {"contig": fields[0], "position": fields[1], "info": fields[7]},
@@ -583,6 +586,7 @@ def main():
     annotation = load_annotation(args.annotation) if args.annotation else None
     samples = read_samples(args.families) if args.families else {}
     print_strata(per_sample, annotation, samples, args.strata_qual, loci, families, args.bootstrap)
+    print_gq(per_sample, args.strata_qual)
     print("\n# recall by distance to the target\tfound_any\tfound_pass")
     for _, _, name in strata:
         if strata_total[name]:
@@ -954,6 +958,60 @@ def print_strata(per_sample, annotation, samples, strata_qual, loci=None, famili
         print(f"\n# genotypes of the true calls at {level} by median candidate depth\tright\tcalls")
         for depth, (right, n) in sorted(genotypes.items()):
             print(f"{depth}\t{right}\t{n}")
+
+
+GQ_THRESHOLDS = (0, 10, 20, 30)
+GQ_BINS = [10, 20, 30, 50]
+
+
+def gq_table(rows):
+    """Genotype quality against the truth genotypes, from `(status, truth, genotype, gq)` rows.
+
+    Returns two lists. Kept: for each GQ threshold of `GQ_THRESHOLDS`, the
+    true calls kept, the false calls kept and the genotypes right among the
+    true calls kept (calls of unknown status are left out). Calibration: for each GQ bin of `GQ_BINS`, the true
+    calls, the wrong genotypes, the observed error rate and the error rate
+    the GQ claims (mean of 10^(-GQ/10)). Calls without genotype count as
+    GQ 0 and as wrong.
+    """
+    true = [(t, g, q or 0) for s, t, g, q in rows if s == "tp"]
+    false = [q or 0 for s, _, _, q in rows if s in FALSE]
+    kept = []
+    for threshold in GQ_THRESHOLDS:
+        held = [(t, g) for t, g, q in true if q >= threshold]
+        right = sum(g != "." and concordant(t, g) for t, g in held)
+        kept.append((threshold, len(held), len(true), sum(q >= threshold for q in false), len(false), right))
+    groups = collections.defaultdict(list)
+    for t, g, q in true:
+        groups[bins(q, GQ_BINS)].append((g != "." and concordant(t, g), q))
+    calibration = []
+    for name, members in sorted(groups.items(), key=lambda kv: min(q for _, q in kv[1])):
+        wrong = sum(not ok for ok, _ in members)
+        claimed = sum(10 ** (-q / 10) for _, q in members) / len(members)
+        calibration.append((name, len(members), wrong, wrong / len(members), claimed))
+    return kept, calibration
+
+
+def print_gq(per_sample, strata_qual):
+    """Print the GQ table (`gq_table`) of the calls at the default QUAL (#156)."""
+    level = f"QUAL>={strata_qual:g}"
+    if level not in per_sample[0][2]:
+        return
+    rows = [
+        (s, unphased(t["genotypes"][sample]) if s == "tp" else ".", c["genotype"], c.get("gq"))
+        for sample, _, levels in per_sample
+        for c, s, t, _ in levels[level]
+    ]
+    if not any(q is not None for _, _, _, q in rows):
+        return
+    kept, calibration = gq_table(rows)
+    print(f"\n# calls at {level} kept at GQ >= threshold\ttrue\tfalse\tgenotypes_right")
+    for threshold, held, n_true, false, n_false, right in kept:
+        concordance = f"{right / held:.3f}" if held else "."
+        print(f"{threshold}\t{held}/{n_true}\t{false}/{n_false}\t{right}/{held} ({concordance})")
+    print(f"\n# GQ calibration of the true calls at {level}\tcalls\twrong\twrong_rate\tclaimed_rate")
+    for name, n, wrong, observed, claimed in calibration:
+        print(f"{name}\t{n}\t{wrong}\t{observed:.3f}\t{claimed:.3f}")
 
 
 def read_families(path):
