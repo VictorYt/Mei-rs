@@ -15,7 +15,9 @@
 //! heterozygous genotype ([`HET_PRIOR`]). `0/0` stays possible for the
 //! candidates that did not pass (`--keep-filtered`). The prior only chooses
 //! the call: GQ measures the reads, so a call the reads do not support (no
-//! alternative read at a mate-only insertion) has a GQ of 0 (#117).
+//! alternative read at a mate-only insertion) has a GQ of 0 (#117), and a
+//! call without any reference read has a GQ of at most
+//! [`NO_REFERENCE_MAX_QUALITY`] (#158).
 //!
 //! On the X and Y of a male, outside the pseudoautosomal regions
 //! ([`ploidy`]), the genotype is haploid ([`haploid`]): `0` or `1`.
@@ -57,6 +59,16 @@ pub const HOM_MIN_ALT_FRACTION: f64 = 0.2;
 
 /// Highest genotype quality.
 pub const MAX_QUALITY: u32 = 99;
+
+/// Highest genotype quality of a candidate that passed without any
+/// reference read counted at its site.
+///
+/// The reads then cannot tell a heterozygous insertion next to a probe edge
+/// from a homozygous one (see [`HOM_MIN_ALT_FRACTION`]), whatever the number
+/// of alternative reads: 13 of the 62 such genotypes of the true calls at
+/// QUAL 10 of the 18 tuning exomes are wrong (0.21, phred 7), against 6 of
+/// 128 with reference reads (#158).
+pub const NO_REFERENCE_MAX_QUALITY: u32 = 7;
 
 /// Reads of each allele at one junction.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -176,9 +188,14 @@ pub fn genotype(junctions: &[AlleleCounts], present: bool, depth: Option<u64>) -
         .map(|ll| 10f64.powf(ll - log_likelihoods[best]))
         .sum();
     let wrong = 1.0 - 1.0 / total;
+    let cap = if present && reference == 0 {
+        NO_REFERENCE_MAX_QUALITY
+    } else {
+        MAX_QUALITY
+    };
     Some(Genotype {
         call: calls[best],
-        quality: phred(wrong).min(MAX_QUALITY),
+        quality: phred(wrong).min(cap),
         alternative,
         reference,
         log_likelihoods,
@@ -311,10 +328,17 @@ mod tests {
         assert_eq!(g.call, Call::Het);
         // The reads do not tell it: the quality stays low.
         assert!(g.quality < 10, "{g:?}");
-        // Most reads at the site are alternative: homozygous.
+        // Most reads at the site are alternative: homozygous, but still
+        // without reference read, so the quality is capped.
+        let g = genotype(&[counts(30, 0)], true, Some(40)).unwrap();
         assert_eq!(
-            genotype(&[counts(9, 0)], true, Some(28)).unwrap().call,
-            Call::HomAlt
+            (g.call, g.quality),
+            (Call::HomAlt, NO_REFERENCE_MAX_QUALITY)
+        );
+        // A filtered candidate is not capped.
+        assert_eq!(
+            genotype(&[counts(30, 0)], false, Some(40)).unwrap().quality,
+            MAX_QUALITY
         );
         // Without depth, or for a filtered candidate, the reads decide.
         assert_eq!(
