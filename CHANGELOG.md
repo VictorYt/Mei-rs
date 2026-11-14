@@ -26,9 +26,17 @@ project follows [Semantic Versioning](https://semver.org/).
 - `evaluate.py` prints the calls kept at each GQ threshold and a GQ
   calibration against the truth genotypes; GQ is documented as not
   calibrated, with a usage note (#156).
+- `evaluate.py` prints the genotype concordance of the true calls with its
+  two-way bootstrap interval, overall and by reference reads, depth and read
+  length (#158).
 
 ### Changed
 
+- The GQ of a genotype without reference read at a site where the reads
+  were counted is capped at 7: a quarter of these genotypes are wrong
+  (heterozygous insertions next to a probe edge called `1/1`). Calls and
+  genotypes are unchanged; at GQ 10 or more, 2 of 156 genotypes of the true
+  tuning and test calls are wrong instead of 24 of 240 (#158).
 - The recall per stratum has a clustered lower bound (Clopper-Pearson on the
   effective number of carrier pairs, from the bootstrap over families and
   loci) and its number of distinct sites; the README claims those bounds
