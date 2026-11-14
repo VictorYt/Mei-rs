@@ -565,11 +565,80 @@ read counted (2 to 24 alternative reads): the site has no reference read
 removes these errors. GQ does not separate true from false calls either: at
 GQ 30, 36% of the true test calls and 47% of the false ones are kept.
 
-Usage: do not filter calls on GQ. A GQ below 10 marks a genotype that is
-often wrong (mostly `1/1` insertions called `0/1`); above 10, treat the
-genotype as right about nine times in ten. Recalibrating GQ is left until the
-reference reads are counted at these sites (#158): the errors are in the
-counts, and a calibration fitted now would change with them.
+Usage (v0.5.0): do not filter calls on GQ. A GQ below 10 marks a genotype
+that is often wrong (mostly `1/1` insertions called `0/1`); above 10, treat
+the genotype as right about nine times in ten. #158 caps the GQ of the
+genotypes without reference read (below).
+
+### Genotypes without reference read (#158)
+
+Of the 33 wrong genotypes of the true test calls (v0.5.0), 26 are at sites
+without any reference read counted, 6 at sites with reference reads and 1
+without any read; 19, 7 and 5 of 31 on the tuning set. What was tried on the
+tuning set, then checked once on the test set:
+
+| Rule at sites without reference read | Tuning right (of 62) | Test right (of 58) |
+|---|---|---|
+| `1/1` when alternative reads >= 0.2 of the depth (v0.5.0) | 49 | 35 |
+| Same, best threshold (0.23) | 50 | 37 |
+| Supporting reads, or mates, against the depth | 46-48 | 31-43 |
+| Unclipped reads starting at the junction counted as reference | 49 | 38 |
+
+| MEI mates as alternative reads (weight) | `HOM_MIN_ALT_FRACTION` | Tuning right (of 263) |
+|---|---|---|
+| 0 (v0.5.0) | 0.2 | 238 |
+| 0 | 0.15, 0.25, 0.3 | 235, 237, 233 |
+| 0.25 | 0.2-0.25 | 238 |
+| 0.5 | 0.25-0.3 | 239 |
+
+No rule gains more than one genotype on the tuning set: the mates and the
+unclipped reads at the junction are as frequent at true homozygous sites as
+at heterozygous ones. The counts were left unchanged (`HET_FRACTION` was not
+refitted). Instead, a genotype without reference read at a site where the
+reads were counted is marked uncertain: its GQ is capped at 7
+(`NO_REFERENCE_MAX_QUALITY`, the phred value of the 13 wrong of 62 on the
+tuning set at QUAL 10, against 6 of 128 with reference reads). Calls and
+genotypes are unchanged (all TSVs identical apart from `gq`).
+
+Concordance of the genotypes of the true calls at QUAL 10 (`exome` profile),
+with the 95% interval of the two-way bootstrap (families and loci):
+
+| Stratum | Tuning | Test | HG002 |
+|---|---|---|---|
+| All | 171 / 191, 0.895 (0.801-0.960) | 139 / 167, 0.832 (0.702-0.933) | 11 / 14, 0.786 (0.538-1) |
+| No reference read | 49 / 62, 0.790 (0.587-0.938) | 35 / 58, 0.603 (0.384-0.840) | 7 / 10, 0.700 (0.364-1) |
+| Some reference reads | 122 / 129, 0.946 (0.850-1) | 104 / 109, 0.954 (0.870-1) | 4 / 4 |
+| Depth < 100 | 26 / 28, 0.929 (0.600-1) | 28 / 34, 0.824 (0.615-1) | |
+| Depth 100-149 | 61 / 68, 0.897 (0.760-0.987) | 45 / 53, 0.849 (0.610-1) | |
+| Depth >= 150 | 84 / 95, 0.884 (0.736-0.972) | 66 / 80, 0.825 (0.647-0.955) | |
+| 76 bp reads | 38 / 45, 0.844 (0.634-1) | 23 / 27, 0.852 (0.621-1) | |
+| 90 bp reads | 57 / 63, 0.905 (0.781-1) | 37 / 48, 0.771 (0.547-0.974) | |
+| 100 bp reads | 55 / 59, 0.932 (0.737-1) | 65 / 75, 0.867 (0.667-0.983) | |
+| 101 bp reads | 21 / 24, 0.875 (0.600-1) | 14 / 17, 0.824 (0.500-1) | |
+
+The goal of #158, a lower bound above 0.85 on the test set, is not reached:
+0.702 for all genotypes, 0.870 for those with reference reads. GQ after the
+cap:
+
+| GQ >= | Tuning: true, false kept | Genotypes right | Test: true, false kept | Genotypes right | HG002: true, false | Genotypes right |
+|---|---|---|---|---|---|---|
+| 0 | 196, 11 | 171 / 196 (0.872) | 168, 17 | 139 / 168 (0.827) | 14, 12 | 11 / 14 |
+| 10 | 89, 6 | 87 / 89 (0.978) | 67, 7 | 67 / 67 (1.000) | 3, 2 | 3 / 3 |
+| 20 | 72, 6 | 71 / 72 (0.986) | 51, 5 | 51 / 51 (1.000) | 3, 1 | 3 / 3 |
+| 30 | 65, 5 | 64 / 65 (0.985) | 41, 5 | 41 / 41 (1.000) | 3, 1 | 3 / 3 |
+
+| GQ bin | Tuning: calls, wrong | Test: calls, wrong | Wrong rate (tuning, test) | Claimed |
+|---|---|---|---|---|
+| < 10 | 107, 23 | 101, 29 | 0.215, 0.287 | 0.51-0.52 |
+| 10-19 | 17, 1 | 16, 0 | 0.059, 0 | 0.04 |
+| 20-29 | 7, 0 | 10, 0 | 0, 0 | 0.003 |
+| 30-49 | 21, 0 | 18, 0 | 0, 0 | < 0.001 |
+| >= 50 | 44, 1 | 23, 0 | 0.023, 0 | < 0.001 |
+
+Usage: a GQ of 10 or more marks a genotype right in nearly all cases (2
+wrong of 156 on tuning and test); below 10, about a quarter are wrong. GQ is
+still not a filter on calls: the true and false calls are kept in similar
+shares at each threshold.
 
 ## VCF with bcftools, tabix and VEP (#85)
 

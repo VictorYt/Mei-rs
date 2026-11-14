@@ -841,31 +841,47 @@ def clustered_lower(found, total, variance, sites, alpha=0.05):
     return low
 
 
-def stratum_variances(cells, groups, n_loci, resamples):
-    """Bootstrap variance of the recall of each stratum, over families and loci.
+def stratum_draws(cells, groups, n_loci, resamples):
+    """Bootstrap draws of the share of hits of each stratum, over families and loci.
 
-    `cells` maps a stratum to its `(group, locus, found)` carrier pairs; each
-    resample draws the groups and the loci with replacement (as `bootstrap`),
-    the same draws for every stratum. The seed is fixed.
+    `cells` maps a stratum to its `(group, locus, hit)` units; each resample
+    draws the groups and the loci with replacement (as `bootstrap`), the same
+    draws for every stratum. The seed is fixed.
     """
     rng = random.Random(1)
-    sums = collections.defaultdict(lambda: [0, 0.0, 0.0])
+    draws = collections.defaultdict(list)
     for _ in range(resamples):
         group_weight = collections.Counter(rng.choice(groups) for _ in groups)
         locus_weight = collections.Counter(rng.randrange(n_loci) for _ in range(n_loci))
-        for stratum, pairs in cells.items():
+        for stratum, units in cells.items():
             hit = total = 0
-            for group, locus, found_it in pairs:
+            for group, locus, is_hit in units:
                 weight = group_weight[group] * locus_weight[locus]
-                hit += weight * found_it
+                hit += weight * is_hit
                 total += weight
             if total:
-                value = hit / total
-                acc = sums[stratum]
-                acc[0] += 1
-                acc[1] += value
-                acc[2] += value * value
-    return {k: max(0.0, sq / n - (sm / n) ** 2) for k, (n, sm, sq) in sums.items() if n > 1}
+                draws[stratum].append(hit / total)
+    return draws
+
+
+def stratum_variances(cells, groups, n_loci, resamples):
+    """Bootstrap variance of the recall of each stratum (`stratum_draws` of carrier pairs)."""
+    out = {}
+    for stratum, values in stratum_draws(cells, groups, n_loci, resamples).items():
+        n = len(values)
+        if n > 1:
+            mean = sum(values) / n
+            out[stratum] = max(0.0, sum(v * v for v in values) / n - mean * mean)
+    return out
+
+
+def stratum_intervals(cells, groups, n_loci, resamples):
+    """95% two-way bootstrap interval (2.5th and 97.5th percentiles) of each stratum (`stratum_draws`)."""
+    out = {}
+    for stratum, values in stratum_draws(cells, groups, n_loci, resamples).items():
+        values.sort()
+        out[stratum] = (values[int(0.025 * len(values))], values[min(int(0.975 * len(values)), len(values) - 1)])
+    return out
 
 
 def bins(value, edges, unit=""):
@@ -884,8 +900,10 @@ def print_strata(per_sample, annotation, samples, strata_qual, loci=None, famili
     The unit is the carrier pair (a truth MEI in one sample). Strata: distance
     to the target, to a coding sequence and to an exon (with `annotation`),
     family, number of HGSVC3 carriers, median candidate depth and read length
-    of the sample (with `samples`, from `split.tsv`). The genotype errors of
-    the true calls are counted by depth. Each stratum gets its number of
+    of the sample (with `samples`, from `split.tsv`). The genotype
+    concordance of the true calls is printed by depth, read length and
+    whether reference reads were counted, with its two-way bootstrap
+    interval (`stratum_intervals`, #158). Each stratum gets its number of
     distinct sites and two lower bounds: Clopper-Pearson on the pairs, which
     treats them as independent and is optimistic for strata of few sites,
     and the clustered bound (`clustered_lower`, with `resamples` two-way
@@ -899,7 +917,7 @@ def print_strata(per_sample, annotation, samples, strata_qual, loci=None, famili
     sites = collections.defaultdict(set)
     cells = collections.defaultdict(list)
     families = families or {}
-    genotypes = collections.defaultdict(lambda: [0, 0])
+    genotypes = collections.defaultdict(list)
     kinds = collections.Counter()
     for sample, carried, levels in per_sample:
         rows = levels[level]
@@ -909,9 +927,17 @@ def print_strata(per_sample, annotation, samples, strata_qual, loci=None, famili
             if s == "tp":
                 kinds["imprecise (mate-only)" if c["imprecise"] else "precise"] += 1
                 if c["genotype"] != ".":
-                    depth = bins(int(info["median_candidate_depth"]), [100, 150]) if info else "all"
-                    genotypes[depth][0] += concordant(unphased(t["genotypes"][sample]), c["genotype"])
-                    genotypes[depth][1] += 1
+                    right = concordant(unphased(t["genotypes"][sample]), c["genotype"])
+                    reference = c["row"].get("ref_reads", ".")
+                    names = [("all", "true calls with a genotype")]
+                    if reference != ".":
+                        names.append(("reference reads", "none" if reference == "0" else "some"))
+                    if info:
+                        names.append(("median candidate depth", bins(int(info["median_candidate_depth"]), [100, 150])))
+                        names.append(("read length", f"{info['read_length']} bp"))
+                    locus = loci.of_truth(t) if loci is not None else 0
+                    for name in names:
+                        genotypes[name].append((families.get(sample, sample), locus, right))
         for t in carried:
             if t["distance"] == 0:
                 where = "in target"
@@ -938,8 +964,8 @@ def print_strata(per_sample, annotation, samples, strata_qual, loci=None, famili
                 if loci is not None:
                     cells[(group, name)].append((families.get(sample, sample), loci.of_truth(t), t["id"] in hit))
     variances = {}
+    groups = sorted({families.get(sample, sample) for sample, _, _ in per_sample})
     if loci is not None and resamples:
-        groups = sorted({families.get(sample, sample) for sample, _, _ in per_sample})
         variances = stratum_variances(cells, groups, loci.count, resamples)
     print(
         f"\n# recall at {level} by stratum (carrier pairs)\tfound\ttotal\tsites\trecall\tlower_95\tlower_95_clustered"
@@ -955,9 +981,14 @@ def print_strata(per_sample, annotation, samples, strata_qual, loci=None, famili
         )
     print(f"\n# true calls at {level} by kind\t" + "\t".join(f"{k} {n}" for k, n in sorted(kinds.items())))
     if genotypes:
-        print(f"\n# genotypes of the true calls at {level} by median candidate depth\tright\tcalls")
-        for depth, (right, n) in sorted(genotypes.items()):
-            print(f"{depth}\t{right}\t{n}")
+        intervals = {}
+        if loci is not None and resamples:
+            intervals = stratum_intervals(genotypes, groups, loci.count, resamples)
+        print(f"\n# genotypes of the true calls at {level} by stratum\tright\tcalls\tconcordance\tlow_95\thigh_95")
+        for key, units in sorted(genotypes.items()):
+            right = sum(r for _, _, r in units)
+            low, high = (f"{v:.3f}" for v in intervals[key]) if key in intervals else (".", ".")
+            print(f"{key[0]}: {key[1]}\t{right}\t{len(units)}\t{right / len(units):.3f}\t{low}\t{high}")
 
 
 GQ_THRESHOLDS = (0, 10, 20, 30)
